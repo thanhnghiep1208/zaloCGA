@@ -1,0 +1,407 @@
+"use client";
+
+import { ProtectedRoute } from "@/components/ProtectedRoute";
+import { useState, useRef, useEffect, useCallback } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import { useAuth } from "@/context/AuthContext";
+import { createChatSession, updateChatSession, StoredMessage } from "@/lib/chatHistory";
+import { SITE_HEADER_TITLE } from "@/lib/branding";
+
+type Source = {
+  fileName: string;
+  excerpt?: string;
+  reference?: string;
+};
+
+type Message = {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  sources?: Source[];
+  isStreaming?: boolean;
+};
+
+const FriendlyLoading = () => {
+  const [msgIndex, setMsgIndex] = useState(0);
+  const messages = [
+    "Đang tìm trong kho kiến thức...",
+    "Đợi mình một xíu nhé...",
+    "Đang tổng hợp câu trả lời tốt nhất...",
+    "Sắp xong rồi đây!",
+    "🔍 Đang rà soát dữ liệu chuẩn Zalo..."
+  ];
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setMsgIndex((prev) => (prev + 1) % messages.length);
+    }, 2500);
+    return () => clearInterval(timer);
+  }, [messages.length]);
+
+  return <>{messages[msgIndex]}</>;
+};
+
+export default function ChatView() {
+  const { user } = useAuth();
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [input, setInput] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const bottomRef = useRef<HTMLDivElement>(null);
+  const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages, isLoading]);
+
+  // Debounced save to Firestore after AI finishes responding
+  const saveSession = useCallback((msgs: Message[]) => {
+    if (!sessionId || msgs.length === 0) return;
+    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    saveTimeoutRef.current = setTimeout(() => {
+      const storedMsgs: StoredMessage[] = msgs
+        .filter(m => !m.isStreaming && m.content)
+        .map(m => ({
+          id: m.id,
+          role: m.role,
+          content: m.content,
+          sources: m.sources,
+          timestamp: Date.now(),
+        }));
+      updateChatSession(sessionId, storedMsgs).catch(console.error);
+    }, 1000);
+  }, [sessionId]);
+
+  const handleSend = async () => {
+    if (!input.trim() || isLoading || !user) return;
+    
+    const userQuery = input.trim();
+    const userMsg: Message = { id: Date.now().toString(), role: "user", content: userQuery };
+    
+    const assistantId = (Date.now() + 1).toString();
+    const initialAssistantMsg: Message = { 
+      id: assistantId, 
+      role: "assistant", 
+      content: "", 
+      isStreaming: true,
+      sources: []
+    };
+
+    setInput("");
+    setIsLoading(true);
+
+    let currentSessionId = sessionId;
+    if (!currentSessionId) {
+      try {
+        const firstStoredMessage: StoredMessage = {
+          id: userMsg.id,
+          role: "user",
+          content: userMsg.content,
+          timestamp: Date.now(),
+        };
+        currentSessionId = await createChatSession(user.uid, [firstStoredMessage]);
+        setSessionId(currentSessionId);
+      } catch (e) {
+        console.error("Failed to create chat session", e);
+        setIsLoading(false);
+        return;
+      }
+    }
+
+    setMessages(prev => [...prev, userMsg, initialAssistantMsg]);
+
+    try {
+      const idToken = await user.getIdToken();
+      const response = await fetch("/api/chat", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${idToken}`,
+        },
+        body: JSON.stringify({ query: userQuery }),
+      });
+
+      if (!response.ok || !response.body) {
+        let detail = response.statusText;
+        try {
+          const errJson = await response.clone().json();
+          if (errJson?.error) detail = errJson.error;
+          if (errJson?.details) detail = `${detail}: ${errJson.details}`;
+        } catch {
+          /* ignore */
+        }
+        throw new Error(detail || "Failed to fetch response");
+      }
+
+      setIsLoading(false);
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let accumulatedText = "";
+      let streamBuffer = "";
+      let hasParsedSources = false;
+      let finalSources: Source[] = [];
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        
+        const chunk = decoder.decode(value, { stream: true });
+        streamBuffer += chunk;
+
+        if (!hasParsedSources) {
+          const splitIndex = streamBuffer.indexOf("===CHUNK_SPLIT===\n\n");
+          if (splitIndex !== -1) {
+            const sourcesPart = streamBuffer.slice(0, splitIndex);
+            const textPart = streamBuffer.slice(splitIndex + 17);
+            
+            try {
+               const sourcesJson = JSON.parse(sourcesPart);
+               if (sourcesJson.type === "sources") {
+                  finalSources = sourcesJson.data;
+                  setMessages(prev => prev.map(msg => 
+                    msg.id === assistantId ? { ...msg, sources: sourcesJson.data, isStreaming: false } : msg
+                  ));
+               }
+            } catch(e) { console.error("Failed to parse sources", e); }
+            
+            hasParsedSources = true;
+            accumulatedText += textPart;
+          }
+        } else {
+          accumulatedText += chunk;
+        }
+
+        if (hasParsedSources) {
+          setMessages(prev => prev.map(msg => 
+            msg.id === assistantId ? { ...msg, content: accumulatedText } : msg
+          ));
+        }
+      }
+
+      // Save session after streaming completes
+      setMessages(prev => {
+        const finalMessages = prev.map(msg =>
+          msg.id === assistantId
+            ? { ...msg, content: accumulatedText, sources: finalSources, isStreaming: false }
+            : msg
+        );
+        if (currentSessionId) {
+          const storedMsgs: StoredMessage[] = finalMessages
+            .filter(m => !m.isStreaming && m.content)
+            .map(m => ({
+              id: m.id,
+              role: m.role,
+              content: m.content,
+              sources: m.sources,
+              timestamp: Date.now(),
+            }));
+          updateChatSession(currentSessionId, storedMsgs).catch(console.error);
+        } else {
+          saveSession(finalMessages);
+        }
+        return finalMessages;
+      });
+
+    } catch(e) {
+      console.error(e);
+      setMessages(prev => prev.map(msg => 
+        msg.id === assistantId ? { ...msg, content: "Sorry, I encountered an error connecting to the AI. Please verify API keys and network.", isStreaming: false } : msg
+      ));
+      setIsLoading(false);
+    }
+  };
+
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
+  };
+
+  const startNewChat = async () => {
+    setMessages([]);
+    setInput("");
+    setSessionId(null);
+  };
+
+  return (
+    <ProtectedRoute>
+      <div className="h-full flex flex-col pt-2 animate-in fade-in duration-500 max-h-[88vh] relative pb-2 w-full">
+        <div className="flex items-center justify-between pb-4 border-b border-border/80 sticky top-0 bg-background/95 backdrop-blur z-10">
+            <div className="space-y-1">
+              <h1 className="text-2xl font-bold tracking-tight text-foreground">{SITE_HEADER_TITLE}</h1>
+              <p className="text-muted text-xs font-medium">Tra cứu tiêu chí viết, thuật ngữ và mẫu thông điệp chuẩn Zalo.</p>
+            </div>
+           <button 
+             onClick={startNewChat}
+             className="px-4 py-2 rounded-lg bg-surface border border-border hover:bg-border/50 transition-colors text-sm font-medium shadow-sm flex items-center gap-2 text-foreground"
+           >
+             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
+             New Chat
+           </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto py-6 space-y-6 pr-4 scrollbar-thin">
+          {messages.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-full text-center space-y-5 max-w-md mx-auto opacity-70 mt-12">
+               <div className="w-20 h-20 bg-surface border border-border rounded-2xl flex items-center justify-center rotate-3 shadow-sm">
+                 <svg className="w-10 h-10 text-accent/80" fill="none" strokeWidth={1.5} stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 20.25c4.97 0 9-3.694 9-8.25s-4.03-8.25-9-8.25S3 7.444 3 12c0 2.104.859 4.023 2.273 5.38.432.447.74 1.04.586 1.641a4.483 4.483 0 0 1-.923 1.785A5.969 5.969 0 0 0 6 21c1.282 0 2.47-.402 3.445-1.087.81.22 1.668.337 2.555.337Z" /></svg>
+               </div>
+               <div className="space-y-2 text-foreground">
+                 <h3 className="text-xl font-medium tracking-tight">How can I help you today?</h3>
+                 <p className="text-sm text-muted leading-relaxed">Try asking about PTO policies, travel reimbursements, or recent engineering guidelines from the internal library.</p>
+               </div>
+            </div>
+          ) : (
+            messages.map(msg => (
+              <div key={msg.id} className={`flex flex-col w-full ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
+                {msg.role === 'user' ? (
+                  <div className="bg-accent text-white px-5 py-3.5 rounded-2xl rounded-tr-sm shadow-sm inline-block max-w-[85%] text-[15px]">
+                    <p className="whitespace-pre-wrap">{msg.content}</p>
+                  </div>
+                ) : (
+                  <div className="bg-surface border border-border px-6 py-6 rounded-2xl rounded-tl-sm shadow-sm w-full">
+                    <style dangerouslySetInnerHTML={{ __html: `
+                      .ai-response-container p {
+                        margin-bottom: 16px !important;
+                        line-height: 1.5 !important;
+                        display: block !important;
+                      }
+                      .ai-response-container h3 {
+                        margin-top: 32px !important;
+                        margin-bottom: 16px !important;
+                        font-weight: 700 !important;
+                        font-size: 1.25rem !important;
+                        display: block !important;
+                      }
+                      .ai-response-container ul, .ai-response-container ol {
+                        margin-bottom: 24px !important;
+                        padding-left: 20px !important;
+                      }
+                      .ai-response-container li {
+                        margin-bottom: 8px !important;
+                      }
+                      .ai-response-container hr {
+                        margin: 40px 0 !important;
+                        border: 0 !important;
+                        border-top: 1px solid #eaeaea !important;
+                      }
+                    `}} />
+                    {(() => {
+                      const sourcesUsedMatch = msg.content.match(/\[SOURCES_USED:\s*(.*?)\]/);
+                      const usedFileNames = sourcesUsedMatch 
+                        ? sourcesUsedMatch[1].split(',').map(s => s.trim().toLowerCase()) 
+                        : [];
+                      
+                      const displayContent = msg.content.replace(/\[SOURCES_USED:\s*.*?\]/, '').trim();
+                      const visibleSources = msg.sources?.filter(s => 
+                        usedFileNames.includes(s.fileName.toLowerCase())
+                      ) || [];
+
+                      return (
+                        <>
+                          <div className="ai-response-container prose prose-base dark:prose-invert max-w-none text-foreground">
+                            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                              {displayContent}
+                            </ReactMarkdown>
+                          </div>
+                          
+                          {visibleSources.length > 0 && (
+                            <div className="mt-8 pt-6 border-t border-border/60">
+                              <div className="flex items-center justify-between mb-4">
+                                <div className="flex items-center gap-2">
+                                  <div className="w-2 h-2 rounded-full bg-accent animate-pulse" />
+                                  <p className="text-sm font-bold text-foreground">Featured Sources</p>
+                                </div>
+                                <span className="text-[10px] font-medium text-muted uppercase tracking-widest bg-surface border border-border px-2 py-0.5 rounded-full">
+                                  Scanned {msg.sources?.length || 0} files
+                                </span>
+                              </div>
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                 {visibleSources.map((src, i) => (
+                                   <div key={i} className="bg-background border border-border/80 p-4 rounded-xl flex flex-col gap-2 shadow-sm hover:shadow-md transition-all group">
+                                     <div className="flex items-center gap-2 truncate">
+                                       <svg className="w-4 h-4 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                                       <span className="text-sm font-semibold truncate group-hover:text-accent transition-colors">{src.fileName}</span>
+                                     </div>
+                                     {src.excerpt && <p className="text-xs text-muted leading-relaxed line-clamp-3 italic opacity-80">"{src.excerpt}"</p>}
+                                   </div>
+                                 ))}
+                              </div>
+                            </div>
+                          )}
+                        </>
+                      );
+                    })()}
+
+                    <div className="mt-4 flex items-center justify-end border-t border-border/40 pt-2">
+                      <button 
+                        onClick={() => copyToClipboard(msg.content)}
+                        className="text-muted hover:text-foreground transition-colors p-1.5 rounded-md hover:bg-border/80 flex items-center gap-1.5 text-xs font-medium"
+                        title="Copy answer"
+                      >
+                         <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
+                         Copy
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))
+          )}
+          
+          {isLoading && (
+             <div className="flex flex-col mr-auto items-start max-w-[85%] w-full animate-in fade-in pb-2">
+               <div className="bg-surface border border-border px-6 py-5 rounded-2xl rounded-tl-sm shadow-sm flex flex-col gap-3 w-fit min-w-[240px]">
+                  <div className="flex items-center gap-3">
+                    <div className="flex gap-1">
+                      <div className="w-1.5 h-1.5 rounded-full bg-accent animate-[bounce_1s_infinite_0ms]"></div>
+                      <div className="w-1.5 h-1.5 rounded-full bg-accent animate-[bounce_1s_infinite_200ms]"></div>
+                      <div className="w-1.5 h-1.5 rounded-full bg-accent animate-[bounce_1s_infinite_400ms]"></div>
+                    </div>
+                    <span className="text-sm text-foreground font-bold tracking-tight">AI Assistant</span>
+                  </div>
+                  
+                  <div className="space-y-1">
+                    <p className="text-sm text-foreground font-medium animate-pulse">
+                      <FriendlyLoading />
+                    </p>
+                    <p className="text-[10px] text-muted font-medium uppercase tracking-widest opacity-60">Processing Library...</p>
+                  </div>
+
+               </div>
+             </div>
+          )}
+          <div ref={bottomRef} className="h-px" />
+        </div>
+
+        <div className="pt-3 bg-background/90 backdrop-blur z-10 sticky bottom-0">
+          <div className="relative flex items-end w-full max-w-4xl mx-auto bg-surface border border-border rounded-2xl shadow-sm focus-within:ring-2 focus-within:ring-accent/20 focus-within:border-accent transition-all">
+             <textarea 
+               value={input}
+               onChange={e => setInput(e.target.value)}
+               onKeyDown={e => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSend();
+                  }
+               }}
+               placeholder="Search the internal rules and policies..."
+               className="w-full max-h-36 min-h-[60px] py-4 pl-5 pr-14 bg-transparent outline-none resize-none text-[15px] text-foreground overflow-y-auto scrollbar-none"
+               rows={1}
+               disabled={isLoading}
+             />
+             <button 
+               onClick={handleSend}
+               disabled={!input.trim() || isLoading}
+               className="absolute right-2 bottom-2 p-3 bg-accent hover:bg-accent-hover disabled:bg-surface disabled:text-muted disabled:border disabled:border-border text-white rounded-xl transition-all shadow-sm"
+             >
+               <svg className="w-4 h-4 translate-x-[-1px] translate-y-[1px]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" /></svg>
+             </button>
+          </div>
+          <p className="text-center text-[11px] text-muted mt-3 font-medium">AI-generated answers are based solely on internal files. Verify important policies.</p>
+        </div>
+
+      </div>
+    </ProtectedRoute>
+  );
+}

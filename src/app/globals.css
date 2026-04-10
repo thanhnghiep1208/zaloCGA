@@ -1,26 +1,65 @@
 @import "tailwindcss";
-
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+@plugin "@tailwindcss/typography";
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-surface: var(--surface);
+  --color-border: var(--border);
+  --color-muted: var(--muted);
+  --font-sans: var(--font-inter);
+}
+
+/* Custom Chat Spacing Overrides */
+.chat-content p {
+  margin-bottom: 1.25rem !important;
+  /* 32px gap */
+  line-height: 1.5 !important;
+  /* Airy line height */
+}
+
+.chat-content h3 {
+  margin-top: 1.75rem !important;
+  margin-bottom: 0.75rem !important;
+  font-weight: 700 !important;
+}
+
+.chat-content ul,
+.chat-content ol {
+  margin-bottom: 1.5rem !important;
+}
+
+.chat-content li {
+  margin-bottom: 0.5rem !important;
+}
+
+:root {
+  --background: #ffffff;
+  --foreground: #111111;
+  --surface: #f9f9fa;
+  --border: #eaeaea;
+  --muted: #737373;
+  --accent: #2563eb;
+  --accent-hover: #1d4ed8;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
+    --background: #0a0a0b;
     --foreground: #ededed;
+    --surface: #141517;
+    --border: #262626;
+    --muted: #a3a3a3;
+    --accent: #3b82f6;
+    --accent-hover: #60a5fa;
   }
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-inter), sans-serif;
+  letter-spacing: -0.01em;
 }
