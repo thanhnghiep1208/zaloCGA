@@ -6,7 +6,6 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { useAuth } from "@/context/AuthContext";
 import { createChatSession, updateChatSession, StoredMessage } from "@/lib/chatHistory";
-import { SITE_HEADER_TITLE } from "@/lib/branding";
 
 type Source = {
   fileName: string;
@@ -218,31 +217,9 @@ export default function ChatView() {
     navigator.clipboard.writeText(text);
   };
 
-  const startNewChat = async () => {
-    setMessages([]);
-    setInput("");
-    setSessionId(null);
-  };
-
   return (
     <ProtectedRoute>
       <div className="h-full flex flex-col pt-2 animate-in fade-in duration-500 max-h-[88vh] relative pb-2 w-full">
-        <div className="flex items-center justify-between pb-4 border-b border-border/80 sticky top-0 bg-background/95 backdrop-blur z-10">
-            <div className="space-y-1">
-              <h1 className="text-2xl font-bold tracking-tight text-foreground">{SITE_HEADER_TITLE}</h1>
-              <p className="text-muted text-xs font-medium">
-                Hỏi guideline hoặc mô tả microcopy UI — trợ lý tự chọn cách trả lời phù hợp.
-              </p>
-            </div>
-           <button 
-             onClick={startNewChat}
-             className="px-4 py-2 rounded-lg bg-surface border border-border hover:bg-border/50 transition-colors text-sm font-medium shadow-sm flex items-center gap-2 text-foreground"
-           >
-             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
-             New Chat
-           </button>
-        </div>
-
         <div className="flex-1 overflow-y-auto py-6 space-y-6 pr-4 scrollbar-thin">
           {messages.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full text-center space-y-5 max-w-md mx-auto opacity-70 mt-12">
