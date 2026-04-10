@@ -2,7 +2,7 @@
 
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { useEffect, useState } from "react";
-import { collection, query, orderBy, onSnapshot, doc, deleteDoc, updateDoc } from "firebase/firestore";
+import { collection, query, orderBy, onSnapshot, doc, deleteDoc, setDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/context/AuthContext";
 
@@ -15,7 +15,12 @@ export default function AdminUsersPage() {
     // Listen to changes on the users collection
     const q = query(collection(db, "users"), orderBy("createdAt", "desc"));
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      const usersData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      const usersData = snapshot.docs.map((d) => ({
+        id: d.id,
+        ...d.data(),
+        // Canonical profile path for Storage/Firestore rules is always users/{auth.uid}
+        profileUid: (d.data() as { uid?: string }).uid ?? d.id,
+      }));
       setUsers(usersData);
       setLoading(false);
     }, (error) => {
@@ -31,16 +36,20 @@ export default function AdminUsersPage() {
     return () => unsubscribe();
   }, []);
 
-  const handleRoleChange = async (id: string, newRole: string) => {
+  const handleRoleChange = async (profileUid: string, newRole: string) => {
     try {
-      await updateDoc(doc(db, "users", id), { role: newRole });
+      await setDoc(
+        doc(db, "users", profileUid),
+        { role: newRole, uid: profileUid },
+        { merge: true }
+      );
     } catch (e) {
       console.error("Failed to update user role", e);
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (id === currentUser?.uid) {
+  const handleDelete = async (profileUid: string) => {
+    if (profileUid === currentUser?.uid) {
        alert("You cannot delete your own active administrator account.");
        return;
     }
@@ -50,7 +59,7 @@ export default function AdminUsersPage() {
     if (!confirm("Are you sure you want to delete this user profile?")) return;
     
     try {
-      await deleteDoc(doc(db, "users", id));
+      await deleteDoc(doc(db, "users", profileUid));
     } catch (e) {
       console.error("Failed to delete user", e);
     }
@@ -85,13 +94,13 @@ export default function AdminUsersPage() {
                  </thead>
                  <tbody className="divide-y divide-border">
                    {users.map(u => (
-                     <tr key={u.id} className="hover:bg-white dark:hover:bg-accent/5 transition-colors">
+                     <tr key={u.profileUid} className="hover:bg-white dark:hover:bg-accent/5 transition-colors">
                        <td className="p-4 font-medium text-foreground">{u.email}</td>
                        <td className="p-4 text-muted text-[11px] font-mono tracking-tighter opacity-70 truncate max-w-[150px]">{u.uid}</td>
                        <td className="p-4">
                            <select 
                               value={u.role || "user"}
-                              onChange={(e) => handleRoleChange(u.id, e.target.value)}
+                              onChange={(e) => handleRoleChange(u.profileUid, e.target.value)}
                               disabled={u.uid === currentUser?.uid}
                               className={`text-xs font-bold rounded-lg px-2.5 py-1.5 outline-none border transition-colors cursor-pointer ${
                                  u.role === 'admin' 
@@ -111,7 +120,7 @@ export default function AdminUsersPage() {
                        </td>
                        <td className="p-4 text-right space-x-2">
                           <button 
-                            onClick={() => handleDelete(u.id)} 
+                            onClick={() => handleDelete(u.profileUid)} 
                             disabled={u.uid === currentUser?.uid}
                             className="text-red-600 hover:text-red-700 font-medium px-3 py-1.5 rounded hover:bg-red-50 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
                           >

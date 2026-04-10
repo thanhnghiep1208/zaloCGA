@@ -16,7 +16,9 @@ export async function POST(req: Request) {
     // Hit the abstracted Provider
     const contextSnippets = await RetrievalService.getContext(query);
 
-    console.log(`[ChatRoute] Query: "${query}". Found ${contextSnippets.length} relevant snippets.`);
+    console.log(
+      `[ChatRoute] Query: "${query}". Found ${contextSnippets.length} relevant snippets.`
+    );
     if (contextSnippets.length > 0) {
       console.log(`[ChatRoute] Documents in context: ${contextSnippets.map(s => s.fileName).join(", ")}`);
     }

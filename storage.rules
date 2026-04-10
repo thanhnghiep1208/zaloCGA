@@ -5,9 +5,14 @@ service firebase.storage {
       return request.auth != null;
     }
 
+    // Must use firestore.exists / firestore.get — plain exists() is NOT for Firestore paths in Storage rules.
+    function userDoc() {
+      return /databases/(default)/documents/users/$(request.auth.uid);
+    }
+
     function userRole() {
-      return exists(/databases/(default)/documents/users/$(request.auth.uid))
-        ? firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role
+      return firestore.exists(userDoc())
+        ? firestore.get(userDoc()).data.role
         : "user";
     }
 

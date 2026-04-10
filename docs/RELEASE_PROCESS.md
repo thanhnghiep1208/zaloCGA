@@ -2,6 +2,8 @@
 
 This project deploys production via **Firebase App Hosting**.
 
+Vietnamese day-to-day guide: `[HUONG_DAN_LEN_LIVE.md](./HUONG_DAN_LEN_LIVE.md)`.
+
 ## 1) Pre-release checks (local)
 
 Run before every release:

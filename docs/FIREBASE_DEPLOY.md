@@ -27,7 +27,8 @@ Set these in **Firebase App Hosting > Backend > Environment variables**:
 - `NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID`
 - `NEXT_PUBLIC_FIREBASE_APP_ID`
 - `FIREBASE_SERVICE_ACCOUNT_KEY` (full JSON string of service account)
-- Any AI model/API keys used by your `/api/`* routes
+- `GEMINI_API_KEY` (cho `/api/chat` và `/api/ingest`)
+- Tùy chọn: `NEXT_PUBLIC_SITE_URL` (canonical URL cho metadata/OG), `NEXT_PUBLIC_GA_ID`
 
 ## 4) Deploy security rules
 
@@ -41,8 +42,10 @@ If App Hosting is connected to GitHub, pushing to the configured branch will aut
 You can also deploy via CLI:
 
 ```bash
-frie6) Smoke test in production
+firebase deploy --only apphosting
 ```
+
+## 6) Smoke test in production
 
 - Open `/chat` then exit: no empty `chatSessions` doc created
 - Send first message: `chatSessions` doc is created

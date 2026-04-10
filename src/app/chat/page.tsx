@@ -22,24 +22,25 @@ type Message = {
   isStreaming?: boolean;
 };
 
+const LOADING_MESSAGES = [
+  "Đang tìm trong kho kiến thức...",
+  "Đang đối chiếu guideline & ngữ cảnh...",
+  "Đợi mình một xíu nhé...",
+  "Đang tổng hợp câu trả lời phù hợp...",
+  "Sắp xong rồi đây!",
+];
+
 const FriendlyLoading = () => {
   const [msgIndex, setMsgIndex] = useState(0);
-  const messages = [
-    "Đang tìm trong kho kiến thức...",
-    "Đợi mình một xíu nhé...",
-    "Đang tổng hợp câu trả lời tốt nhất...",
-    "Sắp xong rồi đây!",
-    "🔍 Đang rà soát dữ liệu chuẩn Zalo..."
-  ];
 
   useEffect(() => {
     const timer = setInterval(() => {
-      setMsgIndex((prev) => (prev + 1) % messages.length);
+      setMsgIndex((prev) => (prev + 1) % LOADING_MESSAGES.length);
     }, 2500);
     return () => clearInterval(timer);
-  }, [messages.length]);
+  }, []);
 
-  return <>{messages[msgIndex]}</>;
+  return <>{LOADING_MESSAGES[msgIndex]}</>;
 };
 
 export default function ChatView() {
@@ -229,7 +230,9 @@ export default function ChatView() {
         <div className="flex items-center justify-between pb-4 border-b border-border/80 sticky top-0 bg-background/95 backdrop-blur z-10">
             <div className="space-y-1">
               <h1 className="text-2xl font-bold tracking-tight text-foreground">{SITE_HEADER_TITLE}</h1>
-              <p className="text-muted text-xs font-medium">Tra cứu tiêu chí viết, thuật ngữ và mẫu thông điệp chuẩn Zalo.</p>
+              <p className="text-muted text-xs font-medium">
+                Hỏi guideline hoặc mô tả microcopy UI — trợ lý tự chọn cách trả lời phù hợp.
+              </p>
             </div>
            <button 
              onClick={startNewChat}
@@ -247,8 +250,10 @@ export default function ChatView() {
                  <svg className="w-10 h-10 text-accent/80" fill="none" strokeWidth={1.5} stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 20.25c4.97 0 9-3.694 9-8.25s-4.03-8.25-9-8.25S3 7.444 3 12c0 2.104.859 4.023 2.273 5.38.432.447.74 1.04.586 1.641a4.483 4.483 0 0 1-.923 1.785A5.969 5.969 0 0 0 6 21c1.282 0 2.47-.402 3.445-1.087.81.22 1.668.337 2.555.337Z" /></svg>
                </div>
                <div className="space-y-2 text-foreground">
-                 <h3 className="text-xl font-medium tracking-tight">How can I help you today?</h3>
-                 <p className="text-sm text-muted leading-relaxed">Try asking about PTO policies, travel reimbursements, or recent engineering guidelines from the internal library.</p>
+                 <h3 className="text-xl font-medium tracking-tight">Bắt đầu một câu hỏi</h3>
+                 <p className="text-sm text-muted leading-relaxed">
+                   Ví dụ tra cứu: quy tắc CTA, thuật ngữ, tone & voice. Ví dụ microcopy: toast lỗi upload, nhãn nút, empty state — kèm ngữ cảnh và giới hạn ký tự nếu có.
+                 </p>
                </div>
             </div>
           ) : (
@@ -365,7 +370,9 @@ export default function ChatView() {
                     <p className="text-sm text-foreground font-medium animate-pulse">
                       <FriendlyLoading />
                     </p>
-                    <p className="text-[10px] text-muted font-medium uppercase tracking-widest opacity-60">Processing Library...</p>
+                    <p className="text-[10px] text-muted font-medium uppercase tracking-widest opacity-60">
+                      Đang xử lý…
+                    </p>
                   </div>
 
                </div>
@@ -374,7 +381,7 @@ export default function ChatView() {
           <div ref={bottomRef} className="h-px" />
         </div>
 
-        <div className="pt-3 bg-background/90 backdrop-blur z-10 sticky bottom-0">
+        <div className="pt-3 bg-background/90 backdrop-blur z-10 sticky bottom-0 space-y-2">
           <div className="relative flex items-end w-full max-w-4xl mx-auto bg-surface border border-border rounded-2xl shadow-sm focus-within:ring-2 focus-within:ring-accent/20 focus-within:border-accent transition-all">
              <textarea 
                value={input}
@@ -385,7 +392,7 @@ export default function ChatView() {
                     handleSend();
                   }
                }}
-               placeholder="Search the internal rules and policies..."
+               placeholder="Hỏi guideline hoặc mô tả microcopy (vị trí UI, hành động, giới hạn ký tự)…"
                className="w-full max-h-36 min-h-[60px] py-4 pl-5 pr-14 bg-transparent outline-none resize-none text-[15px] text-foreground overflow-y-auto scrollbar-none"
                rows={1}
                disabled={isLoading}
@@ -398,7 +405,9 @@ export default function ChatView() {
                <svg className="w-4 h-4 translate-x-[-1px] translate-y-[1px]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" /></svg>
              </button>
           </div>
-          <p className="text-center text-[11px] text-muted mt-3 font-medium">AI-generated answers are based solely on internal files. Verify important policies.</p>
+          <p className="text-center text-[11px] text-muted mt-3 font-medium">
+            Trả lời bám tài liệu nội bộ; với microcopy hãy đối chiếu trên UI thật trước khi ship.
+          </p>
         </div>
 
       </div>
