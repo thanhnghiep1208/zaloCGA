@@ -4,13 +4,29 @@ import * as admin from "firebase-admin";
  * Initialize Firebase Admin safely for Next.js 15/16.
  * Bypasses Firestore Security Rules for server-side RAG.
  */
+function resolveProjectId(): string | undefined {
+  return (
+    process.env.GOOGLE_CLOUD_PROJECT ||
+    process.env.GCLOUD_PROJECT ||
+    process.env.FIREBASE_PROJECT_ID ||
+    process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID ||
+    undefined
+  );
+}
+
 function getAdminApp(): admin.app.App | null {
   if (admin.apps.length > 0) {
     return admin.apps[0]!;
   }
 
-  const projectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
+  const projectId = resolveProjectId();
   const rawKey = process.env.FIREBASE_SERVICE_ACCOUNT_KEY?.trim();
+
+  if (!projectId) {
+    console.error(
+      "[FirebaseAdmin] Missing project id: set GOOGLE_CLOUD_PROJECT (auto on Cloud Run), FIREBASE_PROJECT_ID, or NEXT_PUBLIC_FIREBASE_PROJECT_ID"
+    );
+  }
 
   // 1) Explicit service account JSON (App Hosting env / .env.local)
   if (rawKey) {
@@ -19,10 +35,18 @@ function getAdminApp(): admin.app.App | null {
       const hasKey =
         typeof parsed.private_key === "string" && typeof parsed.client_email === "string";
       if (hasKey) {
+        const pid =
+          projectId ||
+          (typeof parsed.project_id === "string" ? parsed.project_id : undefined);
+        if (!pid) {
+          console.error(
+            "[FirebaseAdmin] No project id: set NEXT_PUBLIC_FIREBASE_PROJECT_ID / FIREBASE_PROJECT_ID or use JSON with project_id"
+          );
+        }
         console.log("[FirebaseAdmin] Initializing with FIREBASE_SERVICE_ACCOUNT_KEY");
         return admin.initializeApp({
           credential: admin.credential.cert(parsed as admin.ServiceAccount),
-          projectId,
+          projectId: pid,
         });
       }
       console.error("[FirebaseAdmin] FIREBASE_SERVICE_ACCOUNT_KEY JSON missing private_key/client_email");
@@ -58,7 +82,9 @@ function getAdminApp(): admin.app.App | null {
     }
   }
 
-  console.error("[FirebaseAdmin] Could not initialize — set valid FIREBASE_SERVICE_ACCOUNT_KEY or run on GCP with ADC");
+  console.error(
+    "[FirebaseAdmin] Could not initialize. Set FIREBASE_SERVICE_ACCOUNT_KEY (one-line JSON from Firebase Console → Service accounts) or ensure this runtime has ADC + IAM (Service Account Token Creator / Firebase Admin) on GOOGLE_CLOUD_PROJECT."
+  );
   return null;
 }
 
