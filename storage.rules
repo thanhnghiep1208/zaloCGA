@@ -1,0 +1,24 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function userRole() {
+      return exists(/databases/(default)/documents/users/$(request.auth.uid))
+        ? firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role
+        : "user";
+    }
+
+    function isContributorOrAdmin() {
+      return signedIn() && (userRole() == "contributor" || userRole() == "admin");
+    }
+
+    // Upload area used by Admin Upload page: documents/*
+    match /documents/{allPaths=**} {
+      allow read: if signedIn();
+      allow write: if isContributorOrAdmin();
+    }
+  }
+}
