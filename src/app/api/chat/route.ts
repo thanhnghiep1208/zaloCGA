@@ -7,6 +7,42 @@ import {
   logAnalyticsEvent,
 } from "@/lib/analytics-events";
 
+function extractReferencedSources(
+  fullResponse: string,
+  availableSources: string[]
+): string[] {
+  const match = fullResponse.match(/\[SOURCES_USED:\s*([^\]]*)\]/i);
+  if (!match) return [];
+
+  const requested = match[1]
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+  if (requested.length === 0) return [];
+
+  const sourceLookup = new Map(
+    availableSources.map((name) => [name.toLowerCase(), name] as const)
+  );
+  const normalized: string[] = [];
+
+  requested.forEach((item) => {
+    const exact = sourceLookup.get(item.toLowerCase());
+    if (exact) {
+      normalized.push(exact);
+      return;
+    }
+    const fuzzy = availableSources.find(
+      (name) =>
+        name.toLowerCase().includes(item.toLowerCase()) ||
+        item.toLowerCase().includes(name.toLowerCase())
+    );
+    if (fuzzy) normalized.push(fuzzy);
+  });
+
+  return Array.from(new Set(normalized));
+}
+
 export async function POST(req: Request) {
   try {
     const uid = await requireUidFromRequest(req);
@@ -57,11 +93,16 @@ export async function POST(req: Request) {
           }
 
           const latencyMs = Date.now() - responseStart;
+          const referencedSources = extractReferencedSources(
+            fullResponse,
+            contextSnippets.map((s) => s.fileName)
+          );
           await logAnalyticsEvent("response_delivered", {
             user_id: uid,
             response_type: queryType,
             relevance_score: estimateRelevanceScore(query, fullResponse),
             latency_ms: latencyMs,
+            referenced_sources: referencedSources,
           });
         } catch(e) {
           console.error("Streaming error", e);

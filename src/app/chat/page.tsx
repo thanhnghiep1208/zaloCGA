@@ -51,9 +51,11 @@ export default function ChatView() {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hasVisibleMessages = messages.some((m) => m.role === "user" || (m.role === "assistant" && !!m.content.trim()));
+  const showConversationLayout = hasVisibleMessages || isLoading;
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    bottomRef.current?.scrollIntoView({ behavior: "auto" });
   }, [messages, isLoading]);
 
   // Debounced save to Firestore after AI finishes responding
@@ -143,6 +145,17 @@ export default function ChatView() {
       let streamBuffer = "";
       let hasParsedSources = false;
       let finalSources: Source[] = [];
+      let renderedLength = 0;
+
+      const renderNextChunk = (step = 10) => {
+        if (renderedLength >= accumulatedText.length) return false;
+        renderedLength = Math.min(renderedLength + step, accumulatedText.length);
+        const nextText = accumulatedText.slice(0, renderedLength);
+        setMessages(prev => prev.map(msg =>
+          msg.id === assistantId ? { ...msg, content: nextText } : msg
+        ));
+        return true;
+      };
 
       while (true) {
         const { value, done } = await reader.read();
@@ -175,10 +188,15 @@ export default function ChatView() {
         }
 
         if (hasParsedSources) {
-          setMessages(prev => prev.map(msg => 
-            msg.id === assistantId ? { ...msg, content: accumulatedText } : msg
-          ));
+          const moved = renderNextChunk(4);
+          if (moved) {
+            await new Promise((resolve) => setTimeout(resolve, 24));
+          }
         }
+      }
+
+      while (renderNextChunk(8)) {
+        await new Promise((resolve) => setTimeout(resolve, 16));
       }
 
       // Save session after streaming completes
@@ -248,10 +266,15 @@ export default function ChatView() {
 
   return (
     <ProtectedRoute>
-      <div className="h-full flex flex-col pt-2 animate-in fade-in duration-500 max-h-[88vh] relative pb-2 w-full">
-        <div className="flex-1 overflow-y-auto py-6 space-y-6 pr-4 scrollbar-thin">
-          {messages.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-full text-center space-y-5 max-w-md mx-auto opacity-70 mt-12">
+      <div className="h-[calc(100dvh-8.5rem)] min-h-[560px] flex flex-col pt-2 animate-in fade-in duration-500 w-full">
+        <div
+          className={`flex-1 min-h-0 py-4 pr-3 space-y-8 scrollbar-thin ${
+            showConversationLayout ? "overflow-y-auto" : "overflow-y-hidden"
+          }`}
+        >
+          {!showConversationLayout && (
+            <div className="h-full min-h-[420px] flex items-center justify-center opacity-80">
+              <div className="flex flex-col items-center justify-center text-center space-y-4 max-w-md mx-auto px-4">
                <div className="w-20 h-20 bg-surface border border-border rounded-2xl flex items-center justify-center rotate-3 shadow-sm">
                  <svg className="w-10 h-10 text-accent/80" fill="none" strokeWidth={1.5} stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 20.25c4.97 0 9-3.694 9-8.25s-4.03-8.25-9-8.25S3 7.444 3 12c0 2.104.859 4.023 2.273 5.38.432.447.74 1.04.586 1.641a4.483 4.483 0 0 1-.923 1.785A5.969 5.969 0 0 0 6 21c1.282 0 2.47-.402 3.445-1.087.81.22 1.668.337 2.555.337Z" /></svg>
                </div>
@@ -261,11 +284,13 @@ export default function ChatView() {
                    Ví dụ tra cứu: quy tắc CTA, thuật ngữ, tone & voice. Ví dụ microcopy: toast lỗi upload, nhãn nút, empty state — kèm ngữ cảnh và giới hạn ký tự nếu có.
                  </p>
                </div>
+              </div>
             </div>
-          ) : (
-            messages
-              .filter(msg => !(msg.role === "assistant" && msg.isStreaming && !msg.content.trim()))
-              .map(msg => (
+          )}
+
+          {messages
+            .filter(msg => !(msg.role === "assistant" && msg.isStreaming && !msg.content.trim()))
+            .map(msg => (
               <div key={msg.id} className={`flex flex-col w-full ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
                 {msg.role === 'user' ? (
                   <div className="bg-accent text-white px-5 py-3.5 rounded-2xl rounded-tr-sm shadow-sm inline-block max-w-[85%] text-[15px]">
@@ -385,8 +410,7 @@ export default function ChatView() {
                   </div>
                 )}
               </div>
-            ))
-          )}
+            ))}
           
           {isLoading && (
              <div className="flex flex-col mr-auto items-start max-w-[85%] w-full animate-in fade-in pb-2">
@@ -415,7 +439,7 @@ export default function ChatView() {
           <div ref={bottomRef} className="h-px" />
         </div>
 
-        <div className="pt-3 bg-background/90 backdrop-blur z-10 sticky bottom-0 space-y-2">
+        <div className="pt-3 bg-background/90 backdrop-blur z-10 shrink-0 space-y-2">
           <div className="relative flex items-end w-full max-w-4xl mx-auto bg-surface border border-border rounded-2xl shadow-sm focus-within:ring-2 focus-within:ring-accent/20 focus-within:border-accent transition-all">
              <textarea 
                value={input}
