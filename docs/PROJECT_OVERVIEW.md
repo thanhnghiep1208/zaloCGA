@@ -1,0 +1,320 @@
+# Internal Knowledge Chat - Project Overview
+
+Tài liệu này là bản tổng hợp end-to-end cho dự án: kiến trúc tổng thể, flow tính năng, frontend, backend, Firebase, và quy trình deploy/vận hành.
+
+## 1) Mục tiêu sản phẩm
+
+`Internal Knowledge Chat` là trợ lý nội bộ giúp:
+
+- Tra cứu guideline nội dung Zalo từ kho tài liệu nội bộ.
+- Soạn microcopy UX theo ngữ cảnh UI, vẫn bám guideline nội bộ.
+- Quản trị tài liệu tri thức (upload/index/search) theo role.
+
+Điểm chính của bản hiện tại:
+
+- Chat chỉ tạo `chatSessions` sau khi user gửi tin nhắn đầu tiên (không tạo session rỗng).
+- Chat mode được hợp nhất: model tự suy luận truy vấn guideline hay microcopy UX.
+- API có xác thực token Firebase và kiểm soát role cho các route nhạy cảm.
+
+---
+
+## 2) Tech stack
+
+- **Frontend + Backend app:** Next.js App Router (`src/app/`*)
+- **Auth / DB / Storage:** Firebase Auth, Firestore, Firebase Storage
+- **Server admin access:** Firebase Admin SDK
+- **LLM:** Google GenAI (`gemini-3-flash-preview`)
+- **DOCX parsing:** `mammoth`
+- **Deploy runtime:** Firebase App Hosting (Cloud Run managed)
+
+---
+
+## 3) Kiến trúc tổng thể
+
+### 3.1 Thành phần chính
+
+- **Client App (Next.js client components):**
+  - Đăng nhập, chat UI, sidebar lịch sử
+  - Trang admin: thư viện tài liệu, upload, quản lý users
+- **API Routes (Next.js server routes):**
+  - `POST /api/chat`: xác thực + retrieval + stream câu trả lời
+  - `POST /api/ingest`: xác thực + quyền contributor/admin + parse nội dung file
+- **Firestore:**
+  - `documents`: kho tri thức đã index
+  - `chatSessions`: lịch sử chat theo user
+  - `users`: profile + role (`user`, `contributor`, `admin`)
+- **Storage:**
+  - Bucket chứa file upload tại `documents/`*
+
+### 3.2 Luồng dữ liệu cấp cao
+
+1. User đăng nhập qua Firebase Auth.
+2. Client gọi API kèm `Authorization: Bearer <idToken>`.
+3. API verify token bằng Firebase Admin.
+4. API đọc dữ liệu Firestore (retrieval/index) và/hoặc xử lý file.
+5. API trả kết quả (stream text cho chat, JSON cho ingest).
+6. Client hiển thị và cập nhật Firestore session history.
+
+---
+
+## 4) Cấu trúc frontend
+
+## 4.1 App shell
+
+- `src/components/AppShell.tsx`
+  - Hiển thị layout có `Header` + `Sidebar` cho các trang sau login.
+  - Ẩn shell ở `/` và `/login`.
+- `src/components/Header.tsx`
+  - Header toàn cục.
+  - Trên route `/chat` hiển thị thêm dòng mô tả ngữ cảnh chat.
+- `src/components/Sidebar.tsx`
+  - Link điều hướng theo role.
+  - Nút `New Chat` nằm ở sidebar.
+  - Hiển thị lịch sử chat 7 ngày gần nhất.
+
+## 4.2 Các trang chính
+
+- `src/app/page.tsx`: landing page.
+- `src/app/login/page.tsx`: đăng nhập.
+- `src/app/chat/page.tsx`: chat realtime + streaming + lưu session.
+- `src/app/chat/[id]/page.tsx`: xem lại cuộc hội thoại đã lưu.
+- `src/app/admin/library/page.tsx`: quản lý tài liệu.
+- `src/app/admin/upload/page.tsx`: upload + gọi ingest.
+- `src/app/admin/users/page.tsx`: phân quyền user.
+
+## 4.3 Auth context và phân quyền UI
+
+- `src/context/AuthContext.tsx`
+  - Lắng nghe `onAuthStateChanged`.
+  - Đọc role từ `users/{uid}` trong Firestore.
+- `ProtectedRoute` dùng để chặn truy cập sai role ở client UI.
+
+Lưu ý: bảo vệ ở UI chỉ là lớp hiển thị. Bảo mật thật nằm ở Firestore/Storage rules + API auth server-side.
+
+---
+
+## 5) Cấu trúc backend
+
+## 5.1 API chat (`POST /api/chat`)
+
+File: `src/app/api/chat/route.ts`
+
+Chức năng:
+
+1. Verify Firebase ID token (`requireUidFromRequest`).
+2. Nhận `query` từ body.
+3. Retrieval tài liệu qua `RetrievalService.getContext`.
+4. Generate stream câu trả lời từ Gemini.
+5. Stream về client theo định dạng:
+  - chunk đầu chứa danh sách source (`type: "sources"`)
+  - phần text stream liên tục phía sau.
+
+## 5.2 API ingest (`POST /api/ingest`)
+
+File: `src/app/api/ingest/route.ts`
+
+Chức năng:
+
+1. Verify token.
+2. Check role `admin|contributor`.
+3. Validate `fileUrl` chỉ cho phép URL Firebase Storage bucket hiện tại (chống SSRF).
+4. Tải binary file và parse:
+  - PDF: dùng Gemini OCR/text extraction.
+  - DOCX: dùng `mammoth`.
+  - TXT/CSV: decode text.
+5. Trả về `textContent` để client ghi vào Firestore `documents`.
+
+## 5.3 Retrieval service
+
+- `src/lib/RetrievalService.ts`
+  - Prompt hợp nhất, model tự suy luận 2 kiểu intent:
+    - Tra cứu guideline
+    - Soạn microcopy UX
+  - Luôn yêu cầu `SOURCES_USED` ở cuối câu trả lời.
+- `src/lib/retrieval/FirebaseRetrievalProvider.ts`
+  - Dùng Admin SDK đọc `documents` có `status == "indexed"`.
+
+## 5.4 Firebase Admin init
+
+- `src/lib/firebase-admin.ts`
+  - Ưu tiên `FIREBASE_SERVICE_ACCOUNT_KEY` (JSON string).
+  - Fallback `applicationDefault()` khi chạy môi trường GCP.
+  - Có xử lý lỗi parse JSON để tránh làm chết toàn bộ server.
+
+---
+
+## 6) Firebase data model
+
+## 6.1 Collection `users`
+
+Tài liệu người dùng/role:
+
+- `uid`
+- `email`
+- `role`: `user | contributor | admin`
+- `createdAt` (nếu có)
+
+Quy ước quan trọng:
+
+- Canonical profile path luôn là `users/{auth.uid}`.
+
+## 6.2 Collection `documents`
+
+Dữ liệu tri thức đã upload/index:
+
+- `fileName`, `fileUrl`, `storagePath`, `mimeType`, `sizeBytes`
+- `status`: `processing | indexed | failed | inactive | ...`
+- `description`, `tags`
+- `textContent` (nội dung đã extract để retrieval)
+- `uploadedBy`, `uploadedEmail`, `uploadedAt`, `updatedAt`
+
+## 6.3 Collection `chatSessions`
+
+Lịch sử chat theo user:
+
+- `userId`
+- `title` (từ tin nhắn user đầu tiên)
+- `messages[]` (role/content/sources/timestamp)
+- `createdAt`, `updatedAt`
+
+---
+
+## 7) Security model
+
+## 7.1 Firestore Rules (`firestore.rules`)
+
+- `chatSessions`: user chỉ thao tác session của chính mình.
+- `users`:
+  - user đọc/sửa hồ sơ của mình nhưng không tự nâng role.
+  - admin có toàn quyền.
+- `documents`:
+  - signed-in user được đọc.
+  - chỉ `admin|contributor` mới được create/update/delete.
+
+## 7.2 Storage Rules (`storage.rules`)
+
+- Chỉ signed-in user được đọc `documents/`*.
+- Chỉ `admin|contributor` được ghi.
+- Role lookup trong Storage rules dùng `firestore.exists/get`.
+
+## 7.3 API auth guard
+
+- `src/lib/api-request-auth.ts`
+  - Verify Bearer ID token.
+  - Check role contributor/admin cho ingest.
+  - Validate host/bucket của Storage URL.
+
+---
+
+## 8) Flow tính năng chi tiết
+
+## 8.1 Chat flow
+
+1. User vào `/chat`.
+2. Chưa có session nào được tạo.
+3. User gửi tin đầu tiên:
+  - tạo `chatSessions` với first user message.
+  - gọi `/api/chat`.
+4. API retrieval + stream response.
+5. Client vừa stream UI, vừa lưu lại messages vào session khi hoàn tất.
+6. Sidebar tự cập nhật lịch sử từ Firestore listener.
+
+## 8.2 Upload/index tài liệu flow
+
+1. Contributor/Admin chọn file ở `/admin/upload`.
+2. Upload file lên Storage (`documents/...`).
+3. Tạo doc Firestore `documents` status `processing`.
+4. Gọi `/api/ingest` để extract text.
+5. Cập nhật `documents.textContent` và status `indexed` (hoặc `failed`).
+6. Tài liệu indexed sẽ được retrieval dùng trong chat.
+
+## 8.3 User management flow
+
+1. Admin vào `/admin/users`.
+2. Đổi role qua `setDoc(..., { merge: true })` tại `users/{uid}`.
+3. Rules đảm bảo user thường không thể tự elevate role.
+
+---
+
+## 9) Environment variables
+
+Bắt buộc (App Hosting -> Backend -> Environment variables):
+
+- `NEXT_PUBLIC_FIREBASE_API_KEY`
+- `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN`
+- `NEXT_PUBLIC_FIREBASE_PROJECT_ID`
+- `NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET`
+- `NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID`
+- `NEXT_PUBLIC_FIREBASE_APP_ID`
+- `FIREBASE_SERVICE_ACCOUNT_KEY`
+- `GEMINI_API_KEY`
+
+Khuyến nghị:
+
+- `NEXT_PUBLIC_SITE_URL` (metadata canonical + OG absolute URL)
+- `NEXT_PUBLIC_GA_ID` (nếu bật Google Analytics)
+
+Lưu ý:
+
+- Thay đổi `NEXT_PUBLIC_*` cần rollout/build lại để có hiệu lực.
+
+---
+
+## 10) Deploy và vận hành
+
+## 10.1 Thiết lập project Firebase
+
+- `firebase.json`:
+  - map rules Firestore/Storage
+  - cấu hình App Hosting backend `zalo-ikc-be`
+- `apphosting.yaml`:
+  - `minInstances: 0`
+
+## 10.2 Lệnh deploy
+
+Khuyến nghị dùng CLI mới nhất:
+
+```bash
+npx -y firebase-tools@latest use
+```
+
+Deploy app:
+
+```bash
+npx -y firebase-tools@latest deploy --only apphosting
+```
+
+Deploy rules:
+
+```bash
+npx -y firebase-tools@latest deploy --only firestore:rules,storage
+```
+
+Nếu backend App Hosting đã nối GitHub branch live (`main`), push code lên branch đó sẽ tự rollout.
+
+## 10.3 Checklist release ngắn
+
+1. `npm install` (khi có đổi dependency)
+2. `npm run build`
+3. Smoke test local các flow chính
+4. Commit + push
+5. Theo dõi App Hosting rollout đến `Succeeded`
+6. Smoke test production + log monitor
+
+---
+
+## 11) Troubleshooting nhanh
+
+- **Thấy UI cũ sau deploy:** thử Incognito / hard refresh / kiểm tra rollout đã `Succeeded`.
+- `**Server configuration error` ở API:** thiếu hoặc sai `FIREBASE_SERVICE_ACCOUNT_KEY` / project id env.
+- `**storage/unauthorized` khi upload:** kiểm tra role user doc và deploy `storage.rules` mới nhất.
+- **Hydration mismatch có `bis_skin_checked`:** thường do browser extension chèn DOM, không phải lỗi app.
+
+---
+
+## 12) Tài liệu liên quan
+
+- `docs/HUONG_DAN_LEN_LIVE.md` - runbook deploy hằng ngày (tiếng Việt)
+- `docs/RELEASE_PROCESS.md` - quy trình release tổng quát
+- `docs/FIREBASE_DEPLOY.md` - checklist Firebase deploy/env
+
