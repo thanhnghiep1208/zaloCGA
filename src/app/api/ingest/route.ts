@@ -7,6 +7,7 @@ import {
   requireContributorOrAdmin,
   requireUidFromRequest,
 } from "@/lib/api-request-auth";
+import { logAnalyticsEvent } from "@/lib/analytics-events";
 
 // Initialize Gemini for Server-side extraction via v1beta
 const ai = new GoogleGenAI({ 
@@ -56,6 +57,7 @@ export async function POST(req: Request) {
     const base64Data = Buffer.from(arrayBuffer).toString("base64");
 
     let extractedText = "";
+    const parseStart = Date.now();
 
     // 2. Extract using Gemini 3 Flash Preview (AI OCR & Parsing)
     if (isPdf) {
@@ -109,6 +111,18 @@ export async function POST(req: Request) {
     if (extractedText.length > 900000) {
         extractedText = extractedText.substring(0, 900000) + "... [Truncated]";
     }
+
+    const ruleCountExtracted = extractedText
+      .split("\n")
+      .map((line) => line.trim().toLowerCase())
+      .filter((line) => line.startsWith("-") || line.startsWith("*") || line.includes("quy tắc"))
+      .length;
+
+    await logAnalyticsEvent("parse_success", {
+      user_id: uid,
+      rule_count_extracted: ruleCountExtracted,
+      latency_ms: Date.now() - parseStart,
+    });
 
     return NextResponse.json({ 
         success: true, 

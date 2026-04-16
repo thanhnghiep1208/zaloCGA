@@ -19,6 +19,7 @@ type Message = {
   content: string;
   sources?: Source[];
   isStreaming?: boolean;
+  feedback?: "up" | "down";
 };
 
 const LOADING_MESSAGES = [
@@ -161,7 +162,7 @@ export default function ChatView() {
                if (sourcesJson.type === "sources") {
                   finalSources = sourcesJson.data;
                   setMessages(prev => prev.map(msg => 
-                    msg.id === assistantId ? { ...msg, sources: sourcesJson.data, isStreaming: false } : msg
+                    msg.id === assistantId ? { ...msg, sources: sourcesJson.data } : msg
                   ));
                }
             } catch(e) { console.error("Failed to parse sources", e); }
@@ -217,6 +218,34 @@ export default function ChatView() {
     navigator.clipboard.writeText(text);
   };
 
+  const handleFeedback = async (messageId: string, value: "up" | "down") => {
+    if (!user) return;
+    setMessages((prev) =>
+      prev.map((msg) => (msg.id === messageId ? { ...msg, feedback: value } : msg))
+    );
+
+    try {
+      const idToken = await user.getIdToken();
+      await fetch("/api/events", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${idToken}`,
+        },
+        body: JSON.stringify({
+          eventName: "user_feedback",
+          payload: {
+            feedback: value === "up" ? "thumbs_up" : "thumbs_down",
+            session_id: sessionId,
+            message_id: messageId,
+          },
+        }),
+      });
+    } catch (e) {
+      console.error("Failed to log feedback", e);
+    }
+  };
+
   return (
     <ProtectedRoute>
       <div className="h-full flex flex-col pt-2 animate-in fade-in duration-500 max-h-[88vh] relative pb-2 w-full">
@@ -234,7 +263,9 @@ export default function ChatView() {
                </div>
             </div>
           ) : (
-            messages.map(msg => (
+            messages
+              .filter(msg => !(msg.role === "assistant" && msg.isStreaming && !msg.content.trim()))
+              .map(msg => (
               <div key={msg.id} className={`flex flex-col w-full ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
                 {msg.role === 'user' ? (
                   <div className="bg-accent text-white px-5 py-3.5 rounded-2xl rounded-tr-sm shadow-sm inline-block max-w-[85%] text-[15px]">
@@ -316,9 +347,35 @@ export default function ChatView() {
                     })()}
 
                     <div className="mt-4 flex items-center justify-end border-t border-border/40 pt-2">
+                      <button
+                        onClick={() => handleFeedback(msg.id, "up")}
+                        className={`p-1.5 rounded-md transition-colors ${
+                          msg.feedback === "up"
+                            ? "text-green-600 bg-green-50"
+                            : "text-muted hover:text-foreground hover:bg-border/80"
+                        }`}
+                        title="Hữu ích"
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 9V5a3 3 0 00-3-3l-1 4-3 4v10h11.28a2 2 0 001.98-1.72l1-7A2 2 0 0019.28 9H14zM7 22H4a2 2 0 01-2-2v-8a2 2 0 012-2h3" />
+                        </svg>
+                      </button>
+                      <button
+                        onClick={() => handleFeedback(msg.id, "down")}
+                        className={`ml-1 p-1.5 rounded-md transition-colors ${
+                          msg.feedback === "down"
+                            ? "text-red-600 bg-red-50"
+                            : "text-muted hover:text-foreground hover:bg-border/80"
+                        }`}
+                        title="Chưa hữu ích"
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 15v4a3 3 0 003 3l1-4 3-4V4H5.72a2 2 0 00-1.98 1.72l-1 7A2 2 0 004.72 15H10zM17 2h3a2 2 0 012 2v8a2 2 0 01-2 2h-3" />
+                        </svg>
+                      </button>
                       <button 
                         onClick={() => copyToClipboard(msg.content)}
-                        className="text-muted hover:text-foreground transition-colors p-1.5 rounded-md hover:bg-border/80 flex items-center gap-1.5 text-xs font-medium"
+                        className="ml-1 text-muted hover:text-foreground transition-colors p-1.5 rounded-md hover:bg-border/80 flex items-center gap-1.5 text-xs font-medium"
                         title="Copy answer"
                       >
                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>

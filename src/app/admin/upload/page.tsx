@@ -76,6 +76,22 @@ export default function AdminUploadPage() {
         const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
         const tags = tagsInput.split(",").map(t => t.trim()).filter(Boolean);
 
+        const idToken = await user.getIdToken();
+        await fetch("/api/events", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${idToken}`,
+          },
+          body: JSON.stringify({
+            eventName: "file_uploaded",
+            payload: {
+              file_type: file.type || "unknown",
+              size: file.size,
+            },
+          }),
+        }).catch(() => {});
+
         // 2. Initial Firestore save
         const newDocRef = await addDoc(collection(db, "documents"), {
           fileName: file.name,
@@ -94,7 +110,6 @@ export default function AdminUploadPage() {
 
         // 3. AI Extraction
         try {
-          const idToken = await user.getIdToken();
           const ingestRes = await fetch("/api/ingest", {
              method: "POST",
              headers: {

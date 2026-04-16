@@ -54,5 +54,11 @@ service cloud.firestore {
       allow read: if signedIn();
       allow create, update, delete: if isContributorOrAdmin();
     }
+
+    // Analytics events are server-written. Admin can read for dashboard.
+    match /analyticsEvents/{eventId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
   }
 }
