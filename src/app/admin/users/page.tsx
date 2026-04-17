@@ -5,13 +5,21 @@ import { useEffect, useState } from "react";
 import { collection, query, orderBy, onSnapshot, doc, deleteDoc, setDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/context/AuthContext";
+import { useTheme } from "@/context/ThemeContext";
 
 export default function AdminUsersPage() {
   const [users, setUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const { user: currentUser } = useAuth(); // Prevent self-deletion
+  const { user: currentUser, role, loading: authLoading } = useAuth(); // Prevent self-deletion
+  const { theme } = useTheme();
 
   useEffect(() => {
+    if (authLoading) return;
+    if (!currentUser || role !== "admin") {
+      setLoading(false);
+      return;
+    }
+
     // Listen to changes on the users collection
     const q = query(collection(db, "users"), orderBy("createdAt", "desc"));
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -34,7 +42,7 @@ export default function AdminUsersPage() {
       setLoading(false);
     });
     return () => unsubscribe();
-  }, []);
+  }, [currentUser, role, authLoading]);
 
   const handleRoleChange = async (profileUid: string, newRole: string) => {
     try {
@@ -69,7 +77,7 @@ export default function AdminUsersPage() {
     <ProtectedRoute allowedRoles={["admin"]}>
       <div className="h-full flex flex-col space-y-6 animate-in fade-in duration-500">
         <div className="space-y-1">
-           <h1 className="text-2xl font-semibold tracking-tight">Manage Users</h1>
+           <h1 className="text-2xl font-light tracking-tight">Manage Users</h1>
            <p className="text-muted text-sm">Control access, view roles, and manage internal user permissions.</p>
         </div>
 
@@ -80,7 +88,7 @@ export default function AdminUsersPage() {
         ) : users.length === 0 ? (
            <div className="pt-8 text-center text-muted">No users found.</div>
         ) : (
-          <div className="border border-border rounded-xl bg-surface/50 overflow-hidden shadow-sm flex-1">
+          <div className="clay-card overflow-hidden flex-1">
              <div className="overflow-x-auto">
                <table className="w-full text-left text-sm whitespace-nowrap">
                  <thead className="bg-surface border-b border-border text-muted">
@@ -94,7 +102,7 @@ export default function AdminUsersPage() {
                  </thead>
                  <tbody className="divide-y divide-border">
                    {users.map(u => (
-                     <tr key={u.profileUid} className="hover:bg-white dark:hover:bg-accent/5 transition-colors">
+                    <tr key={u.profileUid} className="hover:bg-white/5 transition-colors">
                        <td className="p-4 font-medium text-foreground">{u.email}</td>
                        <td className="p-4 text-muted text-[11px] font-mono tracking-tighter opacity-70 truncate max-w-[150px]">{u.uid}</td>
                        <td className="p-4">
@@ -102,12 +110,18 @@ export default function AdminUsersPage() {
                               value={u.role || "user"}
                               onChange={(e) => handleRoleChange(u.profileUid, e.target.value)}
                               disabled={u.uid === currentUser?.uid}
-                              className={`text-xs font-bold rounded-lg px-2.5 py-1.5 outline-none border transition-colors cursor-pointer ${
+                              className={`text-xs font-semibold rounded-[3px] px-2.5 py-1.5 outline-none border transition-colors cursor-pointer ${
                                  u.role === 'admin' 
-                                   ? 'bg-purple-100 text-purple-700 border-purple-200' 
+                                   ? theme === "dark"
+                                     ? 'bg-[#533afd]/18 text-[#dcd8ff] border-[#b9b9f9]/55'
+                                     : 'bg-purple-100 text-purple-700 border-purple-200'
                                    : u.role === 'contributor'
-                                     ? 'bg-blue-100 text-blue-700 border-blue-200'
-                                     : 'bg-green-100 text-green-700 border-green-200'
+                                     ? theme === "dark"
+                                       ? 'bg-[#533afd]/12 text-[#cfc9ff] border-[#d6d9fc]/50'
+                                       : 'bg-indigo-100 text-indigo-700 border-indigo-200'
+                                     : theme === "dark"
+                                       ? 'bg-white/5 text-white/90 border-white/20'
+                                       : 'bg-slate-100 text-slate-700 border-slate-200'
                               }`}
                            >
                               <option value="user">User</option>
@@ -122,7 +136,7 @@ export default function AdminUsersPage() {
                           <button 
                             onClick={() => handleDelete(u.profileUid)} 
                             disabled={u.uid === currentUser?.uid}
-                            className="text-red-600 hover:text-red-700 font-medium px-3 py-1.5 rounded hover:bg-red-50 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                            className="text-[#ff8fb3] hover:text-[#ffb3cb] font-medium px-3 py-1.5 rounded-[4px] hover:bg-[#ea2261]/20 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
                           >
                             Delete
                           </button>

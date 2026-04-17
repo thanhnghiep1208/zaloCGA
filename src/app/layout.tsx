@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/context/AuthContext";
+import { ThemeProvider } from "@/context/ThemeContext";
 import { AppShell } from "@/components/AppShell";
 import Script from "next/script";
 
@@ -61,11 +62,13 @@ export default function RootLayout({
       suppressHydrationWarning
     >
       <body className="min-h-screen bg-background text-foreground flex flex-col font-sans" suppressHydrationWarning>
-        <AuthProvider>
-          <AppShell>
-            {children}
-          </AppShell>
-        </AuthProvider>
+        <ThemeProvider>
+          <AuthProvider>
+            <AppShell>
+              {children}
+            </AppShell>
+          </AuthProvider>
+        </ThemeProvider>
         {/* Avoid loading GA when unset (reduces noise); ad blockers may still block gtag when enabled */}
         {process.env.NEXT_PUBLIC_GA_ID ? (
           <>

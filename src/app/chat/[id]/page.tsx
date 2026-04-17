@@ -68,7 +68,7 @@ export default function ChatSessionPage({ params }: { params: Promise<{ id: stri
         <div className="flex items-center justify-between pb-4 border-b border-border/80 sticky top-0 bg-background/95 backdrop-blur z-10">
           <div className="space-y-1 min-w-0 flex-1 mr-4">
             <p className="text-[10px] text-muted font-semibold uppercase tracking-widest">Lịch sử cuộc trò chuyện</p>
-            <h1 className="text-xl font-bold tracking-tight text-foreground truncate">
+            <h1 className="text-xl font-light tracking-tight text-foreground truncate">
               {loading ? "Đang tải..." : session?.title || "Cuộc trò chuyện"}
             </h1>
             {session?.updatedAt && (
@@ -83,14 +83,14 @@ export default function ChatSessionPage({ params }: { params: Promise<{ id: stri
           <div className="flex items-center gap-2 shrink-0">
             <button
               onClick={handleDelete}
-              className="px-3 py-2 rounded-lg bg-red-50 border border-red-200 hover:bg-red-100 transition-colors text-sm font-medium text-red-600 flex items-center gap-1.5"
+              className="px-3 py-2 rounded-[4px] bg-red-50 border border-red-200 hover:bg-red-100 transition-colors text-sm font-normal text-red-600 flex items-center gap-1.5"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
               Xóa
             </button>
             <Link
               href="/chat"
-              className="px-4 py-2 rounded-lg bg-accent text-white hover:bg-accent-hover transition-colors text-sm font-medium flex items-center gap-2"
+              className="clay-hover-playful px-4 py-2 rounded-[4px] bg-[#533afd] border border-transparent text-white hover:bg-[#4434d4] transition-colors text-sm font-normal flex items-center gap-2"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
               Chat mới
@@ -115,18 +115,42 @@ export default function ChatSessionPage({ params }: { params: Promise<{ id: stri
             session?.messages.map(msg => (
               <div key={msg.id} className={`flex flex-col w-full ${msg.role === "user" ? "items-end" : "items-start"}`}>
                 {msg.role === "user" ? (
-                  <div className="bg-accent text-white px-5 py-3.5 rounded-2xl rounded-tr-sm shadow-sm inline-block max-w-[85%] text-[15px]">
+                  <div className="bg-[#533afd] text-white px-5 py-3 rounded-[8px] shadow-[var(--stripe-shadow-elevated)] inline-block max-w-[85%] text-[15px]">
                     <p className="whitespace-pre-wrap">{msg.content}</p>
                   </div>
                 ) : (
-                  <div className="bg-surface border border-border px-6 py-6 rounded-2xl rounded-tl-sm shadow-sm w-full">
+                  <div className="bg-surface border border-border px-6 py-6 rounded-[8px] shadow-[var(--stripe-shadow-standard)] w-full">
                     <style dangerouslySetInnerHTML={{ __html: `
-                      .ai-hist-container p { margin-bottom: 16px !important; line-height: 1.5 !important; display: block !important; }
-                      .ai-hist-container h3 { margin-top: 32px !important; margin-bottom: 16px !important; font-weight: 700 !important; font-size: 1.25rem !important; display: block !important; }
-                      .ai-hist-container ul, .ai-hist-container ol { margin-bottom: 24px !important; padding-left: 20px !important; }
-                      .ai-hist-container li { margin-bottom: 8px !important; }
+                      .ai-hist-container p { margin-bottom: 16px !important; line-height: 1.5 !important; display: block !important; color: var(--foreground) !important; }
+                      .ai-hist-container h3 { margin-top: 32px !important; margin-bottom: 16px !important; font-weight: 700 !important; font-size: 1.25rem !important; display: block !important; color: var(--foreground) !important; }
+                      .ai-hist-container ul, .ai-hist-container ol { margin-bottom: 24px !important; padding-left: 20px !important; color: var(--foreground) !important; }
+                      .ai-hist-container li { margin-bottom: 8px !important; color: var(--foreground) !important; }
+                      .ai-hist-container strong,
+                      .ai-hist-container em,
+                      .ai-hist-container a,
+                      .ai-hist-container code,
+                      .ai-hist-container span {
+                        color: var(--foreground) !important;
+                      }
+                      .ai-hist-container pre {
+                        background: color-mix(in srgb, var(--surface) 82%, var(--foreground) 18%) !important;
+                        color: var(--foreground) !important;
+                        border: 1px solid var(--border) !important;
+                        border-radius: 6px !important;
+                      }
+                      .ai-hist-container pre code {
+                        background: transparent !important;
+                        color: var(--foreground) !important;
+                      }
+                      .ai-hist-container :not(pre) > code {
+                        background: color-mix(in srgb, var(--surface) 88%, var(--foreground) 12%) !important;
+                        color: var(--foreground) !important;
+                        border: 1px solid var(--border) !important;
+                        border-radius: 4px !important;
+                        padding: 1px 4px !important;
+                      }
                     `}} />
-                    <div className="ai-hist-container prose prose-base dark:prose-invert max-w-none text-foreground">
+                    <div className="ai-hist-container prose prose-base max-w-none text-foreground">
                       <ReactMarkdown remarkPlugins={[remarkGfm]}>
                         {msg.content.replace(/\[SOURCES_USED:\s*.*?\]/, "").trim()}
                       </ReactMarkdown>
@@ -137,7 +161,7 @@ export default function ChatSessionPage({ params }: { params: Promise<{ id: stri
                         <p className="text-xs font-semibold text-muted uppercase tracking-widest mb-3">Nguồn tham khảo</p>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                           {msg.sources.map((src, i) => (
-                            <div key={i} className="bg-background border border-border/80 p-3 rounded-xl flex items-center gap-2 text-sm">
+                            <div key={i} className="bg-background border border-border/80 p-3 rounded-[6px] flex items-center gap-2 text-sm">
                               <svg className="w-4 h-4 text-accent shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
                               <span className="font-medium truncate">{src.fileName}</span>
                             </div>
@@ -155,7 +179,7 @@ export default function ChatSessionPage({ params }: { params: Promise<{ id: stri
         {/* Read-only notice */}
         {!loading && !notFound && (
           <div className="pt-3 bg-background/90 backdrop-blur z-10 sticky bottom-0">
-            <div className="w-full max-w-4xl mx-auto bg-surface border border-border rounded-2xl px-5 py-3.5 flex items-center gap-3 text-muted">
+            <div className="w-full max-w-4xl mx-auto bg-surface border border-border rounded-[6px] px-5 py-3.5 flex items-center gap-3 text-muted shadow-[var(--stripe-shadow-standard)]">
               <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
               <p className="text-sm font-medium">Đây là lịch sử chỉ đọc. <Link href="/chat" className="text-accent hover:underline font-semibold">Bắt đầu chat mới →</Link></p>
             </div>

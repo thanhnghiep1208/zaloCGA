@@ -37,7 +37,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
             setRole("user");
           }
         } catch (error) {
-          console.error("Error fetching user role", error);
+          const code = (error as { code?: string })?.code;
+          if (code !== "permission-denied") {
+            console.error("Error fetching user role", error);
+          }
           setRole("user"); // Allow standard user access fallback
         }
       } else {

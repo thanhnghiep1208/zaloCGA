@@ -256,7 +256,7 @@ Khuyến nghị:
 
 Lưu ý:
 
-- Thay đổi `NEXT_PUBLIC_*` cần rollout/build lại để có hiệu lực.
+- Thay đổi `NEXT_PUBLIC_`* cần rollout/build lại để có hiệu lực.
 
 ---
 

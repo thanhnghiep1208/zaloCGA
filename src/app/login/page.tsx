@@ -57,13 +57,13 @@ export default function LoginPage() {
   };
 
   return (
-    <main className="flex-1 flex items-center justify-center p-6 bg-surface min-h-screen animate-in fade-in duration-500">
-      <div className="bg-background border border-border rounded-xl shadow-sm p-10 w-full max-w-[28rem] space-y-8">
+    <main className="flex-1 flex items-center justify-center p-6 bg-background min-h-screen animate-in fade-in duration-500">
+      <div className="clay-card p-8 w-full max-w-[28rem] space-y-8 rounded-[8px]">
         <div className="text-center space-y-4 pb-2">
-          <div className="w-16 h-16 bg-surface border border-border shadow-sm rounded-2xl flex items-center justify-center mx-auto mb-4">
+          <div className="w-16 h-16 bg-surface border border-border shadow-sm rounded-[6px] flex items-center justify-center mx-auto mb-4">
             <svg className="w-8 h-8 text-accent" fill="none" strokeWidth={1.5} stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 20.25c4.97 0 9-3.694 9-8.25s-4.03-8.25-9-8.25S3 7.444 3 12c0 2.104.859 4.023 2.273 5.38.432.447.74 1.04.586 1.641a4.483 4.483 0 0 1-.923 1.785A5.969 5.969 0 0 0 6 21c1.282 0 2.47-.402 3.445-1.087.81.22 1.668.337 2.555.337Z" /></svg>
           </div>
-          <h1 className="text-3xl font-semibold text-foreground tracking-tight">Internal Portal</h1>
+          <h1 className="text-3xl font-light text-foreground tracking-tight">Internal Portal</h1>
           <p className="text-muted text-[15px] max-w-sm mx-auto leading-relaxed">Sign in securely using your company Google account to access the knowledge base.</p>
         </div>
         
@@ -78,7 +78,7 @@ export default function LoginPage() {
             type="button" 
             onClick={handleGoogleSignIn}
             disabled={loading}
-            className="w-full bg-surface border border-border hover:bg-black/5 text-foreground py-3.5 rounded-xl font-medium transition-colors disabled:opacity-50 flex items-center justify-center gap-3 shadow-sm hover:border-black/20"
+            className="clay-hover-playful w-full bg-[#533afd] border border-transparent hover:bg-[#4434d4] text-white py-3 clay-pill font-normal transition-colors disabled:opacity-50 flex items-center justify-center gap-3 shadow-[var(--stripe-shadow-elevated)]"
           >
             {loading ? (
                <div className="flex gap-1.5 items-center">

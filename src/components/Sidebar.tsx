@@ -7,6 +7,7 @@ import { collection, query, where, orderBy, onSnapshot, Timestamp } from "fireba
 import { db } from "@/lib/firebase";
 import { deleteChatSession, cleanupOldSessions } from "@/lib/chatHistory";
 import Link from "next/link";
+import { useTheme } from "@/context/ThemeContext";
 
 interface SidebarProps {
   onClose?: () => void;
@@ -37,6 +38,7 @@ export function Sidebar({ onClose, className = "" }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
   const { role, user } = useAuth();
+  const { theme } = useTheme();
   const [sessions, setSessions] = useState<ChatSessionSummary[]>([]);
 
   const links = [
@@ -115,8 +117,8 @@ export function Sidebar({ onClose, className = "" }: SidebarProps) {
   };
 
   return (
-    <aside className={`w-64 border-r border-border bg-surface/30 min-h-screen flex flex-col p-4 space-y-2 ${className}`}>
-      <h2 className="text-[10px] font-bold text-muted uppercase tracking-[0.2em] mb-4 px-3 mt-4 opacity-60">General</h2>
+    <aside className={`w-64 border-r border-border bg-surface min-h-screen flex flex-col p-4 space-y-2 ${className}`}>
+      <h2 className="clay-label mb-4 px-3 mt-4 opacity-80">General</h2>
       {links.map((link) => {
         const isActive = pathname === link.href || (link.href !== "/chat" && pathname.startsWith(link.href));
         return (
@@ -124,13 +126,23 @@ export function Sidebar({ onClose, className = "" }: SidebarProps) {
             key={link.href} 
             href={link.href}
             onClick={() => onClose?.()}
-            className={`flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all text-sm font-medium ${
+            className={`group clay-hover-playful flex items-center gap-3 px-4 py-2.5 rounded-[6px] transition-all text-sm font-normal border ${
               isActive 
-                ? "bg-accent text-white shadow-md shadow-accent/20" 
-                : "text-muted hover:bg-border/40 hover:text-foreground"
+                ? "bg-[#533afd] text-white border-[#533afd]" 
+                : theme === "dark"
+                  ? "text-foreground border-border bg-surface hover:bg-[#533afd]/20 hover:text-white hover:border-[#b9b9f9]"
+                  : "text-foreground border-border bg-surface hover:bg-[#533afd]/5 hover:text-[#533afd] hover:border-[#b9b9f9]"
             }`}
           >
-            <span className={isActive ? "text-white" : "text-muted group-hover:text-foreground"}>
+            <span
+              className={
+                isActive
+                  ? "text-white"
+                  : theme === "dark"
+                    ? "text-muted group-hover:text-white"
+                    : "text-muted group-hover:text-[#533afd]"
+              }
+            >
               {link.icon}
             </span>
             {link.label}
@@ -141,7 +153,7 @@ export function Sidebar({ onClose, className = "" }: SidebarProps) {
       {/* Chat History Section */}
       {sessions.length > 0 && (
         <div className="pt-4">
-          <h2 className="text-[10px] font-bold text-muted uppercase tracking-[0.2em] mb-3 px-3 opacity-60">
+          <h2 className="clay-label mb-3 px-3 opacity-80">
             Lịch sử gần đây
           </h2>
           <div className="space-y-0.5 max-h-[50vh] overflow-y-auto scrollbar-thin pr-1">
@@ -152,10 +164,12 @@ export function Sidebar({ onClose, className = "" }: SidebarProps) {
                   key={session.id}
                   href={`/chat/${session.id}`}
                   onClick={() => onClose?.()}
-                  className={`flex items-start justify-between gap-2 px-3 py-2.5 rounded-xl transition-all group ${
+                  className={`flex items-start justify-between gap-2 px-3 py-2.5 rounded-[6px] transition-all group border ${
                     isActive
-                      ? "bg-accent/10 border border-accent/20"
-                      : "hover:bg-border/40"
+                      ? "bg-[#533afd]/5 border-[#b9b9f9]"
+                      : theme === "dark"
+                        ? "border-border bg-surface hover:bg-white/5"
+                        : "border-border bg-surface hover:bg-[#f6f9fc]"
                   }`}
                 >
                   <div className="min-w-0 flex-1">

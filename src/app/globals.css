@@ -35,26 +35,37 @@
   margin-bottom: 0.5rem !important;
 }
 
-:root {
+:root,
+[data-theme="light"] {
   --background: #ffffff;
-  --foreground: #111111;
-  --surface: #f9f9fa;
-  --border: #eaeaea;
-  --muted: #737373;
-  --accent: #2563eb;
-  --accent-hover: #1d4ed8;
+  --foreground: #061b31;
+  --surface: #ffffff;
+  --border: #e5edf5;
+  --muted: #64748d;
+  --accent: #533afd;
+  --accent-hover: #4434d4;
+  --stripe-purple: #533afd;
+  --stripe-purple-hover: #4434d4;
+  --stripe-purple-deep: #2e2b8c;
+  --stripe-navy: #061b31;
+  --stripe-brand-dark: #1c1e54;
+  --stripe-ruby: #ea2261;
+  --stripe-magenta: #f96bee;
+  --stripe-shadow-ambient: rgba(23, 23, 23, 0.06) 0px 3px 6px;
+  --stripe-shadow-standard: rgba(23, 23, 23, 0.08) 0px 15px 35px;
+  --stripe-shadow-elevated:
+    rgba(50, 50, 93, 0.25) 0px 30px 45px -30px,
+    rgba(0, 0, 0, 0.1) 0px 18px 36px -18px;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0b;
-    --foreground: #ededed;
-    --surface: #141517;
-    --border: #262626;
-    --muted: #a3a3a3;
-    --accent: #3b82f6;
-    --accent-hover: #60a5fa;
-  }
+[data-theme="dark"] {
+  --background: #1c1e54;
+  --foreground: #f7f9ff;
+  --surface: #0d253d;
+  --border: rgba(255, 255, 255, 0.18);
+  --muted: rgba(247, 249, 255, 0.7);
+  --accent: #533afd;
+  --accent-hover: #4434d4;
 }
 
 body {
@@ -62,4 +73,45 @@ body {
   color: var(--foreground);
   font-family: var(--font-inter), sans-serif;
   letter-spacing: -0.01em;
+  font-feature-settings: "ss01" 1;
+}
+
+.clay-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: rgba(3, 3, 39, 0.25) 0px 14px 21px -14px, rgba(0, 0, 0, 0.18) 0px 8px 17px -8px;
+}
+
+.clay-card-dashed {
+  border-style: solid;
+}
+
+.clay-pill {
+  border-radius: 4px;
+}
+
+.clay-section {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: var(--stripe-shadow-standard);
+}
+
+.clay-label {
+  font-size: 13px;
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--muted);
+}
+
+.clay-hover-playful {
+  transition: box-shadow 180ms ease, background-color 180ms ease, color 180ms ease, border-color 180ms ease;
+  transform-origin: center;
+}
+
+.clay-hover-playful:hover {
+  transform: none;
+  border-color: #b9b9f9;
+  box-shadow: var(--stripe-shadow-standard);
 }

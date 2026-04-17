@@ -2,9 +2,11 @@
 
 import Link from "next/link";
 import { trackEvent } from "@/lib/gtag";
+import { useTheme } from "@/context/ThemeContext";
 
 
 export default function LandingPage() {
+  const { theme, toggleTheme } = useTheme();
   const benefits = [
     {
       title: "Tối ưu trải nghiệm",
@@ -47,46 +49,84 @@ export default function LandingPage() {
   ];
 
   return (
-    <main className="flex-1 max-w-6xl mx-auto w-full px-6 py-12 md:py-24 animate-in fade-in slide-in-from-bottom-6 duration-1000">
+    <main className="flex-1 max-w-[1080px] mx-auto w-full px-6 py-12 md:py-20 animate-in fade-in slide-in-from-bottom-6 duration-1000">
+      <div className="flex justify-end mb-6">
+        <button
+          onClick={toggleTheme}
+          className="clay-hover-playful bg-surface border border-border p-1.5 rounded-[4px] text-foreground"
+          title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+          aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+        >
+          {theme === "dark" ? (
+            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M12 3v2.2M12 18.8V21M4.8 4.8l1.6 1.6M17.6 17.6l1.6 1.6M3 12h2.2M18.8 12H21M4.8 19.2l1.6-1.6M17.6 6.4l1.6-1.6M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
+            </svg>
+          ) : (
+            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M21 12.8A8.8 8.8 0 1111.2 3a7 7 0 109.8 9.8z" />
+            </svg>
+          )}
+        </button>
+      </div>
+
       {/* Hero Section */}
       <div className="text-center space-y-10 mb-20">
         <div className="space-y-4">
-          <h1 className="text-5xl md:text-7xl font-black tracking-tight text-foreground leading-[1.1]">
+          <h1 className="text-4xl md:text-[56px] font-light tracking-[-1.4px] text-foreground leading-[1.03]">
             Zalo Content <br />
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-accent to-blue-500">Guidelines</span>
+            <span className="text-[#533afd]">Guidelines</span>
           </h1>
-          <p className="text-lg md:text-xl text-muted font-medium max-w-2xl mx-auto opacity-80">
+          <p className="text-lg text-muted font-light max-w-2xl mx-auto opacity-90">
             Tra cứu quy cách viết, tối ưu hóa trải nghiệm người dùng dành riêng cho Zalo.
           </p>
         </div>
 
-        {/* Primary CTA moved up */}
-        <div className="flex justify-center">
-          <Link 
-            href="/chat"
-            onClick={() => trackEvent("start_chat_click")}
-            className="group relative inline-flex items-center gap-2 bg-accent text-white px-12 py-5 rounded-full font-bold text-xl transition-all shadow-[0_20px_50px_rgba(0,111,238,0.3)] hover:shadow-[0_20px_50px_rgba(0,111,238,0.5)] hover:scale-105 active:scale-95 overflow-hidden"
-          >
-
-            <span className="relative z-10">Bắt đầu ngay</span>
-            <svg className="w-5 h-5 relative z-10 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" /></svg>
-            <div className="absolute inset-0 bg-gradient-to-r from-accent to-blue-600 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-          </Link>
-        </div>
       </div>
+
+      <section
+        className={`mb-20 rounded-[8px] px-8 py-12 md:px-12 md:py-14 shadow-[var(--stripe-shadow-elevated)] ${
+          theme === "dark"
+            ? "border border-white/20 bg-[#1c1e54]"
+            : "border border-border bg-surface"
+        }`}
+      >
+        <div className="max-w-3xl space-y-4">
+          <p className={`text-xs font-normal tracking-[0.1px] ${theme === "dark" ? "text-white/70" : "text-muted"}`}>
+            Zalo Content Guidelines
+          </p>
+          <h2 className={`text-3xl md:text-[32px] font-light tracking-[-0.64px] leading-[1.1] ${theme === "dark" ? "text-white" : "text-foreground"}`}>
+            Viết nhanh hơn, đồng nhất hơn, đúng guideline ngay từ bản nháp đầu tiên.
+          </h2>
+          <p className={`text-base font-light leading-relaxed ${theme === "dark" ? "text-white/75" : "text-muted"}`}>
+            Hệ thống kết hợp tra cứu guideline và gợi ý microcopy theo ngữ cảnh UI, giúp giảm vòng lặp review và giữ chất lượng ngôn ngữ nhất quán trên toàn bộ sản phẩm.
+          </p>
+          <div className="pt-2">
+            <Link
+              href="/chat"
+              onClick={() => trackEvent("start_chat_click")}
+              className="clay-hover-playful inline-flex items-center gap-2 rounded-[4px] px-5 py-2.5 text-sm font-normal border border-transparent bg-[#533afd] text-white hover:bg-[#4434d4] transition-colors shadow-[var(--stripe-shadow-elevated)]"
+            >
+              Bắt đầu ngay
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+              </svg>
+            </Link>
+          </div>
+        </div>
+      </section>
 
       {/* Professional Benefit Chips (Now Unified Cards) */}
       <section className="mb-24">
-        <h2 className="text-2xl md:text-3xl font-bold text-foreground text-center mb-10">
+        <h2 className="text-2xl md:text-3xl font-light text-foreground text-center mb-10">
           Lợi ích khi chuẩn hóa ngôn từ
         </h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-6xl mx-auto">
         {benefits.map((b, i) => (
-          <div key={i} className="group bg-surface/40 border border-border/60 p-8 rounded-[2rem] hover:bg-white dark:hover:bg-accent/5 hover:border-accent/40 hover:shadow-2xl hover:shadow-accent/5 transition-all duration-500">
-            <div className="w-14 h-14 bg-surface border border-border rounded-2xl flex items-center justify-center text-accent mb-6 group-hover:bg-accent group-hover:text-white transition-all duration-300 shadow-sm">
+          <div key={i} className="clay-card group p-6 rounded-[6px] hover:bg-[#f6f9fc] transition-all duration-300">
+            <div className="w-12 h-12 bg-surface border border-border rounded-[6px] flex items-center justify-center text-[#533afd] mb-5 group-hover:bg-[#533afd] group-hover:text-white transition-all duration-300 shadow-sm">
               <div className="scale-110">{b.icon}</div>
             </div>
-            <h3 className="text-lg font-bold text-foreground mb-2">{b.title}</h3>
+            <h3 className="text-[22px] font-light tracking-[-0.22px] text-foreground mb-2">{b.title}</h3>
             <p className="text-sm text-muted leading-relaxed opacity-80">{b.desc}</p>
           </div>
         ))}
@@ -97,21 +137,25 @@ export default function LandingPage() {
 
       {/* Category Grid (Unified) */}
       <section className="pb-20">
-        <h2 className="text-2xl md:text-3xl font-bold text-foreground text-center mb-10">
+        <h2 className="text-2xl md:text-3xl font-light text-foreground text-center mb-10">
           Xây dựng nội dung nhất quán
         </h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
         {cards.map((card, i) => (
-          <div key={i} className="group bg-surface border border-border/60 p-8 rounded-[2rem] hover:bg-white dark:hover:bg-accent/5 hover:border-accent/50 hover:shadow-2xl hover:shadow-accent/10 transition-all duration-500 cursor-default">
-            <div className="w-14 h-14 bg-surface border border-border rounded-2xl flex items-center justify-center text-accent mb-6 group-hover:bg-accent group-hover:text-white transition-all duration-300 shadow-sm">
+          <div key={i} className="clay-card group p-6 rounded-[6px] hover:bg-[#f6f9fc] transition-all duration-300 cursor-default">
+            <div className="w-12 h-12 bg-surface border border-border rounded-[6px] flex items-center justify-center text-[#533afd] mb-5 group-hover:bg-[#533afd] group-hover:text-white transition-all duration-300 shadow-sm">
               <div className="scale-110">{card.icon}</div>
             </div>
-            <h3 className="text-lg font-bold text-foreground mb-2 group-hover:text-accent transition-colors">{card.title}</h3>
+            <h3 className="text-[22px] font-light tracking-[-0.22px] text-foreground mb-2 group-hover:text-[#533afd] transition-colors">{card.title}</h3>
             <p className="text-sm text-muted leading-relaxed opacity-80 group-hover:opacity-100 transition-opacity">{card.desc}</p>
           </div>
         ))}
         </div>
       </section>
+
+      <p className="text-center text-xs text-muted/90 mt-6">
+        Design System Inspired by Stripe
+      </p>
     </main>
   );
 }

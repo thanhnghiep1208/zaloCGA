@@ -275,7 +275,7 @@ export default function ChatView() {
           {!showConversationLayout && (
             <div className="h-full min-h-[420px] flex items-center justify-center opacity-80">
               <div className="flex flex-col items-center justify-center text-center space-y-4 max-w-md mx-auto px-4">
-               <div className="w-20 h-20 bg-surface border border-border rounded-2xl flex items-center justify-center rotate-3 shadow-sm">
+               <div className="w-20 h-20 bg-surface border border-border rounded-[8px] flex items-center justify-center rotate-3 shadow-sm">
                  <svg className="w-10 h-10 text-accent/80" fill="none" strokeWidth={1.5} stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 20.25c4.97 0 9-3.694 9-8.25s-4.03-8.25-9-8.25S3 7.444 3 12c0 2.104.859 4.023 2.273 5.38.432.447.74 1.04.586 1.641a4.483 4.483 0 0 1-.923 1.785A5.969 5.969 0 0 0 6 21c1.282 0 2.47-.402 3.445-1.087.81.22 1.668.337 2.555.337Z" /></svg>
                </div>
                <div className="space-y-2 text-foreground">
@@ -293,16 +293,17 @@ export default function ChatView() {
             .map(msg => (
               <div key={msg.id} className={`flex flex-col w-full ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
                 {msg.role === 'user' ? (
-                  <div className="bg-accent text-white px-5 py-3.5 rounded-2xl rounded-tr-sm shadow-sm inline-block max-w-[85%] text-[15px]">
+                  <div className="clay-card bg-[#533afd] text-white px-5 py-3 rounded-[8px] inline-block max-w-[85%] text-[15px]">
                     <p className="whitespace-pre-wrap">{msg.content}</p>
                   </div>
                 ) : (
-                  <div className="bg-surface border border-border px-6 py-6 rounded-2xl rounded-tl-sm shadow-sm w-full">
+                  <div className="clay-card px-6 py-6 rounded-[8px] w-full">
                     <style dangerouslySetInnerHTML={{ __html: `
                       .ai-response-container p {
                         margin-bottom: 16px !important;
                         line-height: 1.5 !important;
                         display: block !important;
+                        color: var(--foreground) !important;
                       }
                       .ai-response-container h3 {
                         margin-top: 32px !important;
@@ -310,18 +311,45 @@ export default function ChatView() {
                         font-weight: 700 !important;
                         font-size: 1.25rem !important;
                         display: block !important;
+                        color: var(--foreground) !important;
                       }
                       .ai-response-container ul, .ai-response-container ol {
                         margin-bottom: 24px !important;
                         padding-left: 20px !important;
+                        color: var(--foreground) !important;
                       }
                       .ai-response-container li {
                         margin-bottom: 8px !important;
+                        color: var(--foreground) !important;
+                      }
+                      .ai-response-container strong,
+                      .ai-response-container em,
+                      .ai-response-container a,
+                      .ai-response-container code,
+                      .ai-response-container span {
+                        color: var(--foreground) !important;
+                      }
+                      .ai-response-container pre {
+                        background: color-mix(in srgb, var(--surface) 82%, var(--foreground) 18%) !important;
+                        color: var(--foreground) !important;
+                        border: 1px solid var(--border) !important;
+                        border-radius: 6px !important;
+                      }
+                      .ai-response-container pre code {
+                        background: transparent !important;
+                        color: var(--foreground) !important;
+                      }
+                      .ai-response-container :not(pre) > code {
+                        background: color-mix(in srgb, var(--surface) 88%, var(--foreground) 12%) !important;
+                        color: var(--foreground) !important;
+                        border: 1px solid var(--border) !important;
+                        border-radius: 4px !important;
+                        padding: 1px 4px !important;
                       }
                       .ai-response-container hr {
                         margin: 40px 0 !important;
                         border: 0 !important;
-                        border-top: 1px solid #eaeaea !important;
+                        border-top: 1px solid var(--border) !important;
                       }
                     `}} />
                     {(() => {
@@ -337,7 +365,7 @@ export default function ChatView() {
 
                       return (
                         <>
-                          <div className="ai-response-container prose prose-base dark:prose-invert max-w-none text-foreground">
+                          <div className="ai-response-container prose prose-base max-w-none text-foreground">
                             <ReactMarkdown remarkPlugins={[remarkGfm]}>
                               {displayContent}
                             </ReactMarkdown>
@@ -356,7 +384,7 @@ export default function ChatView() {
                               </div>
                               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                  {visibleSources.map((src, i) => (
-                                   <div key={i} className="bg-background border border-border/80 p-4 rounded-xl flex flex-col gap-2 shadow-sm hover:shadow-md transition-all group">
+                                   <div key={i} className="bg-background border border-border/80 p-4 rounded-[6px] flex flex-col gap-2 shadow-sm hover:shadow-md transition-all group">
                                      <div className="flex items-center gap-2 truncate">
                                        <svg className="w-4 h-4 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
                                        <span className="text-sm font-semibold truncate group-hover:text-accent transition-colors">{src.fileName}</span>
@@ -414,7 +442,7 @@ export default function ChatView() {
           
           {isLoading && (
              <div className="flex flex-col mr-auto items-start max-w-[85%] w-full animate-in fade-in pb-2">
-               <div className="bg-surface border border-border px-6 py-5 rounded-2xl rounded-tl-sm shadow-sm flex flex-col gap-3 w-fit min-w-[240px]">
+               <div className="clay-card px-6 py-5 rounded-[8px] flex flex-col gap-3 w-fit min-w-[240px]">
                   <div className="flex items-center gap-3">
                     <div className="flex gap-1">
                       <div className="w-1.5 h-1.5 rounded-full bg-accent animate-[bounce_1s_infinite_0ms]"></div>
@@ -439,8 +467,8 @@ export default function ChatView() {
           <div ref={bottomRef} className="h-px" />
         </div>
 
-        <div className="pt-3 bg-background/90 backdrop-blur z-10 shrink-0 space-y-2">
-          <div className="relative flex items-end w-full max-w-4xl mx-auto bg-surface border border-border rounded-2xl shadow-sm focus-within:ring-2 focus-within:ring-accent/20 focus-within:border-accent transition-all">
+        <div className="pt-3 bg-background/95 backdrop-blur z-10 shrink-0 space-y-2">
+          <div className="relative flex items-end w-full max-w-4xl mx-auto bg-surface border border-border rounded-[6px] shadow-[var(--stripe-shadow-elevated)] focus-within:ring-2 focus-within:ring-[#533afd]/30 transition-all">
              <textarea 
                value={input}
                onChange={e => setInput(e.target.value)}
@@ -458,7 +486,7 @@ export default function ChatView() {
              <button 
                onClick={handleSend}
                disabled={!input.trim() || isLoading}
-               className="absolute right-2 bottom-2 p-3 bg-accent hover:bg-accent-hover disabled:bg-surface disabled:text-muted disabled:border disabled:border-border text-white rounded-xl transition-all shadow-sm"
+              className="clay-hover-playful absolute right-2 bottom-2 p-3 bg-[#533afd] hover:bg-[#4434d4] disabled:bg-surface disabled:text-muted disabled:border disabled:border-border text-white border border-transparent rounded-[4px] transition-all shadow-[var(--stripe-shadow-elevated)]"
              >
                <svg className="w-4 h-4 translate-x-[-1px] translate-y-[1px]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" /></svg>
              </button>
