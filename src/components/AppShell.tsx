@@ -38,7 +38,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           )}
 
           <div className={`
-            fixed inset-y-0 left-0 w-64 z-[70] bg-surface shadow-2xl transform transition-transform duration-300 ease-in-out md:hidden
+            fixed inset-y-0 left-0 w-64 z-[70] bg-surface border-r border-border transform transition-transform duration-300 ease-in-out md:hidden
             ${isSidebarOpen ? "translate-x-0" : "-translate-x-full"}
           `}>
              <Sidebar onClose={() => setIsSidebarOpen(false)} className="w-full" />

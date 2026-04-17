@@ -126,21 +126,25 @@ export function Sidebar({ onClose, className = "" }: SidebarProps) {
             key={link.href} 
             href={link.href}
             onClick={() => onClose?.()}
-            className={`group clay-hover-playful flex items-center gap-3 px-4 py-2.5 rounded-[6px] transition-all text-sm font-normal border ${
-              isActive 
-                ? "bg-[#533afd] text-white border-[#533afd]" 
+            className={`group clay-hover-playful flex items-center gap-3 px-4 py-2.5 rounded-[8px] transition-all text-sm font-medium border ${
+              isActive
+                ? theme === "dark"
+                  ? "bg-cream text-charcoal border-border"
+                  : "bg-charcoal text-white border-charcoal"
                 : theme === "dark"
-                  ? "text-foreground border-border bg-surface hover:bg-[#533afd]/20 hover:text-white hover:border-[#b9b9f9]"
-                  : "text-foreground border-border bg-surface hover:bg-[#533afd]/5 hover:text-[#533afd] hover:border-[#b9b9f9]"
+                  ? "text-foreground border-border bg-surface hover:bg-accent/10 hover:border-accent/40"
+                  : "text-foreground border-border bg-surface hover:bg-accent/10 hover:text-link hover:border-parchment"
             }`}
           >
             <span
               className={
                 isActive
-                  ? "text-white"
+                  ? theme === "dark"
+                    ? "text-charcoal"
+                    : "text-white"
                   : theme === "dark"
-                    ? "text-muted group-hover:text-white"
-                    : "text-muted group-hover:text-[#533afd]"
+                    ? "text-muted group-hover:text-foreground"
+                    : "text-muted group-hover:text-link"
               }
             >
               {link.icon}
@@ -164,12 +168,12 @@ export function Sidebar({ onClose, className = "" }: SidebarProps) {
                   key={session.id}
                   href={`/chat/${session.id}`}
                   onClick={() => onClose?.()}
-                  className={`flex items-start justify-between gap-2 px-3 py-2.5 rounded-[6px] transition-all group border ${
+                  className={`flex items-start justify-between gap-2 px-3 py-2.5 rounded-[8px] transition-all group border ${
                     isActive
-                      ? "bg-[#533afd]/5 border-[#b9b9f9]"
+                      ? "bg-accent/15 border-accent/35"
                       : theme === "dark"
-                        ? "border-border bg-surface hover:bg-white/5"
-                        : "border-border bg-surface hover:bg-[#f6f9fc]"
+                        ? "border-border bg-surface hover:bg-accent/8"
+                        : "border-border bg-surface hover:bg-cream/50"
                   }`}
                 >
                   <div className="min-w-0 flex-1">

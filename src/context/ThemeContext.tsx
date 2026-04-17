@@ -15,7 +15,7 @@ const ThemeContext = createContext<ThemeContextValue | null>(null);
 const STORAGE_KEY = "ikc-theme";
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setThemeState] = useState<Theme>("dark");
+  const [theme, setThemeState] = useState<Theme>("light");
 
   const applyTheme = (nextTheme: Theme) => {
     if (typeof document === "undefined") return;
@@ -37,7 +37,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (typeof window === "undefined") return;
     const saved = window.localStorage.getItem(STORAGE_KEY) as Theme | null;
-    const initialTheme = saved === "light" || saved === "dark" ? saved : "dark";
+    const initialTheme = saved === "light" || saved === "dark" ? saved : "light";
     setThemeState(initialTheme);
     applyTheme(initialTheme);
   }, []);

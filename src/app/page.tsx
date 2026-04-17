@@ -4,7 +4,6 @@ import Link from "next/link";
 import { trackEvent } from "@/lib/gtag";
 import { useTheme } from "@/context/ThemeContext";
 
-
 export default function LandingPage() {
   const { theme, toggleTheme } = useTheme();
   const benefits = [
@@ -48,12 +47,21 @@ export default function LandingPage() {
     }
   ];
 
+  const heroTint =
+    theme === "dark"
+      ? "from-mysteria via-[#252044] to-[#1b1938]"
+      : "from-mysteria via-[#252044] to-[#2a2650]";
+
   return (
-    <main className="flex-1 max-w-[1080px] mx-auto w-full px-6 py-12 md:py-20 animate-in fade-in slide-in-from-bottom-6 duration-1000">
-      <div className="flex justify-end mb-6">
+    <main className="flex-1 w-full animate-in fade-in slide-in-from-bottom-6 duration-1000">
+      <section
+        className={`w-full bg-gradient-to-b ${heroTint} border-b border-white/10`}
+      >
+        <div className="max-w-6xl mx-auto px-6 md:px-8 py-[80px] flex flex-col">
+          <div className="flex justify-end">
         <button
           onClick={toggleTheme}
-          className="clay-hover-playful bg-surface border border-border p-1.5 rounded-[4px] text-foreground"
+          className="clay-hover-playful bg-surface border border-border p-1.5 rounded-[8px] text-foreground"
           title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
           aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
         >
@@ -67,95 +75,80 @@ export default function LandingPage() {
             </svg>
           )}
         </button>
-      </div>
-
-      {/* Hero Section */}
-      <div className="text-center space-y-10 mb-20">
-        <div className="space-y-4">
-          <h1 className="text-4xl md:text-[56px] font-light tracking-[-1.4px] text-foreground leading-[1.03]">
-            Zalo Content <br />
-            <span className="text-[#533afd]">Guidelines</span>
-          </h1>
-          <p className="text-lg text-muted font-light max-w-2xl mx-auto opacity-90">
-            Tra cứu quy cách viết, tối ưu hóa trải nghiệm người dùng dành riêng cho Zalo.
-          </p>
-        </div>
-
-      </div>
-
-      <section
-        className={`mb-20 rounded-[8px] px-8 py-12 md:px-12 md:py-14 shadow-[var(--stripe-shadow-elevated)] ${
-          theme === "dark"
-            ? "border border-white/20 bg-[#1c1e54]"
-            : "border border-border bg-surface"
-        }`}
-      >
-        <div className="max-w-3xl space-y-4">
-          <p className={`text-xs font-normal tracking-[0.1px] ${theme === "dark" ? "text-white/70" : "text-muted"}`}>
-            Zalo Content Guidelines
-          </p>
-          <h2 className={`text-3xl md:text-[32px] font-light tracking-[-0.64px] leading-[1.1] ${theme === "dark" ? "text-white" : "text-foreground"}`}>
-            Viết nhanh hơn, đồng nhất hơn, đúng guideline ngay từ bản nháp đầu tiên.
-          </h2>
-          <p className={`text-base font-light leading-relaxed ${theme === "dark" ? "text-white/75" : "text-muted"}`}>
-            Hệ thống kết hợp tra cứu guideline và gợi ý microcopy theo ngữ cảnh UI, giúp giảm vòng lặp review và giữ chất lượng ngôn ngữ nhất quán trên toàn bộ sản phẩm.
-          </p>
-          <div className="pt-2">
-            <Link
-              href="/chat"
-              onClick={() => trackEvent("start_chat_click")}
-              className="clay-hover-playful inline-flex items-center gap-2 rounded-[4px] px-5 py-2.5 text-sm font-normal border border-transparent bg-[#533afd] text-white hover:bg-[#4434d4] transition-colors shadow-[var(--stripe-shadow-elevated)]"
-            >
-              Bắt đầu ngay
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
-              </svg>
-            </Link>
+          </div>
+          <div className="flex items-center justify-center">
+            <div className="text-center space-y-6 max-w-3xl mx-auto">
+              <h1 className="text-4xl md:text-[56px] font-light tracking-[-1.4px] text-white/95 leading-[1.03]">
+                Zalo Content <br />
+                <span className="text-accent">Guidelines</span>
+              </h1>
+              <p className="text-lg text-white/80 font-light leading-relaxed max-w-3xl mx-auto">
+                Tra cứu guideline và gợi ý microcopy theo ngữ cảnh UI cho Zalo, giúp viết nhanh, đúng chuẩn ngay từ đầu, giảm vòng lặp review và giữ ngôn ngữ nhất quán trên toàn sản phẩm.
+              </p>
+              <div className="pt-2">
+                <Link
+                  href="/chat"
+                  onClick={() => trackEvent("start_chat_click")}
+                  className="clay-hover-playful inline-flex items-center gap-2 rounded-[8px] px-6 py-3 text-base font-bold bg-charcoal text-white border border-white/20 shadow-[0_8px_22px_rgba(0,0,0,0.28)] hover:brightness-110 hover:shadow-[0_10px_26px_rgba(0,0,0,0.34)] transition-all"
+                >
+                  Bắt đầu ngay
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                  </svg>
+                </Link>
+              </div>
+            </div>
           </div>
         </div>
       </section>
 
-      {/* Professional Benefit Chips (Now Unified Cards) */}
+      <div className="max-w-[1080px] mx-auto w-full px-6 py-12 md:py-20">
       <section className="mb-24">
         <h2 className="text-2xl md:text-3xl font-light text-foreground text-center mb-10">
           Lợi ích khi chuẩn hóa ngôn từ
         </h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-6xl mx-auto">
-        {benefits.map((b, i) => (
-          <div key={i} className="clay-card group p-6 rounded-[6px] hover:bg-[#f6f9fc] transition-all duration-300">
-            <div className="w-12 h-12 bg-surface border border-border rounded-[6px] flex items-center justify-center text-[#533afd] mb-5 group-hover:bg-[#533afd] group-hover:text-white transition-all duration-300 shadow-sm">
-              <div className="scale-110">{b.icon}</div>
+          {benefits.map((b, i) => (
+            <div
+              key={i}
+              className="clay-card group p-6 rounded-[16px] hover:bg-cream/40 transition-colors duration-300"
+            >
+              <div className="w-12 h-12 bg-accent/25 border border-border rounded-[8px] flex items-center justify-center text-charcoal mb-5 group-hover:bg-accent/40 transition-colors duration-300">
+                <div className="scale-110">{b.icon}</div>
+              </div>
+              <h3 className="text-[22px] font-light tracking-[-0.22px] text-foreground mb-2">{b.title}</h3>
+              <p className="text-sm text-muted leading-relaxed">{b.desc}</p>
             </div>
-            <h3 className="text-[22px] font-light tracking-[-0.22px] text-foreground mb-2">{b.title}</h3>
-            <p className="text-sm text-muted leading-relaxed opacity-80">{b.desc}</p>
-          </div>
-        ))}
+          ))}
         </div>
       </section>
 
-    
-
-      {/* Category Grid (Unified) */}
       <section className="pb-20">
         <h2 className="text-2xl md:text-3xl font-light text-foreground text-center mb-10">
           Xây dựng nội dung nhất quán
         </h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-        {cards.map((card, i) => (
-          <div key={i} className="clay-card group p-6 rounded-[6px] hover:bg-[#f6f9fc] transition-all duration-300 cursor-default">
-            <div className="w-12 h-12 bg-surface border border-border rounded-[6px] flex items-center justify-center text-[#533afd] mb-5 group-hover:bg-[#533afd] group-hover:text-white transition-all duration-300 shadow-sm">
-              <div className="scale-110">{card.icon}</div>
+          {cards.map((card, i) => (
+            <div
+              key={i}
+              className="clay-card group p-6 rounded-[16px] hover:bg-cream/40 transition-colors duration-300 cursor-default"
+            >
+              <div className="w-12 h-12 bg-accent/25 border border-border rounded-[8px] flex items-center justify-center text-charcoal mb-5 group-hover:bg-accent/40 transition-colors duration-300">
+                <div className="scale-110">{card.icon}</div>
+              </div>
+              <h3 className="text-[22px] font-light tracking-[-0.22px] text-foreground mb-2 group-hover:text-link transition-colors">
+                {card.title}
+              </h3>
+              <p className="text-sm text-muted leading-relaxed group-hover:opacity-100 transition-opacity">{card.desc}</p>
             </div>
-            <h3 className="text-[22px] font-light tracking-[-0.22px] text-foreground mb-2 group-hover:text-[#533afd] transition-colors">{card.title}</h3>
-            <p className="text-sm text-muted leading-relaxed opacity-80 group-hover:opacity-100 transition-opacity">{card.desc}</p>
-          </div>
-        ))}
+          ))}
         </div>
       </section>
 
-      <p className="text-center text-xs text-muted/90 mt-6">
-        Design System Inspired by Stripe
-      </p>
+        <p className="text-center text-xs text-muted mt-6">
+          Design system inspired by Superhuman
+        </p>
+      </div>
     </main>
   );
 }

@@ -74,22 +74,22 @@ export default function AdminLibraryPage() {
   const getStatusColor = (status: string) => {
       if (theme === "light") {
         switch (status) {
-          case "indexed": return "bg-green-100 text-green-700 border-green-200";
-          case "ready": return "bg-emerald-100 text-emerald-700 border-emerald-200";
-          case "processing": return "bg-indigo-100 text-indigo-700 border-indigo-200";
-          case "uploaded": return "bg-purple-100 text-purple-700 border-purple-200";
-          case "failed": return "bg-rose-100 text-rose-700 border-rose-200";
-          case "inactive": return "bg-slate-100 text-slate-700 border-slate-200";
-          default: return "bg-amber-100 text-amber-700 border-amber-200";
+          case "indexed": return "bg-accent/12 text-link border-accent/30";
+          case "ready": return "bg-accent/16 text-link border-accent/35";
+          case "processing": return "bg-accent/10 text-link border-accent/25";
+          case "uploaded": return "bg-accent/18 text-link border-accent/40";
+          case "failed": return "bg-cream text-charcoal border-border";
+          case "inactive": return "bg-background text-muted border-border";
+          default: return "bg-background text-muted border-border";
         }
       }
       switch(status) {
           case 'indexed': return 'bg-[#15be53]/20 text-[#9df2ba] border-[#15be53]/45';
           case 'ready': return 'bg-[#15be53]/16 text-[#8de5ac] border-[#15be53]/35';
-          case 'processing': return 'bg-[#533afd]/18 text-[#cfc9ff] border-[#b9b9f9]/45';
-          case 'uploaded': return 'bg-[#533afd]/24 text-[#dcd8ff] border-[#b9b9f9]/55';
-          case 'failed': return 'bg-[#ea2261]/20 text-[#ffb3cb] border-[#ea2261]/45';
-          case 'inactive': return 'bg-white/8 text-white/70 border-white/20';
+          case 'processing': return 'bg-accent/18 text-accent border-accent/40';
+          case 'uploaded': return 'bg-accent/22 text-accent border-accent/50';
+          case 'failed': return 'bg-cream/15 text-foreground border-border';
+          case 'inactive': return 'bg-background/30 text-muted border-border';
           default: return 'bg-[#9b6829]/25 text-[#ffd9a8] border-[#9b6829]/45';
       }
   };
@@ -121,7 +121,7 @@ export default function AdminLibraryPage() {
              <h1 className="text-2xl font-light tracking-tight">Document Library</h1>
              <p className="text-muted text-sm">Manage your uploaded internal documents.</p>
            </div>
-           <Link href="/admin/upload" className="clay-hover-playful bg-[#533afd] hover:bg-[#4434d4] border border-transparent text-white px-5 py-2.5 clay-pill text-sm font-normal transition-colors shadow-[var(--stripe-shadow-elevated)] whitespace-nowrap">
+           <Link href="/admin/upload" className="clay-hover-playful bg-cream text-charcoal border border-border px-5 py-2.5 clay-pill text-sm font-medium transition-opacity whitespace-nowrap">
               Upload New
            </Link>
         </div>
@@ -132,12 +132,12 @@ export default function AdminLibraryPage() {
              placeholder="Search by filename or tag..."
              value={search}
              onChange={e => setSearch(e.target.value)}
-             className="flex-1 px-4 py-2 border border-border rounded-[4px] bg-surface focus:outline-none focus:ring-2 focus:ring-[#533afd]/30 text-sm"
+             className="flex-1 px-4 py-2 border border-border rounded-[8px] bg-surface focus:outline-none focus:ring-2 focus:ring-accent/35 text-sm"
            />
            <select 
              value={filterType} 
              onChange={e => setFilterType(e.target.value)}
-            className="px-4 py-2 border border-border rounded-[4px] bg-surface focus:outline-none text-sm text-foreground"
+            className="px-4 py-2 border border-border rounded-[8px] bg-surface focus:outline-none text-sm text-foreground"
            >
              <option value="all">All Types</option>
              <option value="pdf">PDF</option>
@@ -148,7 +148,7 @@ export default function AdminLibraryPage() {
            <select 
              value={filterStatus} 
              onChange={e => setFilterStatus(e.target.value)}
-            className="px-4 py-2 border border-border rounded-[4px] bg-surface focus:outline-none text-sm text-foreground"
+            className="px-4 py-2 border border-border rounded-[8px] bg-surface focus:outline-none text-sm text-foreground"
            >
              <option value="all">All Statuses</option>
              <option value="uploaded">Uploaded</option>
@@ -186,7 +186,7 @@ export default function AdminLibraryPage() {
                  </thead>
                  <tbody className="divide-y divide-border">
                    {filteredDocs.map(doc => (
-                    <tr key={doc.id} className="hover:bg-white/5 transition-colors">
+                    <tr key={doc.id} className={`${theme === "dark" ? "hover:bg-accent/8" : "hover:bg-cream/40"} transition-colors`}>
                        <td className="p-4">
                           <a href={doc.fileUrl} target="_blank" rel="noreferrer" className="font-medium text-foreground hover:underline block truncate max-w-[200px]">
                             {doc.fileName}
@@ -217,13 +217,13 @@ export default function AdminLibraryPage() {
                        <td className="p-4 text-right">
                           <button 
                             onClick={() => handleToggleActive(doc.id, doc.status)} 
-                            className="text-foreground hover:text-accent font-medium px-3 py-1.5 rounded-[4px] hover:bg-white/10 transition-colors mr-2"
+                            className="text-foreground hover:text-link font-medium px-3 py-1.5 rounded-[8px] hover:bg-accent/12 transition-colors mr-2"
                           >
                             {doc.status === "inactive" ? "Activate" : "Deactivate"}
                           </button>
                           <button 
                             onClick={() => handleDelete(doc.id, doc.storagePath, doc.fileName)} 
-                            className="text-[#ff8fb3] hover:text-[#ffb3cb] font-medium px-3 py-1.5 rounded-[4px] hover:bg-[#ea2261]/20 transition-colors"
+                            className="text-muted hover:text-foreground font-medium px-3 py-1.5 rounded-[8px] hover:bg-accent/12 transition-colors"
                           >
                             Delete
                           </button>

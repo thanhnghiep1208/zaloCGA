@@ -166,7 +166,7 @@ export default function AdminUploadPage() {
           <label 
             onDragOver={(e) => e.preventDefault()}
             onDrop={handleDrop}
-            className="mt-8 flex-1 border border-dashed border-[#362baa] rounded-[6px] bg-surface/50 flex flex-col items-center justify-center p-12 text-center hover:bg-white/5 transition-colors min-h-[40vh] cursor-pointer group shadow-[var(--stripe-shadow-standard)]"
+            className="mt-8 flex-1 border border-dashed border-accent/50 rounded-[16px] bg-surface/50 flex flex-col items-center justify-center p-12 text-center hover:bg-accent/5 transition-colors min-h-[40vh] cursor-pointer group"
           >
              <div className="w-16 h-16 bg-background border border-border shadow-sm rounded-full flex items-center justify-center mb-4 group-hover:scale-105 transition-transform">
                <svg className="w-8 h-8 text-muted" fill="none" strokeWidth={1.5} stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" /></svg>
@@ -183,7 +183,7 @@ export default function AdminUploadPage() {
               <h3 className="text-sm font-semibold uppercase tracking-wider text-muted">Selected Files ({files.length})</h3>
               <div className="max-h-60 overflow-y-auto space-y-2 pr-2 scrollbar-thin">
                 {files.map((f, idx) => (
-                  <div key={idx} className={`p-4 rounded-[6px] border flex items-center justify-between transition-colors ${idx === currentFileIndex ? 'border-[#b9b9f9] bg-white/5 ring-1 ring-[#533afd]/30' : 'border-border bg-background'}`}>
+                  <div key={idx} className={`p-4 rounded-[16px] border flex items-center justify-between transition-colors ${idx === currentFileIndex ? "border-accent/45 bg-accent/10 ring-1 ring-accent/30" : "border-border bg-background"}`}>
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 rounded-lg bg-surface border border-border flex items-center justify-center">
                          <svg className="w-5 h-5 text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
@@ -194,7 +194,7 @@ export default function AdminUploadPage() {
                       </div>
                     </div>
                     {!uploading && (
-                      <button onClick={() => removeFile(idx)} className="p-2 hover:bg-[#ea2261]/20 text-muted hover:text-[#ff9fbe] rounded-[4px] transition-colors">
+                      <button onClick={() => removeFile(idx)} className="p-2 hover:bg-accent/12 text-muted hover:text-foreground rounded-[8px] transition-colors">
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                       </button>
                     )}
@@ -210,7 +210,7 @@ export default function AdminUploadPage() {
                    disabled={uploading}
                    value={description}
                    onChange={e => setDescription(e.target.value)}
-                   className="w-full px-4 py-2 border border-border rounded-[4px] bg-background focus:outline-none focus:ring-2 focus:ring-[#533afd]/30 text-sm"
+                   className="w-full px-4 py-2 border border-border rounded-[8px] bg-background focus:outline-none focus:ring-2 focus:ring-accent/35 text-sm"
                    placeholder="E.g., Batch upload Q3 docs"
                 />
               </div>
@@ -220,7 +220,7 @@ export default function AdminUploadPage() {
                    disabled={uploading}
                    value={tagsInput}
                    onChange={e => setTagsInput(e.target.value)}
-                   className="w-full px-4 py-2 border border-border rounded-[4px] bg-background focus:outline-none focus:ring-2 focus:ring-[#533afd]/30 text-sm"
+                   className="w-full px-4 py-2 border border-border rounded-[8px] bg-background focus:outline-none focus:ring-2 focus:ring-accent/35 text-sm"
                    placeholder="policy, rules"
                 />
               </div>
@@ -233,7 +233,7 @@ export default function AdminUploadPage() {
                     <span>{Math.round(progress)}%</span>
                   </div>
                   <div className="h-2 w-full bg-border rounded-full overflow-hidden">
-                    <div className="h-full bg-[#533afd] transition-all duration-300" style={{ width: `${progress}%` }}></div>
+                    <div className="h-full bg-accent transition-all duration-300" style={{ width: `${progress}%` }}></div>
                   </div>
                   <p className="text-xs text-center text-muted italic">
                     {progress < 100 
@@ -247,13 +247,13 @@ export default function AdminUploadPage() {
               <div className="flex gap-4 pt-4">
                 <button 
                   onClick={resetForm}
-                  className="clay-hover-playful flex-1 py-3 rounded-[4px] border border-[#b9b9f9] font-normal hover:bg-[#533afd]/20 hover:text-white text-foreground transition-colors"
+                  className="clay-hover-playful flex-1 py-3 rounded-[8px] border border-border font-medium hover:bg-accent/15 text-foreground transition-colors"
                 >
                   Clear All
                 </button>
                 <button 
                   onClick={handleUpload}
-                  className="clay-hover-playful flex-1 py-3 rounded-[4px] bg-[#533afd] text-white font-normal hover:bg-[#4434d4] border border-transparent transition-colors shadow-[var(--stripe-shadow-elevated)]"
+                  className="clay-hover-playful flex-1 py-3 rounded-[8px] bg-cream text-charcoal border border-border font-medium transition-opacity"
                 >
                   Start Batch Processing
                 </button>

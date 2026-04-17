@@ -102,7 +102,7 @@ export default function AdminUsersPage() {
                  </thead>
                  <tbody className="divide-y divide-border">
                    {users.map(u => (
-                    <tr key={u.profileUid} className="hover:bg-white/5 transition-colors">
+                    <tr key={u.profileUid} className={`${theme === "dark" ? "hover:bg-accent/8" : "hover:bg-cream/40"} transition-colors`}>
                        <td className="p-4 font-medium text-foreground">{u.email}</td>
                        <td className="p-4 text-muted text-[11px] font-mono tracking-tighter opacity-70 truncate max-w-[150px]">{u.uid}</td>
                        <td className="p-4">
@@ -110,18 +110,18 @@ export default function AdminUsersPage() {
                               value={u.role || "user"}
                               onChange={(e) => handleRoleChange(u.profileUid, e.target.value)}
                               disabled={u.uid === currentUser?.uid}
-                              className={`text-xs font-semibold rounded-[3px] px-2.5 py-1.5 outline-none border transition-colors cursor-pointer ${
+                              className={`text-xs font-semibold rounded-[8px] px-2.5 py-1.5 outline-none border transition-colors cursor-pointer ${
                                  u.role === 'admin' 
                                    ? theme === "dark"
-                                     ? 'bg-[#533afd]/18 text-[#dcd8ff] border-[#b9b9f9]/55'
-                                     : 'bg-purple-100 text-purple-700 border-purple-200'
+                                     ? "bg-accent/20 text-accent border-accent/45"
+                                     : "bg-accent/18 text-link border-accent/40"
                                    : u.role === 'contributor'
                                      ? theme === "dark"
-                                       ? 'bg-[#533afd]/12 text-[#cfc9ff] border-[#d6d9fc]/50'
-                                       : 'bg-indigo-100 text-indigo-700 border-indigo-200'
+                                       ? "bg-accent/14 text-accent border-accent/40"
+                                       : "bg-accent/12 text-link border-accent/30"
                                      : theme === "dark"
-                                       ? 'bg-white/5 text-white/90 border-white/20'
-                                       : 'bg-slate-100 text-slate-700 border-slate-200'
+                                       ? "bg-background/30 text-foreground border-border"
+                                       : "bg-background text-muted border-border"
                               }`}
                            >
                               <option value="user">User</option>
@@ -136,7 +136,7 @@ export default function AdminUsersPage() {
                           <button 
                             onClick={() => handleDelete(u.profileUid)} 
                             disabled={u.uid === currentUser?.uid}
-                            className="text-[#ff8fb3] hover:text-[#ffb3cb] font-medium px-3 py-1.5 rounded-[4px] hover:bg-[#ea2261]/20 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                            className="text-muted hover:text-foreground font-medium px-3 py-1.5 rounded-[8px] hover:bg-accent/12 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
                           >
                             Delete
                           </button>

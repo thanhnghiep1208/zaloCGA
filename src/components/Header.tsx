@@ -35,7 +35,7 @@ export function Header({ onOpenMenu }: HeaderProps) {
       <div className="flex-1 flex items-center gap-3">
         <button
           onClick={onOpenMenu}
-          className="p-2 -ml-2 hover:bg-border/50 rounded-lg text-muted md:hidden"
+          className="p-2 -ml-2 hover:bg-border/50 rounded-[8px] text-muted md:hidden"
         >
           <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" /></svg>
         </button>
@@ -47,10 +47,10 @@ export function Header({ onOpenMenu }: HeaderProps) {
         </div>
         {role === "admin" && (
           <span
-            className={`px-2 py-0.5 rounded-[4px] text-[10px] font-normal border ${
+            className={`px-2 py-0.5 rounded-[8px] text-[10px] font-medium border ${
               theme === "dark"
                 ? "bg-white/10 text-white border-white/20"
-                : "bg-[#f6f9fc] text-[#273951] border-border"
+                : "bg-cream/80 text-charcoal border-border"
             }`}
           >
             Admin
@@ -60,7 +60,7 @@ export function Header({ onOpenMenu }: HeaderProps) {
       <div className="flex items-center gap-4 text-sm">
         <button
           onClick={toggleTheme}
-          className="clay-hover-playful bg-surface border border-border p-1.5 rounded-[4px] text-foreground"
+          className="clay-hover-playful bg-surface border border-border p-1.5 rounded-[8px] text-foreground"
           title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
           aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
         >
@@ -84,7 +84,7 @@ export function Header({ onOpenMenu }: HeaderProps) {
         </div>
         <button
           onClick={handleLogout}
-          className="clay-hover-playful bg-[#533afd] border border-transparent px-3 py-1.5 clay-pill text-white hover:bg-[#4434d4] font-normal transition-all text-xs"
+          className="clay-hover-playful bg-cream text-charcoal border border-border px-3 py-1.5 clay-pill font-medium transition-opacity text-xs"
         >
           Sign Out
         </button>

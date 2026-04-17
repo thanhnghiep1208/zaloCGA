@@ -5,6 +5,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { useAuth } from "@/context/AuthContext";
+import { useTheme } from "@/context/ThemeContext";
 import { createChatSession, updateChatSession, StoredMessage } from "@/lib/chatHistory";
 
 type Source = {
@@ -45,6 +46,7 @@ const FriendlyLoading = () => {
 
 export default function ChatView() {
   const { user } = useAuth();
+  const { theme } = useTheme();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -293,11 +295,17 @@ export default function ChatView() {
             .map(msg => (
               <div key={msg.id} className={`flex flex-col w-full ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
                 {msg.role === 'user' ? (
-                  <div className="clay-card bg-[#533afd] text-white px-5 py-3 rounded-[8px] inline-block max-w-[85%] text-[15px]">
+                  <div
+                    className={`px-5 py-3 rounded-[8px] inline-block max-w-[85%] text-[15px] leading-relaxed border ${
+                      theme === "dark"
+                        ? "bg-cream text-charcoal border-border"
+                        : "bg-charcoal text-white border-charcoal"
+                    }`}
+                  >
                     <p className="whitespace-pre-wrap">{msg.content}</p>
                   </div>
                 ) : (
-                  <div className="clay-card px-6 py-6 rounded-[8px] w-full">
+                  <div className="clay-card px-6 py-6 rounded-[16px] w-full">
                     <style dangerouslySetInnerHTML={{ __html: `
                       .ai-response-container p {
                         margin-bottom: 16px !important;
@@ -305,13 +313,21 @@ export default function ChatView() {
                         display: block !important;
                         color: var(--foreground) !important;
                       }
-                      .ai-response-container h3 {
-                        margin-top: 32px !important;
-                        margin-bottom: 16px !important;
+                      .ai-response-container h1,
+                      .ai-response-container h2,
+                      .ai-response-container h3,
+                      .ai-response-container h4,
+                      .ai-response-container h5,
+                      .ai-response-container h6 {
+                        margin-top: 24px !important;
+                        margin-bottom: 12px !important;
                         font-weight: 700 !important;
-                        font-size: 1.25rem !important;
+                        line-height: 1.2 !important;
                         display: block !important;
-                        color: var(--foreground) !important;
+                        color: var(--strong-color) !important;
+                      }
+                      .ai-response-container h3 {
+                        font-size: 1.25rem !important;
                       }
                       .ai-response-container ul, .ai-response-container ol {
                         margin-bottom: 24px !important;
@@ -322,34 +338,54 @@ export default function ChatView() {
                         margin-bottom: 8px !important;
                         color: var(--foreground) !important;
                       }
-                      .ai-response-container strong,
+                      .ai-response-container strong {
+                        color: var(--strong-color) !important;
+                      }
                       .ai-response-container em,
-                      .ai-response-container a,
                       .ai-response-container code,
                       .ai-response-container span {
                         color: var(--foreground) !important;
                       }
+                      .ai-response-container a {
+                        color: var(--link) !important;
+                        text-decoration: underline !important;
+                      }
                       .ai-response-container pre {
-                        background: color-mix(in srgb, var(--surface) 82%, var(--foreground) 18%) !important;
+                        background: var(--code-bg) !important;
                         color: var(--foreground) !important;
-                        border: 1px solid var(--border) !important;
-                        border-radius: 6px !important;
+                        border: 1px solid var(--code-border) !important;
+                        border-radius: 8px !important;
                       }
                       .ai-response-container pre code {
                         background: transparent !important;
                         color: var(--foreground) !important;
                       }
                       .ai-response-container :not(pre) > code {
-                        background: color-mix(in srgb, var(--surface) 88%, var(--foreground) 12%) !important;
+                        background: var(--code-inline-bg) !important;
                         color: var(--foreground) !important;
-                        border: 1px solid var(--border) !important;
-                        border-radius: 4px !important;
+                        border: 1px solid var(--code-border) !important;
+                        border-radius: 8px !important;
                         padding: 1px 4px !important;
                       }
                       .ai-response-container hr {
                         margin: 40px 0 !important;
                         border: 0 !important;
                         border-top: 1px solid var(--border) !important;
+                      }
+                      .ai-response-container table {
+                        width: 100% !important;
+                        border-collapse: collapse !important;
+                      }
+                      .ai-response-container th,
+                      .ai-response-container td {
+                        color: var(--foreground) !important;
+                        border: 1px solid var(--code-border) !important;
+                        padding: 8px 10px !important;
+                      }
+                      .ai-response-container th {
+                        color: var(--strong-color) !important;
+                        background: var(--code-inline-bg) !important;
+                        font-weight: 700 !important;
                       }
                     `}} />
                     {(() => {
@@ -384,7 +420,7 @@ export default function ChatView() {
                               </div>
                               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                  {visibleSources.map((src, i) => (
-                                   <div key={i} className="bg-background border border-border/80 p-4 rounded-[6px] flex flex-col gap-2 shadow-sm hover:shadow-md transition-all group">
+                                   <div key={i} className="bg-background border border-border/80 p-4 rounded-[16px] flex flex-col gap-2 transition-colors hover:border-parchment group">
                                      <div className="flex items-center gap-2 truncate">
                                        <svg className="w-4 h-4 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
                                        <span className="text-sm font-semibold truncate group-hover:text-accent transition-colors">{src.fileName}</span>
@@ -442,7 +478,7 @@ export default function ChatView() {
           
           {isLoading && (
              <div className="flex flex-col mr-auto items-start max-w-[85%] w-full animate-in fade-in pb-2">
-               <div className="clay-card px-6 py-5 rounded-[8px] flex flex-col gap-3 w-fit min-w-[240px]">
+               <div className="clay-card px-6 py-5 rounded-[16px] flex flex-col gap-3 w-fit min-w-[240px]">
                   <div className="flex items-center gap-3">
                     <div className="flex gap-1">
                       <div className="w-1.5 h-1.5 rounded-full bg-accent animate-[bounce_1s_infinite_0ms]"></div>
@@ -468,7 +504,7 @@ export default function ChatView() {
         </div>
 
         <div className="pt-3 bg-background/95 backdrop-blur z-10 shrink-0 space-y-2">
-          <div className="relative flex items-end w-full max-w-4xl mx-auto bg-surface border border-border rounded-[6px] shadow-[var(--stripe-shadow-elevated)] focus-within:ring-2 focus-within:ring-[#533afd]/30 transition-all">
+          <div className="relative flex items-end w-full max-w-4xl mx-auto bg-surface border border-border rounded-[16px] focus-within:ring-2 focus-within:ring-accent/35 transition-all">
              <textarea 
                value={input}
                onChange={e => setInput(e.target.value)}
@@ -486,7 +522,7 @@ export default function ChatView() {
              <button 
                onClick={handleSend}
                disabled={!input.trim() || isLoading}
-              className="clay-hover-playful absolute right-2 bottom-2 p-3 bg-[#533afd] hover:bg-[#4434d4] disabled:bg-surface disabled:text-muted disabled:border disabled:border-border text-white border border-transparent rounded-[4px] transition-all shadow-[var(--stripe-shadow-elevated)]"
+              className="clay-hover-playful absolute right-2 bottom-2 p-3 bg-cream text-charcoal border border-border disabled:bg-surface disabled:text-muted disabled:border-border rounded-[8px] transition-opacity"
              >
                <svg className="w-4 h-4 translate-x-[-1px] translate-y-[1px]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" /></svg>
              </button>
