@@ -1,4 +1,5 @@
 export interface RetrievedSnippet {
+  docId?: string;
   fileName: string;
   excerpt?: string;
   reference?: string;

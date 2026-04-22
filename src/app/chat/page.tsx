@@ -7,8 +7,11 @@ import remarkGfm from "remark-gfm";
 import { useAuth } from "@/context/AuthContext";
 import { useTheme } from "@/context/ThemeContext";
 import { createChatSession, updateChatSession, StoredMessage } from "@/lib/chatHistory";
+import Link from "next/link";
+import { ReferencePreviewModal } from "@/components/ReferencePreviewModal";
 
 type Source = {
+  docId?: string;
   fileName: string;
   excerpt?: string;
   reference?: string;
@@ -51,6 +54,7 @@ export default function ChatView() {
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
+  const [previewDocId, setPreviewDocId] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hasVisibleMessages = messages.some((m) => m.role === "user" || (m.role === "assistant" && !!m.content.trim()));
@@ -426,6 +430,30 @@ export default function ChatView() {
                                        <span className="text-sm font-semibold truncate group-hover:text-accent transition-colors">{src.fileName}</span>
                                      </div>
                                      {src.excerpt && <p className="text-xs text-muted leading-relaxed line-clamp-3 italic opacity-80">"{src.excerpt}"</p>}
+                                     {src.docId ? (
+                                       <button
+                                         type="button"
+                                         onClick={() => setPreviewDocId(src.docId ?? null)}
+                                         className="text-xs text-link hover:underline font-medium text-left"
+                                       >
+                                         Mở nội dung tham khảo
+                                       </button>
+                                     ) : src.reference ? (
+                                       src.reference.startsWith("/") ? (
+                                         <Link href={src.reference} className="text-xs text-link hover:underline font-medium">
+                                           Mở nội dung tham khảo
+                                         </Link>
+                                       ) : (
+                                         <a
+                                           href={src.reference}
+                                           target="_blank"
+                                           rel="noreferrer"
+                                           className="text-xs text-link hover:underline font-medium"
+                                         >
+                                           Mở nội dung tham khảo
+                                         </a>
+                                       )
+                                     ) : null}
                                    </div>
                                  ))}
                               </div>
@@ -533,6 +561,7 @@ export default function ChatView() {
         </div>
 
       </div>
+      <ReferencePreviewModal docId={previewDocId} onClose={() => setPreviewDocId(null)} />
     </ProtectedRoute>
   );
 }

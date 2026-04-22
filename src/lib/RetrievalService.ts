@@ -20,7 +20,12 @@ export class RetrievalService {
     // 1. Prepare retrieved context
     let contextText = "";
     if (contextSnippets.length > 0) {
-      contextText = contextSnippets.map(doc => `File: ${doc.fileName}\nContent:\n${doc.excerpt}`).join("\n\n");
+      contextText = contextSnippets
+        .map((doc) => {
+          const refLine = doc.reference ? `Reference link: ${doc.reference}\n` : "";
+          return `File: ${doc.fileName}\n${refLine}Content:\n${doc.excerpt}`;
+        })
+        .join("\n\n");
     } else {
       contextText = "No relevant internal documents found for this query.";
     }
@@ -43,15 +48,20 @@ Thực hiện 4 tác vụ khi phù hợp:
 Định dạng: Markdown (h3, bold, lists), **hai lần xuống dòng** (\\n\\n) giữa đoạn và mục. Tiếng Việt chuyên nghiệp.
 
 ### Kiểu B — Trả lời (microcopy, bám guideline đã truy xuất — không bịa quy tắc ngoài tài liệu)
-Nếu thiếu thông tin, nêu giả định ngắn trong **Pre-write** (không hỏi lại dài dòng).
+Nếu thiếu thông tin, nêu giả định ngắn trong **Pre-write analysis** (không hỏi lại dài dòng).
 
-Bắt buộc cấu trúc Markdown (tiếng Việt), KHÔNG JSON:
-- Pre-write analysis
-- In-write decisions
-- 3 draft options (ít nhất 3 phương án khác nghĩa rõ rệt)
-- Post-write audit
-- Recommended final version
-- Why this version is best
+Bắt buộc cấu trúc Markdown (tiếng Việt), KHÔNG JSON, KHÔNG đổi tên heading, KHÔNG thêm/bớt section:
+### Pre-write analysis
+### Draft options
+### Recommended final version
+### Rationale
+### Nguồn tham khảo
+
+Quy tắc bắt buộc:
+- Heading phải khớp chính tả 100% như 5 dòng trên (đúng hoa/thường, đúng dấu).
+- Draft options phải có ít nhất 3 phương án khác nghĩa rõ rệt (dùng bullet).
+- Recommended final version chỉ chọn 1 phương án cuối cùng, rõ ràng để dùng ngay.
+- Nguồn tham khảo dùng markdown links nếu có URL trong context theo dạng [Tên tài liệu](URL); nếu không có URL thì ghi bullet tên tài liệu.
 
 Tuân thủ tone, xưng hô, độ dài và thuật ngữ trong guideline khi có; nếu guideline không đủ, ghi rõ phần nào là suy luận có kiểm soát.
 

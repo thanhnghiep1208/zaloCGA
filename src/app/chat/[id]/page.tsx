@@ -11,12 +11,13 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import Link from "next/link";
 import { deleteChatSession } from "@/lib/chatHistory";
+import { ReferencePreviewModal } from "@/components/ReferencePreviewModal";
 
 type StoredMessage = {
   id: string;
   role: "user" | "assistant";
   content: string;
-  sources?: { fileName: string; excerpt?: string }[];
+  sources?: { docId?: string; fileName: string; excerpt?: string; reference?: string }[];
   timestamp: number;
 };
 
@@ -35,6 +36,7 @@ export default function ChatSessionPage({ params }: { params: Promise<{ id: stri
   const [session, setSession] = useState<ChatSessionData | null>(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
+  const [previewDocId, setPreviewDocId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!user || !id) return;
@@ -186,7 +188,33 @@ export default function ChatSessionPage({ params }: { params: Promise<{ id: stri
                           {msg.sources.map((src, i) => (
                             <div key={i} className="bg-background border border-border/80 p-3 rounded-[16px] flex items-center gap-2 text-sm">
                               <svg className="w-4 h-4 text-accent shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-                              <span className="font-medium truncate">{src.fileName}</span>
+                              <div className="min-w-0 flex-1">
+                                <span className="font-medium truncate block">{src.fileName}</span>
+                                {src.docId ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => setPreviewDocId(src.docId ?? null)}
+                                    className="text-xs text-link hover:underline font-medium text-left"
+                                  >
+                                    Mở nội dung tham khảo
+                                  </button>
+                                ) : src.reference ? (
+                                  src.reference.startsWith("/") ? (
+                                    <Link href={src.reference} className="text-xs text-link hover:underline font-medium">
+                                      Mở nội dung tham khảo
+                                    </Link>
+                                  ) : (
+                                    <a
+                                      href={src.reference}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className="text-xs text-link hover:underline font-medium"
+                                    >
+                                      Mở nội dung tham khảo
+                                    </a>
+                                  )
+                                ) : null}
+                              </div>
                             </div>
                           ))}
                         </div>
@@ -209,6 +237,7 @@ export default function ChatSessionPage({ params }: { params: Promise<{ id: stri
           </div>
         )}
       </div>
+      <ReferencePreviewModal docId={previewDocId} onClose={() => setPreviewDocId(null)} />
     </ProtectedRoute>
   );
 }

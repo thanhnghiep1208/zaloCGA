@@ -26,9 +26,10 @@ export class FirebaseRetrievalProvider implements RetrievalProvider {
          if (data.textContent) {
              console.log(`[AdminRetrieval] Injecting: ${data.fileName} (${data.textContent.length} chars)`);
              snippets.push({
+                 docId: doc.id,
                  fileName: data.fileName,
                  excerpt: data.textContent, 
-                 reference: data.description ? data.description : (data.tags ? `Tags: ${data.tags.join(", ")}` : undefined)
+                 reference: `/references/${doc.id}`
              });
          } else {
              console.warn(`[AdminRetrieval] Warning: Doc ${data.fileName} is indexed but has NO textContent.`);

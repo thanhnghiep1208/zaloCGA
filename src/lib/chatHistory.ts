@@ -16,7 +16,7 @@ export type StoredMessage = {
   id: string;
   role: "user" | "assistant";
   content: string;
-  sources?: { fileName: string; excerpt?: string }[];
+  sources?: { docId?: string; fileName: string; excerpt?: string; reference?: string }[];
   timestamp: number; // Unix ms
 };
 
