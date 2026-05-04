@@ -9,6 +9,7 @@ import { useTheme } from "@/context/ThemeContext";
 import { createChatSession, updateChatSession, StoredMessage } from "@/lib/chatHistory";
 import Link from "next/link";
 import { ReferencePreviewModal } from "@/components/ReferencePreviewModal";
+import { useRouter, useSearchParams } from "next/navigation";
 
 type Source = {
   docId?: string;
@@ -24,6 +25,11 @@ type Message = {
   sources?: Source[];
   isStreaming?: boolean;
   feedback?: "up" | "down";
+};
+
+type ConversationTurn = {
+  role: "user" | "assistant";
+  content: string;
 };
 
 const LOADING_MESSAGES = [
@@ -50,6 +56,8 @@ const FriendlyLoading = () => {
 export default function ChatView() {
   const { user } = useAuth();
   const { theme } = useTheme();
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -63,6 +71,19 @@ export default function ChatView() {
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "auto" });
   }, [messages, isLoading]);
+
+  useEffect(() => {
+    if (searchParams.get("new") !== "1") return;
+    setMessages([]);
+    setInput("");
+    setIsLoading(false);
+    setSessionId(null);
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+      saveTimeoutRef.current = null;
+    }
+    router.replace("/chat");
+  }, [searchParams, router]);
 
   // Debounced save to Firestore after AI finishes responding
   const saveSession = useCallback((msgs: Message[]) => {
@@ -81,6 +102,14 @@ export default function ChatView() {
       updateChatSession(sessionId, storedMsgs).catch(console.error);
     }, 1000);
   }, [sessionId]);
+
+  const buildConversationContext = (): ConversationTurn[] => {
+    // Keep only recent meaningful turns to preserve context without oversized payloads.
+    return messages
+      .filter((m) => !m.isStreaming && !!m.content.trim())
+      .slice(-8)
+      .map((m) => ({ role: m.role, content: m.content }));
+  };
 
   const handleSend = async () => {
     if (!input.trim() || isLoading || !user) return;
@@ -128,7 +157,10 @@ export default function ChatView() {
           "Content-Type": "application/json",
           Authorization: `Bearer ${idToken}`,
         },
-        body: JSON.stringify({ query: userQuery }),
+        body: JSON.stringify({
+          query: userQuery,
+          conversation: buildConversationContext(),
+        }),
       });
 
       if (!response.ok || !response.body) {

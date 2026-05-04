@@ -7,6 +7,26 @@ import {
   logAnalyticsEvent,
 } from "@/lib/analytics-events";
 
+function envInt(name: string, fallback: number): number {
+  const v = process.env[name];
+  if (!v) return fallback;
+  const n = parseInt(v, 10);
+  return Number.isFinite(n) && n > 0 ? n : fallback;
+}
+
+function truncateText(text: string, max: number): string {
+  if (text.length <= max) return text;
+  return text.slice(0, max).trimEnd() + "\n…";
+}
+
+/** Per-turn cap for conversation sent to Gemini (limits pasted blobs). */
+const MAX_CONVERSATION_CHARS_PER_TURN = envInt(
+  "CHAT_CONVERSATION_MAX_CHARS_PER_TURN",
+  2500
+);
+/** Cap on the latest user message length sent to the model. */
+const MAX_QUERY_CHARS = envInt("CHAT_QUERY_MAX_CHARS", 12000);
+
 function extractReferencedSources(
   fullResponse: string,
   availableSources: string[]
@@ -48,11 +68,41 @@ export async function POST(req: Request) {
     const uid = await requireUidFromRequest(req);
 
     const body = await req.json();
-    const { query } = body;
+    const { query, conversation } = body as {
+      query?: string;
+      conversation?: { role: "user" | "assistant"; content: string }[];
+    };
 
     if (!query) {
       return NextResponse.json({ error: "Query is required" }, { status: 400 });
     }
+
+    const safeConversation = Array.isArray(conversation)
+      ? conversation
+          .filter(
+            (t) =>
+              t &&
+              (t.role === "user" || t.role === "assistant") &&
+              typeof t.content === "string" &&
+              t.content.trim().length > 0
+          )
+          .slice(-8)
+      : [];
+
+    const boundedQuery = truncateText(query.trim(), MAX_QUERY_CHARS);
+    const boundedConversation = safeConversation.map((t) => ({
+      role: t.role,
+      content: truncateText(t.content, MAX_CONVERSATION_CHARS_PER_TURN),
+    }));
+
+    const retrievalQuery =
+      boundedConversation.length > 0
+        ? `${boundedConversation
+            .filter((t) => t.role === "user")
+            .slice(-2)
+            .map((t) => t.content)
+            .join("\n")}\n${boundedQuery}`.trim()
+        : boundedQuery;
 
     const queryType = inferQueryType(query);
     await logAnalyticsEvent("query_sent", {
@@ -64,7 +114,7 @@ export async function POST(req: Request) {
     const responseStart = Date.now();
 
     // Hit the abstracted Provider
-    const contextSnippets = await RetrievalService.getContext(query);
+    const contextSnippets = await RetrievalService.getContext(retrievalQuery);
 
     console.log(
       `[ChatRoute] Query: "${query}". Found ${contextSnippets.length} relevant snippets.`
@@ -74,7 +124,11 @@ export async function POST(req: Request) {
     }
 
     // Get strictly-prompted stream from our isolated service
-    const stream = await RetrievalService.generateChatResponse(query, contextSnippets);
+    const stream = await RetrievalService.generateChatResponse(
+      boundedQuery,
+      contextSnippets,
+      boundedConversation
+    );
 
     // Stream transformation to safely pack sources into the first bytes
     const encoder = new TextEncoder();

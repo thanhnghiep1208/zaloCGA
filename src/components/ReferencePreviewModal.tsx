@@ -6,10 +6,6 @@ import { db } from "@/lib/firebase";
 
 type ReferenceDoc = {
   fileName?: string;
-  description?: string;
-  textContent?: string;
-  fileUrl?: string;
-  uploadedAt?: { seconds: number };
 };
 
 type ReferencePreviewModalProps = {
@@ -71,46 +67,25 @@ export function ReferencePreviewModal({ docId, onClose }: ReferencePreviewModalP
           </div>
           <div className="flex items-center gap-2">
             {docId ? (
-              <>
-                <a
-                  href={`/references/file/${docId}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="clay-hover-playful px-3 py-1.5 rounded-[8px] border border-border text-sm text-link hover:underline font-medium"
-                >
-                  Mở file gốc
-                </a>
-                <a
-                  href={`/references/file/${docId}?download=1`}
-                  download
-                  className="clay-hover-playful px-3 py-1.5 rounded-[8px] border border-border text-sm text-foreground font-medium"
-                >
-                  Download
-                </a>
-              </>
+              <a
+                href={`/references/file/${docId}?download=1`}
+                download
+                className="clay-hover-playful px-3 py-1.5 rounded-[8px] border border-border text-sm text-foreground font-medium"
+              >
+                Download
+              </a>
             ) : null}
-            <button
-              type="button"
-              onClick={onClose}
-              className="clay-hover-playful px-3 py-1.5 rounded-[8px] border border-border text-sm text-foreground"
-            >
-              Đóng
-            </button>
           </div>
         </div>
         <div className="p-5 overflow-y-auto max-h-[calc(85vh-80px)]">
           {loading ? <p className="text-muted">Đang tải nội dung...</p> : null}
           {!loading && notFound ? <p className="text-foreground">Không tìm thấy tài liệu tham khảo.</p> : null}
           {!loading && !notFound && data ? (
-            <div className="space-y-4">
-              {data.description ? <p className="text-sm text-muted">{data.description}</p> : null}
-              <pre
-                className="text-sm leading-relaxed whitespace-pre-wrap rounded-[8px] p-4 text-foreground"
-                style={{ background: "var(--code-bg)", border: "1px solid var(--code-border)" }}
-              >
-                {data.textContent || "Tài liệu chưa có nội dung text để hiển thị."}
-              </pre>
-            </div>
+            <iframe
+              title={data.fileName || "Reference preview"}
+              src={`/references/file/${docId}`}
+              className="w-full min-h-[65vh] rounded-[8px] border border-border bg-background"
+            />
           ) : null}
         </div>
       </div>
