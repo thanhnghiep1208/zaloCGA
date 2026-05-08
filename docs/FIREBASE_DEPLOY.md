@@ -30,6 +30,10 @@ Set these in **Firebase App Hosting > Backend > Environment variables**:
 - `GEMINI_API_KEY` (cho `/api/chat` và `/api/ingest`)
 - Tùy chọn: `NEXT_PUBLIC_SITE_URL` (canonical URL cho metadata/OG), `NEXT_PUBLIC_GA_ID`
 
+Chi tiet pre-live audit env (bat buoc + khuyen nghi + token tuning):
+
+- [PRE_LIVE_ENV_CHECKLIST.md](./PRE_LIVE_ENV_CHECKLIST.md)
+
 ## 4) Deploy security rules
 
 ```bash
