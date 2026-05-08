@@ -10,6 +10,7 @@ import { createChatSession, updateChatSession, StoredMessage } from "@/lib/chatH
 import Link from "next/link";
 import { ReferencePreviewModal } from "@/components/ReferencePreviewModal";
 import { useRouter, useSearchParams } from "next/navigation";
+import { toFriendlyErrorMessage } from "@/lib/user-error";
 
 type Source = {
   docId?: string;
@@ -169,6 +170,7 @@ export default function ChatView() {
           const errJson = await response.clone().json();
           if (errJson?.error) detail = errJson.error;
           if (errJson?.details) detail = `${detail}: ${errJson.details}`;
+          if (errJson?.userMessage) detail = errJson.userMessage;
         } catch {
           /* ignore */
         }
@@ -263,8 +265,9 @@ export default function ChatView() {
 
     } catch(e) {
       console.error(e);
+      const friendly = toFriendlyErrorMessage(e);
       setMessages(prev => prev.map(msg => 
-        msg.id === assistantId ? { ...msg, content: "Sorry, I encountered an error connecting to the AI. Please verify API keys and network.", isStreaming: false } : msg
+        msg.id === assistantId ? { ...msg, content: friendly, isStreaming: false } : msg
       ));
       setIsLoading(false);
     }

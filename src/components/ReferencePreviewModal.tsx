@@ -6,6 +6,9 @@ import { db } from "@/lib/firebase";
 
 type ReferenceDoc = {
   fileName?: string;
+  title?: string;
+  type?: string;
+  fileUrl?: string;
 };
 
 type ReferencePreviewModalProps = {
@@ -63,10 +66,12 @@ export function ReferencePreviewModal({ docId, onClose }: ReferencePreviewModalP
         <div className="flex items-start justify-between gap-3 p-5 border-b border-border bg-surface">
           <div className="min-w-0">
             <p className="text-xs text-muted font-medium">Nội dung tham khảo</p>
-            <h3 className="text-lg font-medium text-foreground truncate">{data?.fileName || "Đang tải tài liệu..."}</h3>
+            <h3 className="text-lg font-medium text-foreground truncate">
+              {data?.fileName || data?.title || "Đang tải tài liệu..."}
+            </h3>
           </div>
           <div className="flex items-center gap-2">
-            {docId ? (
+            {docId && (data?.fileUrl || data?.type === "inline_doc") ? (
               <a
                 href={`/references/file/${docId}?download=1`}
                 download

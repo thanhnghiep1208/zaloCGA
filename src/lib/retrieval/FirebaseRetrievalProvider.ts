@@ -31,7 +31,7 @@ export class FirebaseRetrievalProvider implements RetrievalProvider {
       const snapshot = await adminDb
         .collection("documents")
         .where("status", "==", "indexed")
-        .select("fileName", "textContent")
+        .select("type", "fileName", "title", "textContent", "contentPlain")
         .limit(fetchCap)
         .get();
 
@@ -39,11 +39,24 @@ export class FirebaseRetrievalProvider implements RetrievalProvider {
 
       const docs = snapshot.docs
         .map((doc) => {
-          const data = doc.data();
-          const text = typeof data.textContent === "string" ? data.textContent : "";
+          const data = doc.data() as {
+            type?: string;
+            fileName?: string;
+            title?: string;
+            textContent?: string;
+            contentPlain?: string;
+          };
+          const text =
+            typeof data.textContent === "string" && data.textContent.trim()
+              ? data.textContent
+              : typeof data.contentPlain === "string"
+              ? data.contentPlain
+              : "";
           const fileName =
             typeof data.fileName === "string" && data.fileName.trim()
               ? data.fileName
+              : typeof data.title === "string" && data.title.trim()
+              ? data.title
               : doc.id;
           return { id: doc.id, fileName, text };
         })

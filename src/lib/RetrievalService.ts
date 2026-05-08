@@ -8,6 +8,30 @@ const ai = new GoogleGenAI({
   httpOptions: { apiVersion: "v1beta" }
 });
 
+function envList(name: string, fallback: string[]): string[] {
+  const raw = process.env[name];
+  if (!raw) return fallback;
+  return raw
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+const CHAT_MODELS = envList("GEMINI_CHAT_MODELS", [
+  "gemini-3-flash-preview",
+  "gemini-2.5-flash",
+]);
+
+function extractErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (typeof error === "string") return error;
+  try {
+    return JSON.stringify(error);
+  } catch {
+    return "Unknown Gemini error";
+  }
+}
+
 // Abstraction layer swapped to LIVE FIREBASE MODE!
 const currentProvider: RetrievalProvider = new FirebaseRetrievalProvider();
 
@@ -94,19 +118,32 @@ KẾT THÚC MỌI CÂU TRẢ LỜI PHẢI LUÔN CÓ (dòng cuối):
 
     // 3. Initiate Stream
     try {
+      if (!process.env.GEMINI_API_KEY || !process.env.GEMINI_API_KEY.trim()) {
+        throw new Error("GEMINI_API_KEY is missing on server runtime.");
+      }
       console.log(`[ChatService] Sending ${contextText.length} chars of context to Gemini 3.`);
-      const responseStream = await ai.models.generateContentStream({
-        model: "gemini-3-flash-preview",
-        contents: [{ role: "user", parts: [{ text: query }] }],
-        config: {
-          systemInstruction: { parts: [{ text: systemPrompt }] },
-          temperature: 0.1
+      let lastErr: unknown = null;
+      for (const model of CHAT_MODELS) {
+        try {
+          const responseStream = await ai.models.generateContentStream({
+            model,
+            contents: [{ role: "user", parts: [{ text: query }] }],
+            config: {
+              systemInstruction: { parts: [{ text: systemPrompt }] },
+              temperature: 0.1
+            }
+          });
+          return responseStream;
+        } catch (err) {
+          lastErr = err;
+          console.warn(`[ChatService] Model ${model} failed: ${extractErrorMessage(err)}`);
         }
-      });
-      return responseStream;
+      }
+      throw lastErr || new Error("No available Gemini chat model succeeded.");
     } catch (error) {
-      console.error("Gemini API Error", error);
-      throw new Error("Failed to generate response.");
+      const message = extractErrorMessage(error);
+      console.error("Gemini API Error", message);
+      throw new Error(`Failed to generate response: ${message}`);
     }
   }
 }

@@ -4,15 +4,24 @@ import { useState, useCallback } from "react";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { storage, db } from "@/lib/firebase";
 import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
-import { collection, addDoc, serverTimestamp, updateDoc } from "firebase/firestore";
+import { collection, addDoc, serverTimestamp, updateDoc, doc, getDoc } from "firebase/firestore";
 import { useAuth } from "@/context/AuthContext";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { trackEvent } from "@/lib/gtag";
+import { InlineDocumentEditor } from "@/components/InlineDocumentEditor";
+import { buildUploadedFileBasePayload } from "@/lib/documents/indexing";
+import { useEffect } from "react";
+import { toFriendlyErrorMessage } from "@/lib/user-error";
 
 
 export default function AdminUploadPage() {
   const { user } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const editInlineId = searchParams.get("edit");
+  const [mode, setMode] = useState<"upload" | "compose">(
+    searchParams.get("compose") === "1" || !!editInlineId ? "compose" : "upload"
+  );
   const [files, setFiles] = useState<File[]>([]);
   const [uploading, setUploading] = useState(false);
   const [currentFileIndex, setCurrentFileIndex] = useState<number>(-1);
@@ -20,6 +29,13 @@ export default function AdminUploadPage() {
 
   const [description, setDescription] = useState("");
   const [tagsInput, setTagsInput] = useState("");
+  const [inlineInitialDraft, setInlineInitialDraft] = useState<{
+    title: string;
+    category: string;
+    tags: string[];
+    contentHtml: string;
+  } | null>(null);
+  const [inlineLoading, setInlineLoading] = useState(false);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -94,14 +110,15 @@ export default function AdminUploadPage() {
 
         // 2. Initial Firestore save
         const newDocRef = await addDoc(collection(db, "documents"), {
-          fileName: file.name,
-          fileUrl: downloadURL,
-          storagePath: storagePath,
-          mimeType: file.type,
-          sizeBytes: file.size,
-          status: "processing",
-          tags,
-          description,
+          ...buildUploadedFileBasePayload({
+            fileName: file.name,
+            fileUrl: downloadURL,
+            storagePath,
+            mimeType: file.type,
+            sizeBytes: file.size,
+            tags,
+            description,
+          }),
           uploadedBy: user.uid,
           uploadedEmail: user.email,
           uploadedAt: serverTimestamp(),
@@ -150,8 +167,83 @@ export default function AdminUploadPage() {
     } catch (e: any) {
       console.error("Batch upload error", e);
       setUploading(false);
-      alert(`Upload Interrupted: ${e.message}`);
+      alert(toFriendlyErrorMessage(e));
     }
+  };
+
+  useEffect(() => {
+    const loadInlineForEdit = async () => {
+      if (!editInlineId) {
+        setInlineInitialDraft(null);
+        return;
+      }
+      setInlineLoading(true);
+      try {
+        const snap = await getDoc(doc(db, "documents", editInlineId));
+        const data = snap.data() as
+          | {
+              type?: string;
+              title?: string;
+              category?: string | null;
+              tags?: string[];
+              contentHtml?: string;
+            }
+          | undefined;
+        if (!snap.exists() || data?.type !== "inline_doc") {
+          throw new Error("Inline document not found");
+        }
+        setInlineInitialDraft({
+          title: data.title || "",
+          category: data.category || "",
+          tags: Array.isArray(data.tags) ? data.tags : [],
+          contentHtml: data.contentHtml || "<p></p>",
+        });
+      } catch (err: unknown) {
+        alert(toFriendlyErrorMessage(err));
+      } finally {
+        setInlineLoading(false);
+      }
+    };
+    loadInlineForEdit();
+  }, [editInlineId]);
+
+  const handleInlineDraftSubmit = async (payload: {
+    title: string;
+    category: string;
+    tags: string[];
+    contentHtml: string;
+    contentPlain: string;
+  }) => {
+    if (!user) return;
+    const token = await user.getIdToken();
+    const endpoint = editInlineId
+      ? `/api/documents/inline/${encodeURIComponent(editInlineId)}`
+      : "/api/documents/inline";
+    const res = await fetch(endpoint, {
+      method: editInlineId ? "PUT" : "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        title: payload.title,
+        category: payload.category,
+        tags: payload.tags,
+        contentHtml: payload.contentHtml,
+        uploadedEmail: user.email || null,
+      }),
+    });
+    const data = (await res.json()) as { success?: boolean; error?: string; id?: string };
+    if (!res.ok || !data.success) {
+      throw new Error(data.error || "Failed to save inline document");
+    }
+    trackEvent("file_upload", {
+      file_name: payload.title,
+      file_type: "inline_doc",
+      status: "indexed",
+    });
+    alert(editInlineId ? "Da cap nhat inline document." : "Da luu inline document thanh cong.");
+    router.push("/admin/library");
   };
 
   return (
@@ -159,10 +251,37 @@ export default function AdminUploadPage() {
       <div className="h-full flex flex-col space-y-6 animate-in fade-in duration-500">
         <div className="space-y-1">
            <h1 className="text-2xl font-light tracking-tight">Upload Documents</h1>
-           <p className="text-muted text-sm">Add documents to the knowledge base (PDF, TXT, DOCX, CSV).</p>
+           <p className="text-muted text-sm">
+             Add documents to the knowledge base (PDF, TXT, DOCX, CSV) or compose inline docs.
+           </p>
         </div>
 
-        {files.length === 0 ? (
+        <div className="inline-flex rounded-[10px] border border-border p-1 bg-surface/80">
+          <button
+            type="button"
+            onClick={() => setMode("upload")}
+            className={`px-3 py-1.5 text-sm rounded-[8px] transition-colors ${
+              mode === "upload"
+                ? "bg-accent/18 text-foreground border border-accent/35"
+                : "text-muted hover:text-foreground"
+            }`}
+          >
+            Upload PDF/DOCX
+          </button>
+          <button
+            type="button"
+            onClick={() => setMode("compose")}
+            className={`px-3 py-1.5 text-sm rounded-[8px] transition-colors ${
+              mode === "compose"
+                ? "bg-accent/18 text-foreground border border-accent/35"
+                : "text-muted hover:text-foreground"
+            }`}
+          >
+            Soan tai lieu
+          </button>
+        </div>
+
+        {mode === "upload" && (files.length === 0 ? (
           <label 
             onDragOver={(e) => e.preventDefault()}
             onDrop={handleDrop}
@@ -260,7 +379,21 @@ export default function AdminUploadPage() {
               </div>
             )}
           </div>
-        )}
+        ))}
+
+        {mode === "compose" ? (
+          inlineLoading ? (
+            <div className="clay-card mt-8 p-6 max-w-4xl mx-auto w-full text-sm text-muted">
+              Dang tai noi dung inline document...
+            </div>
+          ) : (
+            <InlineDocumentEditor
+              initialDraft={inlineInitialDraft || undefined}
+              submitLabel={editInlineId ? "Cap nhat tai lieu" : "Luu tai lieu"}
+              onSubmitDraft={handleInlineDraftSubmit}
+            />
+          )
+        ) : null}
       </div>
     </ProtectedRoute>
   );

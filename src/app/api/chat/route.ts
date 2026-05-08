@@ -6,6 +6,7 @@ import {
   inferQueryType,
   logAnalyticsEvent,
 } from "@/lib/analytics-events";
+import { toFriendlyErrorMessage } from "@/lib/user-error";
 
 function envInt(name: string, fallback: number): number {
   const v = process.env[name];
@@ -175,14 +176,19 @@ export async function POST(req: Request) {
     });
   } catch (error: unknown) {
     if (error instanceof ApiAuthError) {
-      return NextResponse.json({ error: error.message }, { status: error.status });
+      return NextResponse.json(
+        { error: error.message, userMessage: toFriendlyErrorMessage(error.message) },
+        { status: error.status }
+      );
     }
     const err = error as { message?: string; stack?: string };
     console.error("Chat API Critical Failure:", error);
+    const details = err.message || "Unknown error";
     return new Response(
       JSON.stringify({
         error: "Server Error",
-        details: err.message || "Unknown error",
+        details,
+        userMessage: toFriendlyErrorMessage(details),
         stack: process.env.NODE_ENV === "development" ? err.stack : undefined,
       }),
       {

@@ -27,7 +27,52 @@ export async function GET(
     return NextResponse.json({ error: "Document not found" }, { status: 404 });
   }
 
-  const data = snap.data() as { fileUrl?: string; fileName?: string; mimeType?: string } | undefined;
+  const data = snap.data() as
+    | {
+        type?: string;
+        fileUrl?: string;
+        fileName?: string;
+        title?: string;
+        mimeType?: string;
+        contentHtml?: string;
+        contentPlain?: string;
+      }
+    | undefined;
+  const displayName = data?.fileName || data?.title || "reference";
+  const forceDownload = req.nextUrl.searchParams.get("download") === "1";
+
+  // Inline docs do not have source file URL; render/store directly from contentHtml.
+  if (data?.type === "inline_doc") {
+    const htmlBody = data.contentHtml?.trim();
+    const plain = data.contentPlain?.trim() || "No content.";
+    const html = `<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>${displayName}</title>
+    <style>
+      body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; max-width: 980px; margin: 24px auto; padding: 0 16px; line-height: 1.6; color: #292827; }
+      h1,h2,h3 { line-height: 1.25; }
+      table { border-collapse: collapse; width: 100%; }
+      th, td { border: 1px solid #dcd7d3; padding: 8px; text-align: left; }
+      img { max-width: 100%; height: auto; }
+      blockquote { border-left: 3px solid #dcd7d3; padding-left: 12px; margin-left: 0; color: #595857; }
+    </style>
+  </head>
+  <body>${htmlBody || `<pre>${plain}</pre>`}</body>
+</html>`;
+
+    const headers = new Headers({
+      "content-type": "text/html; charset=utf-8",
+      "cache-control": "private, max-age=300",
+    });
+    if (forceDownload) {
+      headers.set("content-disposition", buildContentDisposition(`${displayName}.html`, "attachment"));
+    }
+    return new NextResponse(html, { status: 200, headers });
+  }
+
   const fileUrl = data?.fileUrl;
   if (!fileUrl) {
     return NextResponse.json({ error: "Missing source URL" }, { status: 400 });
@@ -38,9 +83,8 @@ export async function GET(
     return NextResponse.json({ error: "Failed to fetch source file" }, { status: 502 });
   }
 
-  const forceDownload = req.nextUrl.searchParams.get("download") === "1";
   const mimeType = (data?.mimeType || upstream.headers.get("content-type") || "").toLowerCase();
-  const fileName = (data?.fileName || "").toLowerCase();
+  const fileName = (displayName || "").toLowerCase();
 
   // Download must always return original file binary as attachment.
   if (forceDownload) {
@@ -52,7 +96,7 @@ export async function GET(
     if (contentType) headers.set("content-type", contentType);
     const contentLength = upstream.headers.get("content-length");
     if (contentLength) headers.set("content-length", contentLength);
-    headers.set("content-disposition", buildContentDisposition(data?.fileName || "reference", "attachment"));
+    headers.set("content-disposition", buildContentDisposition(displayName, "attachment"));
     headers.set("cache-control", "private, max-age=300");
     return new NextResponse(upstream.body, { status: 200, headers });
   }
@@ -69,7 +113,7 @@ export async function GET(
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>${data?.fileName || "Reference document"}</title>
+    <title>${displayName || "Reference document"}</title>
     <style>
       body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; max-width: 980px; margin: 24px auto; padding: 0 16px; line-height: 1.6; color: #292827; }
       h1,h2,h3 { line-height: 1.25; }
@@ -103,7 +147,7 @@ export async function GET(
   }
   const contentLength = upstream.headers.get("content-length");
   if (contentLength) headers.set("content-length", contentLength);
-  headers.set("content-disposition", buildContentDisposition(data?.fileName || "reference", "inline"));
+  headers.set("content-disposition", buildContentDisposition(displayName, "inline"));
   headers.set("cache-control", "private, max-age=300");
 
   if (!upstream.body) {

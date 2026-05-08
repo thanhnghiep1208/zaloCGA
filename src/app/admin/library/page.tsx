@@ -46,14 +46,32 @@ export default function AdminLibraryPage() {
     return () => unsubscribe();
   }, [user, role, authLoading]);
 
-  const handleDelete = async (id: string, storagePath: string, fileName: string) => {
+  const handleDelete = async (
+    id: string,
+    storagePath: string | undefined,
+    fileName: string,
+    type?: string
+  ) => {
     if (!confirm(`Are you sure you want to permanently delete "${fileName}"?`)) return;
     try {
-      if (storagePath) {
+      if (type === "inline_doc") {
+        if (!user) throw new Error("Not authenticated");
+        const token = await user.getIdToken();
+        const res = await fetch(`/api/documents/inline/${encodeURIComponent(id)}`, {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) {
+          const data = (await res.json()) as { error?: string };
+          throw new Error(data.error || "Failed to delete inline document");
+        }
+      } else if (storagePath) {
         const fileRef = ref(storage, storagePath);
         await deleteObject(fileRef);
+        await deleteDoc(doc(db, "documents", id));
+      } else {
+        await deleteDoc(doc(db, "documents", id));
       }
-      await deleteDoc(doc(db, "documents", id));
       trackEvent("file_delete", { file_name: fileName });
     } catch (e) {
 
@@ -64,7 +82,7 @@ export default function AdminLibraryPage() {
   const handleToggleActive = async (id: string, currentStatus: string) => {
     try {
       // Toggle between 'inactive' and the default actionable state 'uploaded'
-      const newStatus = currentStatus === "inactive" ? "uploaded" : "inactive";
+      const newStatus = currentStatus === "inactive" ? "indexed" : "inactive";
       await updateDoc(doc(db, "documents", id), { status: newStatus });
     } catch (e) {
       console.error("Failed to update status", e);
@@ -98,6 +116,8 @@ export default function AdminLibraryPage() {
     if (filterStatus !== "all" && d.status !== filterStatus) return false;
     
     if (filterType !== "all") {
+      if (filterType === "inline" && d.type !== "inline_doc") return false;
+      if (filterType === "uploaded" && d.type === "inline_doc") return false;
       if (filterType === "pdf" && !d.mimeType?.includes("pdf")) return false;
       if (filterType === "csv" && !d.mimeType?.includes("csv")) return false;
       if (filterType === "txt" && !d.mimeType?.includes("text")) return false;
@@ -106,7 +126,8 @@ export default function AdminLibraryPage() {
 
     if (search) {
       const qs = search.toLowerCase();
-      const matchesName = d.fileName?.toLowerCase().includes(qs);
+      const displayName = (d.fileName || d.title || "").toLowerCase();
+      const matchesName = displayName.includes(qs);
       const matchesTags = d.tags?.some((t: string) => t.toLowerCase().includes(qs));
       if (!matchesName && !matchesTags) return false;
     }
@@ -144,6 +165,8 @@ export default function AdminLibraryPage() {
              <option value="docx">DOCX</option>
              <option value="txt">TXT</option>
              <option value="csv">CSV</option>
+             <option value="inline">Inline Doc</option>
+             <option value="uploaded">Uploaded File</option>
            </select>
            <select 
              value={filterStatus} 
@@ -188,11 +211,17 @@ export default function AdminLibraryPage() {
                    {filteredDocs.map(doc => (
                     <tr key={doc.id} className={`${theme === "dark" ? "hover:bg-accent/8" : "hover:bg-cream/40"} transition-colors`}>
                        <td className="p-4">
-                          <a href={doc.fileUrl} target="_blank" rel="noreferrer" className="font-medium text-foreground hover:underline block truncate max-w-[200px]">
-                            {doc.fileName}
-                          </a>
+                          {doc.fileUrl ? (
+                            <a href={doc.fileUrl} target="_blank" rel="noreferrer" className="font-medium text-foreground hover:underline block truncate max-w-[200px]">
+                              {doc.fileName || doc.title}
+                            </a>
+                          ) : (
+                            <span className="font-medium text-foreground block truncate max-w-[200px]">
+                              {doc.fileName || doc.title}
+                            </span>
+                          )}
                           <div className="text-xs text-muted mt-1 flex gap-2 items-center">
-                             <span>{(doc.sizeBytes / 1024 / 1024).toFixed(2)} MB</span>
+                             <span>{doc.type === "inline_doc" ? "Inline document" : `${((doc.sizeBytes || 0) / 1024 / 1024).toFixed(2)} MB`}</span>
                              {doc.description && <span className="truncate max-w-[150px]">— {doc.description}</span>}
                           </div>
                        </td>
@@ -215,6 +244,14 @@ export default function AdminLibraryPage() {
                           {doc.uploadedAt ? new Date(doc.uploadedAt.seconds * 1000).toLocaleDateString("en-GB") : "Just now"}
                        </td>
                        <td className="p-4 text-right">
+                         {doc.type === "inline_doc" ? (
+                           <Link
+                             href={`/admin/upload?compose=1&edit=${encodeURIComponent(doc.id)}`}
+                             className="text-foreground hover:text-link font-medium px-3 py-1.5 rounded-[8px] hover:bg-accent/12 transition-colors mr-2"
+                           >
+                             Edit
+                           </Link>
+                         ) : null}
                           <button 
                             onClick={() => handleToggleActive(doc.id, doc.status)} 
                             className="text-foreground hover:text-link font-medium px-3 py-1.5 rounded-[8px] hover:bg-accent/12 transition-colors mr-2"
@@ -222,7 +259,7 @@ export default function AdminLibraryPage() {
                             {doc.status === "inactive" ? "Activate" : "Deactivate"}
                           </button>
                           <button 
-                            onClick={() => handleDelete(doc.id, doc.storagePath, doc.fileName)} 
+                            onClick={() => handleDelete(doc.id, doc.storagePath, doc.fileName || doc.title, doc.type)} 
                             className="text-muted hover:text-foreground font-medium px-3 py-1.5 rounded-[8px] hover:bg-accent/12 transition-colors"
                           >
                             Delete
