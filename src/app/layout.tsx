@@ -4,6 +4,14 @@ import { AuthProvider } from "@/context/AuthContext";
 import { ThemeProvider } from "@/context/ThemeContext";
 import { AppShell } from "@/components/AppShell";
 import Script from "next/script";
+import { Plus_Jakarta_Sans } from "next/font/google";
+
+const plusJakarta = Plus_Jakarta_Sans({
+  subsets: ["latin", "latin-ext", "vietnamese"],
+  variable: "--font-app-sans",
+  display: "swap",
+  weight: ["400", "500", "600", "700"],
+});
 
 const siteUrl =
   process.env.NEXT_PUBLIC_SITE_URL || "https://zalo-ikc-be--zalo-ikc.asia-southeast1.hosted.app";
@@ -49,8 +57,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="h-full antialiased" suppressHydrationWarning>
-      <body className="min-h-screen bg-background text-foreground flex flex-col font-sans" suppressHydrationWarning>
+    <html lang="vi" className={`h-full antialiased ${plusJakarta.variable}`} suppressHydrationWarning>
+      <body
+        className={`min-h-screen bg-background text-foreground flex flex-col ${plusJakarta.className}`}
+        suppressHydrationWarning
+      >
         <ThemeProvider>
           <AuthProvider>
             <AppShell>

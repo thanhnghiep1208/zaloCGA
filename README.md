@@ -5,6 +5,8 @@ Trợ lý nội bộ cho tra cứu guideline nội dung và soạn microcopy UX 
 ## Project docs
 
 - Tổng quan kiến trúc + flow + frontend/backend + Firebase/deploy: `docs/PROJECT_OVERVIEW.md`
+- **UI & theme (triển khai thực tế):** `docs/UI_AND_THEME.md`
+- Tham chiếu cảm hứng thiết kế (Superhuman): `docs/DESIGN.md`
 - Quy trình release: `docs/RELEASE_PROCESS.md`
 - Hướng dẫn lên live nhanh (VI): `docs/HUONG_DAN_LEN_LIVE.md`
 - Checklist deploy Firebase: `docs/FIREBASE_DEPLOY.md`

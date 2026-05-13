@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { signInWithPopup, GoogleAuthProvider } from "firebase/auth";
+import { signInWithPopup, GoogleAuthProvider, type User } from "firebase/auth";
 import { auth, db } from "@/lib/firebase";
 import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
 import { useRouter } from "next/navigation";
@@ -13,7 +13,7 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const router = useRouter();
 
-  const syncUserToFirestore = async (user: any) => {
+  const syncUserToFirestore = async (user: User) => {
     try {
       const docRef = doc(db, "users", user.uid);
       const docSnap = await getDoc(docRef);
@@ -49,21 +49,25 @@ export default function LoginPage() {
       trackEvent("login", { method: "Google" });
       router.push("/chat");
 
-    } catch (err: any) {
-      setError(err.message || "Failed to sign in with Google");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to sign in with Google");
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <main className="flex-1 flex items-center justify-center p-6 bg-background min-h-screen animate-in fade-in duration-500">
-      <div className="clay-card p-8 w-full max-w-[28rem] space-y-8 rounded-[16px]">
+    <main className="relative flex-1 flex items-center justify-center p-6 min-h-screen overflow-hidden animate-in fade-in duration-500">
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 bg-[radial-gradient(90%_60%_at_50%_-5%,color-mix(in_oklab,var(--accent)_22%,transparent),transparent_50%),radial-gradient(70%_50%_at_100%_100%,color-mix(in_oklab,var(--link)_12%,transparent),transparent_55%)]"
+      />
+      <div className="relative clay-card p-8 md:p-10 w-full max-w-[28rem] space-y-8 rounded-2xl shadow-[var(--shadow-md)] ring-1 ring-black/[0.04] dark:ring-white/[0.06]">
         <div className="text-center space-y-4 pb-2">
-          <div className="w-16 h-16 bg-accent/20 border border-border rounded-[8px] flex items-center justify-center mx-auto mb-4">
+          <div className="w-16 h-16 bg-accent/25 border border-border rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-[var(--shadow-xs)]">
             <svg className="w-8 h-8 text-accent" fill="none" strokeWidth={1.5} stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 20.25c4.97 0 9-3.694 9-8.25s-4.03-8.25-9-8.25S3 7.444 3 12c0 2.104.859 4.023 2.273 5.38.432.447.74 1.04.586 1.641a4.483 4.483 0 0 1-.923 1.785A5.969 5.969 0 0 0 6 21c1.282 0 2.47-.402 3.445-1.087.81.22 1.668.337 2.555.337Z" /></svg>
           </div>
-          <h1 className="text-3xl font-light text-foreground tracking-tight">Internal Portal</h1>
+          <h1 className="text-3xl md:text-[2rem] font-semibold text-foreground tracking-[-0.04em]">Internal Portal</h1>
           <p className="text-muted text-[15px] max-w-sm mx-auto leading-relaxed">Sign in securely using your company Google account to access the knowledge base.</p>
         </div>
         
@@ -78,7 +82,7 @@ export default function LoginPage() {
             type="button" 
             onClick={handleGoogleSignIn}
             disabled={loading}
-            className="clay-hover-playful w-full bg-cream text-charcoal border border-border py-3 clay-pill font-medium transition-opacity disabled:opacity-50 flex items-center justify-center gap-3"
+            className="clay-hover-playful w-full bg-cream text-charcoal border border-border py-3.5 rounded-xl font-semibold transition-opacity disabled:opacity-50 flex items-center justify-center gap-3 shadow-[var(--shadow-xs)]"
           >
             {loading ? (
                <div className="flex gap-1.5 items-center">

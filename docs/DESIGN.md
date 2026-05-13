@@ -1,5 +1,8 @@
 # Design System Inspired by Superhuman
 
+> **Triển khai trong repo:** Giao diện thật của app (font Plus Jakarta Sans, token CSS, Tailwind v4, shell “glass-forward”) được ghi trong `[docs/UI_AND_THEME.md](./UI_AND_THEME.md)` và mã nguồn `src/app/globals.css`, `src/app/layout.tsx`.  
+> Tài liệu **bên dưới** mô tả chủ yếu **cảm hứng / hệ quy chiếu** từ Superhuman (màu lavender, Super Sans, v.v.) — dùng khi brainstorm hoặc so sánh ý đồ; không phải checklist copy-paste từng pixel cho codebase hiện tại.
+
 ## 1. Visual Theme & Atmosphere
 
 Superhuman's website feels like opening a luxury envelope — predominantly white, immaculately clean, with a single dramatic gesture of color that commands attention. The hero section is a cinematic purple gradient, a deep twilight wash of `#1b1938` that evokes the moment just before dawn, overlaid with confident white typography. Below this dramatic entrance, the rest of the site is almost entirely white canvas with dark charcoal text, creating a stark but refined reading experience.

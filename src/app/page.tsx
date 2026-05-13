@@ -61,7 +61,7 @@ export default function LandingPage() {
           <div className="flex justify-end">
         <button
           onClick={toggleTheme}
-          className="clay-hover-playful bg-surface border border-border p-1.5 rounded-[8px] text-foreground"
+          className="clay-hover-playful bg-white/10 border border-white/20 p-1.5 rounded-xl text-white backdrop-blur-md"
           title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
           aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
         >
@@ -78,7 +78,7 @@ export default function LandingPage() {
           </div>
           <div className="flex items-center justify-center">
             <div className="text-center space-y-6 max-w-3xl mx-auto">
-              <h1 className="text-4xl md:text-[56px] font-light tracking-[-1.4px] text-white/95 leading-[1.03]">
+              <h1 className="text-4xl md:text-[56px] font-semibold tracking-[-0.045em] text-white/95 leading-[1.03]">
                 Zalo Content <br />
                 <span className="text-accent">Guidelines</span>
               </h1>
@@ -89,7 +89,7 @@ export default function LandingPage() {
                 <Link
                   href="/chat"
                   onClick={() => trackEvent("start_chat_click")}
-                  className="clay-hover-playful inline-flex items-center gap-2 rounded-[8px] px-6 py-3 text-base font-bold bg-charcoal text-white border border-white/20 shadow-[0_8px_22px_rgba(0,0,0,0.28)] hover:brightness-110 hover:shadow-[0_10px_26px_rgba(0,0,0,0.34)] transition-all"
+                  className="clay-hover-playful inline-flex items-center gap-2 rounded-xl px-7 py-3.5 text-base font-semibold bg-charcoal text-white border border-white/25 shadow-[0_12px_40px_rgba(0,0,0,0.35)] hover:brightness-110 hover:shadow-[0_16px_48px_rgba(0,0,0,0.4)] transition-all"
                 >
                   Bắt đầu ngay
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -104,19 +104,19 @@ export default function LandingPage() {
 
       <div className="max-w-[1080px] mx-auto w-full px-6 py-12 md:py-20">
       <section className="mb-24">
-        <h2 className="text-2xl md:text-3xl font-light text-foreground text-center mb-10">
+        <h2 className="text-2xl md:text-3xl font-semibold tracking-[-0.03em] text-foreground text-center mb-10">
           Lợi ích khi chuẩn hóa ngôn từ
         </h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-6xl mx-auto">
           {benefits.map((b, i) => (
             <div
               key={i}
-              className="clay-card group p-6 rounded-[16px] hover:bg-cream/40 transition-colors duration-300"
+              className="clay-card group p-6 md:p-7 rounded-2xl hover:shadow-[var(--shadow-md)] transition-shadow duration-300"
             >
-              <div className="w-12 h-12 bg-accent/25 border border-border rounded-[8px] flex items-center justify-center text-charcoal mb-5 group-hover:bg-accent/40 transition-colors duration-300">
+              <div className="w-12 h-12 bg-accent/25 border border-border rounded-xl flex items-center justify-center text-charcoal mb-5 group-hover:bg-accent/40 transition-colors duration-300">
                 <div className="scale-110">{b.icon}</div>
               </div>
-              <h3 className="text-[22px] font-light tracking-[-0.22px] text-foreground mb-2">{b.title}</h3>
+              <h3 className="text-[22px] font-semibold tracking-[-0.03em] text-foreground mb-2">{b.title}</h3>
               <p className="text-sm text-muted leading-relaxed">{b.desc}</p>
             </div>
           ))}
@@ -124,19 +124,19 @@ export default function LandingPage() {
       </section>
 
       <section className="pb-20">
-        <h2 className="text-2xl md:text-3xl font-light text-foreground text-center mb-10">
+        <h2 className="text-2xl md:text-3xl font-semibold tracking-[-0.03em] text-foreground text-center mb-10">
           Xây dựng nội dung nhất quán
         </h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
           {cards.map((card, i) => (
             <div
               key={i}
-              className="clay-card group p-6 rounded-[16px] hover:bg-cream/40 transition-colors duration-300 cursor-default"
+              className="clay-card group p-6 md:p-7 rounded-2xl hover:shadow-[var(--shadow-md)] transition-shadow duration-300 cursor-default"
             >
-              <div className="w-12 h-12 bg-accent/25 border border-border rounded-[8px] flex items-center justify-center text-charcoal mb-5 group-hover:bg-accent/40 transition-colors duration-300">
+              <div className="w-12 h-12 bg-accent/25 border border-border rounded-xl flex items-center justify-center text-charcoal mb-5 group-hover:bg-accent/40 transition-colors duration-300">
                 <div className="scale-110">{card.icon}</div>
               </div>
-              <h3 className="text-[22px] font-light tracking-[-0.22px] text-foreground mb-2 group-hover:text-link transition-colors">
+              <h3 className="text-[22px] font-semibold tracking-[-0.03em] text-foreground mb-2 group-hover:text-link transition-colors">
                 {card.title}
               </h3>
               <p className="text-sm text-muted leading-relaxed group-hover:opacity-100 transition-opacity">{card.desc}</p>

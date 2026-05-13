@@ -26,7 +26,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <div className="flex min-h-screen bg-background">
+    <div className="flex min-h-screen bg-background bg-[radial-gradient(120%_80%_at_50%_-10%,color-mix(in_oklab,var(--accent)_18%,transparent),transparent_55%)]">
       {/* Mobile Sidebar Overlay & Drawer (Client-only to prevent hydration mismatch) */}
       {mounted && (
         <>
@@ -38,7 +38,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           )}
 
           <div className={`
-            fixed inset-y-0 left-0 w-64 z-[70] bg-surface border-r border-border transform transition-transform duration-300 ease-in-out md:hidden
+            fixed inset-y-0 left-0 w-64 z-[70] bg-surface/95 backdrop-blur-xl border-r border-border shadow-[var(--shadow-md)] transform transition-transform duration-300 ease-in-out md:hidden
             ${isSidebarOpen ? "translate-x-0" : "-translate-x-full"}
           `}>
              <Sidebar onClose={() => setIsSidebarOpen(false)} className="w-full" />
@@ -53,10 +53,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         {mounted ? (
           <Header onOpenMenu={() => setIsSidebarOpen(true)} />
         ) : (
-          <div className="border-b border-border bg-surface sticky top-0 z-50 min-h-16 py-2" />
+          <div className="border-b border-border/80 bg-surface/90 backdrop-blur-md sticky top-0 z-50 min-h-16 py-2 shadow-[var(--shadow-xs)]" />
         )}
         <main className="flex-1">
-          <div className="max-w-6xl mx-auto p-4 md:p-8">
+          <div className="max-w-6xl mx-auto px-4 py-6 md:px-8 md:py-10">
             {children}
           </div>
         </main>

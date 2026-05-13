@@ -59,20 +59,32 @@ Tài liệu này là bản tổng hợp end-to-end cho dự án: kiến trúc t�
 
 ## 4) Cấu trúc frontend
 
-## 4.1 App shell
+### 4.0 UI, theme & Tailwind
+
+- **Tài liệu chi tiết:** `docs/UI_AND_THEME.md` (font Plus Jakarta Sans, CSS variables, `@theme` Tailwind v4, pattern `.clay-card`, shell glass).
+- **Tham chiếu ý tưởng thương hiệu / Superhuman:** `docs/DESIGN.md` (không phải bản map 1:1 mã nguồn — token thực tế nằm trong `src/app/globals.css`).
+
+Tóm tắt kỹ thuật:
+
+- Theme sáng/tối: `data-theme` trên document + biến `--background`, `--surface`, `--foreground`, … trong `globals.css`.
+- Màu dùng trong component: class Tailwind semantic (`bg-background`, `border-border`, …).
+
+### 4.1 App shell
 
 - `src/components/AppShell.tsx`
   - Hiển thị layout có `Header` + `Sidebar` cho các trang sau login.
   - Ẩn shell ở `/` và `/login`.
+  - Nền app: radial wash nhẹ + vùng nội dung padding rộng hơn trên desktop.
 - `src/components/Header.tsx`
-  - Header toàn cục.
+  - Header toàn cục (sticky, `backdrop-blur`, shadow token).
   - Trên route `/chat` hiển thị thêm dòng mô tả ngữ cảnh chat.
 - `src/components/Sidebar.tsx`
   - Link điều hướng theo role.
   - Nút `New Chat` nằm ở sidebar.
   - Hiển thị lịch sử chat 7 ngày gần nhất.
+  - Sidebar: surface bán trong suốt + blur, viền tinh.
 
-## 4.2 Các trang chính
+### 4.2 Các trang chính
 
 - `src/app/page.tsx`: landing page.
 - `src/app/login/page.tsx`: đăng nhập.
@@ -82,7 +94,7 @@ Tài liệu này là bản tổng hợp end-to-end cho dự án: kiến trúc t�
 - `src/app/admin/upload/page.tsx`: upload + gọi ingest.
 - `src/app/admin/users/page.tsx`: phân quyền user.
 
-## 4.3 Auth context và phân quyền UI
+### 4.3 Auth context và phân quyền UI
 
 - `src/context/AuthContext.tsx`
   - Lắng nghe `onAuthStateChanged`.
@@ -253,6 +265,7 @@ Khuyến nghị:
 
 - `NEXT_PUBLIC_SITE_URL` (metadata canonical + OG absolute URL)
 - `NEXT_PUBLIC_GA_ID` (nếu bật Google Analytics)
+- `CHAT_ATTACHMENTS_CRON_SECRET` (bí mật gọi cron xóa ảnh chat hết TTL trong Storage; xem mục 10.4)
 
 Lưu ý:
 
@@ -300,6 +313,18 @@ Nếu backend App Hosting đã nối GitHub branch live (`main`), push code lên
 4. Commit + push
 5. Theo dõi App Hosting rollout đến `Succeeded`
 6. Smoke test production + log monitor
+
+## 10.4 Cron xóa ảnh chat hết TTL (Storage)
+
+Ảnh đính kèm chat lưu dưới prefix `chat-attachments/` với metadata `expiresAt` (24h). Để xóa vật lý định kỳ:
+
+1. Tạo biến môi trường `CHAT_ATTACHMENTS_CRON_SECRET` (chuỗi ngẫu nhiên đủ dài).
+2. Trên **Google Cloud Scheduler**, tạo job HTTPS **POST** tới
+  `https://<domain-của-app>/api/cron/cleanup-chat-attachments`  
+   với header `Authorization: Bearer <CHAT_ATTACHMENTS_CRON_SECRET>` (hoặc `x-cron-secret` cùng giá trị).
+3. Tần suất gợi ý: mỗi 1–6 giờ (tùy lưu lượng). Tùy chọn env: `CHAT_ATTACHMENTS_CLEANUP_MAX_DELETES` (mặc định 500), `CHAT_ATTACHMENTS_CLEANUP_PAGE_SIZE` (100), `CHAT_ATTACHMENTS_CLEANUP_MAX_PAGES` (50).
+
+Nếu không đặt `CHAT_ATTACHMENTS_CRON_SECRET`, route cron trả `503` (chưa cấu hình). Sai secret trả `401`.
 
 ---
 

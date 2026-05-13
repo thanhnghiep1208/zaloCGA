@@ -31,16 +31,16 @@ export function Header({ onOpenMenu }: HeaderProps) {
   };
 
   return (
-    <header className="border-b border-border bg-surface/95 text-foreground backdrop-blur flex items-center px-4 md:px-6 sticky top-0 z-50 min-h-16 py-2">
+    <header className="border-b border-border/80 bg-surface/90 text-foreground backdrop-blur-md flex items-center px-4 md:px-6 sticky top-0 z-50 min-h-16 py-2 shadow-[var(--shadow-xs)]">
       <div className="flex-1 flex items-center gap-3">
         <button
           onClick={onOpenMenu}
-          className="p-2 -ml-2 hover:bg-border/50 rounded-[8px] text-muted md:hidden"
+          className="p-2 -ml-2 hover:bg-border/60 rounded-xl text-muted md:hidden transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-link"
         >
           <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" /></svg>
         </button>
         <div className="min-w-0">
-          <span className="font-light text-lg text-foreground tracking-[-0.22px]">{SITE_HEADER_TITLE}</span>
+          <span className="font-semibold text-lg text-foreground tracking-[-0.03em]">{SITE_HEADER_TITLE}</span>
           <p className={`text-muted text-xs font-normal leading-tight ${isChatPage ? "block" : "hidden"}`}>
             Hỏi guideline hoặc mô tả microcopy UI — trợ lý tự chọn cách trả lời phù hợp.
           </p>
@@ -60,7 +60,7 @@ export function Header({ onOpenMenu }: HeaderProps) {
       <div className="flex items-center gap-4 text-sm">
         <button
           onClick={toggleTheme}
-          className="clay-hover-playful bg-surface border border-border p-1.5 rounded-[8px] text-foreground"
+          className="clay-hover-playful bg-surface border border-border p-1.5 rounded-xl text-foreground shadow-[var(--shadow-xs)]"
           title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
           aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
         >
@@ -84,7 +84,7 @@ export function Header({ onOpenMenu }: HeaderProps) {
         </div>
         <button
           onClick={handleLogout}
-          className="clay-hover-playful bg-cream text-charcoal border border-border px-3 py-1.5 clay-pill font-medium transition-opacity text-xs"
+          className="clay-hover-playful bg-cream text-charcoal border border-border px-3 py-1.5 rounded-xl font-semibold transition-opacity text-xs shadow-[var(--shadow-xs)]"
         >
           Sign Out
         </button>

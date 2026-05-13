@@ -117,7 +117,7 @@ export function Sidebar({ onClose, className = "" }: SidebarProps) {
   };
 
   return (
-    <aside className={`w-64 border-r border-border bg-surface min-h-screen flex flex-col p-4 space-y-2 ${className}`}>
+    <aside className={`w-64 border-r border-border/80 bg-surface/95 backdrop-blur-xl min-h-screen flex flex-col p-4 space-y-2 shadow-[var(--shadow-xs)] ${className}`}>
       <h2 className="clay-label mb-4 px-3 mt-4 opacity-80">General</h2>
       {links.map((link) => {
         const normalizedHref = link.href.split("?")[0];
@@ -129,7 +129,7 @@ export function Sidebar({ onClose, className = "" }: SidebarProps) {
             key={link.href} 
             href={link.href}
             onClick={() => onClose?.()}
-            className={`group clay-hover-playful flex items-center gap-3 px-4 py-2.5 rounded-[8px] transition-all text-sm font-medium border ${
+            className={`group clay-hover-playful flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all text-sm font-semibold border ${
               isActive
                 ? theme === "dark"
                   ? "bg-cream text-charcoal border-border"
@@ -171,7 +171,7 @@ export function Sidebar({ onClose, className = "" }: SidebarProps) {
                   key={session.id}
                   href={`/chat/${session.id}`}
                   onClick={() => onClose?.()}
-                  className={`flex items-start justify-between gap-2 px-3 py-2.5 rounded-[8px] transition-all group border ${
+                  className={`flex items-start justify-between gap-2 px-3 py-2.5 rounded-xl transition-all group border ${
                     isActive
                       ? "bg-accent/15 border-accent/35"
                       : theme === "dark"
