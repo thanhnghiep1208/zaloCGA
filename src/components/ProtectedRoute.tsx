@@ -1,7 +1,7 @@
 "use client";
 
 import { useAuth } from "@/context/AuthContext";
-import { useRouter, usePathname } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 export function ProtectedRoute({ 
@@ -19,7 +19,11 @@ export function ProtectedRoute({
     if (!loading) {
       if (!user) {
         router.push("/login");
-      } else if (allowedRoles.length > 0 && !allowedRoles.includes(role as any)) {
+      } else if (
+        allowedRoles.length > 0 &&
+        role &&
+        !allowedRoles.includes(role as (typeof allowedRoles)[number])
+      ) {
         router.push("/chat");
       } else {
         setAuthorized(true);

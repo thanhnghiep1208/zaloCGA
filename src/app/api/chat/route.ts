@@ -1,12 +1,16 @@
 import { NextResponse } from "next/server";
 import { RetrievalService } from "@/lib/RetrievalService";
 import { ApiAuthError, requireUidFromRequest } from "@/lib/api-request-auth";
+import { assertFirebaseStorageDownloadUrl } from "@/lib/api-request-auth";
 import {
   estimateRelevanceScore,
   inferQueryType,
   logAnalyticsEvent,
 } from "@/lib/analytics-events";
-import { toFriendlyErrorMessage } from "@/lib/user-error";
+import {
+  chatServerErrorResponse,
+  nextJsonChatAuthError,
+} from "@/lib/server-json-response";
 
 function envInt(name: string, fallback: number): number {
   const v = process.env[name];
@@ -27,6 +31,36 @@ const MAX_CONVERSATION_CHARS_PER_TURN = envInt(
 );
 /** Cap on the latest user message length sent to the model. */
 const MAX_QUERY_CHARS = envInt("CHAT_QUERY_MAX_CHARS", 12000);
+const MAX_ATTACHMENTS_PER_TURN = envInt("CHAT_MAX_ATTACHMENTS_PER_TURN", 4);
+
+type ChatAttachment = {
+  name: string;
+  mimeType: string;
+  sizeBytes: number;
+  storagePath: string;
+  downloadURL: string;
+  expiresAt: number;
+};
+
+function parseStorageObjectPathFromDownloadUrl(downloadURL: string): string | null {
+  try {
+    const url = new URL(downloadURL);
+    if (url.hostname === "firebasestorage.googleapis.com") {
+      const marker = "/o/";
+      const idx = url.pathname.indexOf(marker);
+      if (idx < 0) return null;
+      return decodeURIComponent(url.pathname.slice(idx + marker.length));
+    }
+    if (url.hostname === "storage.googleapis.com") {
+      const parts = url.pathname.split("/").filter(Boolean);
+      if (parts.length < 2) return null;
+      return parts.slice(1).join("/");
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
 
 function extractReferencedSources(
   fullResponse: string,
@@ -69,10 +103,43 @@ export async function POST(req: Request) {
     const uid = await requireUidFromRequest(req);
 
     const body = await req.json();
-    const { query, conversation } = body as {
+    const { query, conversation, attachments, sessionId } = body as {
       query?: string;
       conversation?: { role: "user" | "assistant"; content: string }[];
+      attachments?: ChatAttachment[];
+      sessionId?: string;
     };
+    const safeSessionId =
+      typeof sessionId === "string" && sessionId.trim() ? sessionId.trim() : "draft";
+
+    const safeAttachments = Array.isArray(attachments)
+      ? attachments
+          .filter(
+            (a) =>
+              a &&
+              typeof a.downloadURL === "string" &&
+              typeof a.mimeType === "string" &&
+              typeof a.name === "string" &&
+              typeof a.expiresAt === "number"
+          )
+          .slice(0, MAX_ATTACHMENTS_PER_TURN)
+      : [];
+
+    for (const attachment of safeAttachments) {
+      assertFirebaseStorageDownloadUrl(attachment.downloadURL);
+      if (!attachment.mimeType.startsWith("image/")) {
+        throw new ApiAuthError("Attachment must be an image", 400);
+      }
+      if (attachment.expiresAt <= Date.now()) {
+        throw new ApiAuthError("Attachment has expired. Please upload again.", 400);
+      }
+      const objectPath = parseStorageObjectPathFromDownloadUrl(attachment.downloadURL);
+      const expectedPrefix = `chat-attachments/${uid}/${safeSessionId}/`;
+      if (!objectPath || !objectPath.startsWith(expectedPrefix)) {
+        throw new ApiAuthError("Attachment does not belong to this session", 403);
+      }
+    }
+
 
     if (!query) {
       return NextResponse.json({ error: "Query is required" }, { status: 400 });
@@ -128,7 +195,12 @@ export async function POST(req: Request) {
     const stream = await RetrievalService.generateChatResponse(
       boundedQuery,
       contextSnippets,
-      boundedConversation
+      boundedConversation,
+      safeAttachments.map((a) => ({
+        downloadURL: a.downloadURL,
+        mimeType: a.mimeType,
+        name: a.name,
+      }))
     );
 
     // Stream transformation to safely pack sources into the first bytes
@@ -176,25 +248,11 @@ export async function POST(req: Request) {
     });
   } catch (error: unknown) {
     if (error instanceof ApiAuthError) {
-      return NextResponse.json(
-        { error: error.message, userMessage: toFriendlyErrorMessage(error.message) },
-        { status: error.status }
-      );
+      return nextJsonChatAuthError(error);
     }
     const err = error as { message?: string; stack?: string };
     console.error("Chat API Critical Failure:", error);
     const details = err.message || "Unknown error";
-    return new Response(
-      JSON.stringify({
-        error: "Server Error",
-        details,
-        userMessage: toFriendlyErrorMessage(details),
-        stack: process.env.NODE_ENV === "development" ? err.stack : undefined,
-      }),
-      {
-        status: 500,
-        headers: { "Content-Type": "application/json" },
-      }
-    );
+    return chatServerErrorResponse(details, err.stack);
   }
 }

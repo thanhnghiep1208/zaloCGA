@@ -1,7 +1,8 @@
 import { RetrievalProvider, RetrievedSnippet } from "./interfaces";
 
 export class MockRetrievalProvider implements RetrievalProvider {
-  async search(query: string, limit = 3): Promise<RetrievedSnippet[]> {
+  async search(query: string): Promise<RetrievedSnippet[]> {
+    void query; // Mock provider; reserved for future relevance filtering.
     // In the MVP, this is an integration boundary placeholder. 
     // In Phase 8/custom deployment, you can swap this class out for Vertex AI Search,
     // a managed Gemini File API search call, or a custom Pinecone/pgvector lookup.

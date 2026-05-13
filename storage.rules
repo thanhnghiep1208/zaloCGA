@@ -25,5 +25,11 @@ service firebase.storage {
       allow read: if signedIn();
       allow write: if isContributorOrAdmin();
     }
+
+    // Chat image attachments (uploaded via Admin SDK / API). Optional client reads for same user only.
+    match /chat-attachments/{userId}/{allPaths=**} {
+      allow read: if signedIn() && request.auth.uid == userId;
+      allow write: if false;
+    }
   }
 }

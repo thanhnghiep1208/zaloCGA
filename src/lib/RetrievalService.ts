@@ -43,7 +43,8 @@ export class RetrievalService {
   static async generateChatResponse(
     query: string,
     contextSnippets: RetrievedSnippet[],
-    conversationHistory: { role: "user" | "assistant"; content: string }[] = []
+    conversationHistory: { role: "user" | "assistant"; content: string }[] = [],
+    attachments: { downloadURL: string; mimeType: string; name: string }[] = []
   ) {
     // 1. Prepare retrieved context
     let contextText = "";
@@ -91,6 +92,11 @@ Thực hiện 4 tác vụ khi phù hợp:
 ### Kiểu B — Trả lời (microcopy, bám guideline đã truy xuất — không bịa quy tắc ngoài tài liệu)
 Nếu thiếu thông tin, nêu giả định ngắn trong **Pre-write analysis** (không hỏi lại dài dòng).
 
+### QUY TẮC KHI CÓ ẢNH ĐÍNH KÈM (BẮT BUỘC)
+- Ảnh chỉ dùng để PHÂN TÍCH ngữ cảnh UI theo guideline và đưa TƯ VẤN BẰNG TEXT.
+- TUYỆT ĐỐI KHÔNG đề nghị "đã chỉnh sửa ảnh", "đính kèm ảnh đã sửa", hoặc bất kỳ thao tác chỉnh sửa ảnh trực tiếp.
+- Kết quả phải tập trung vào: mức độ phù hợp, điểm chưa phù hợp, và gợi ý sửa wording/structure/layout bằng mô tả text.
+
 Bắt buộc cấu trúc Markdown (tiếng Việt), KHÔNG JSON, KHÔNG đổi tên heading, KHÔNG thêm/bớt section:
 ### Pre-write analysis
 ### Draft options
@@ -125,9 +131,22 @@ KẾT THÚC MỌI CÂU TRẢ LỜI PHẢI LUÔN CÓ (dòng cuối):
       let lastErr: unknown = null;
       for (const model of CHAT_MODELS) {
         try {
+          const userParts: Array<
+            | { text: string }
+            | { fileData: { fileUri: string; mimeType: string } }
+          > = [{ text: query }];
+          for (const attachment of attachments) {
+            userParts.push({
+              fileData: {
+                fileUri: attachment.downloadURL,
+                mimeType: attachment.mimeType,
+              },
+            });
+          }
+
           const responseStream = await ai.models.generateContentStream({
             model,
-            contents: [{ role: "user", parts: [{ text: query }] }],
+            contents: [{ role: "user", parts: userParts }],
             config: {
               systemInstruction: { parts: [{ text: systemPrompt }] },
               temperature: 0.1

@@ -1,15 +1,21 @@
 "use client";
 
 import { ProtectedRoute } from "@/components/ProtectedRoute";
-import { useState, useRef, useEffect, useCallback } from "react";
+import { ChangeEvent, DragEvent, useState, useRef, useEffect, useCallback } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { useAuth } from "@/context/AuthContext";
 import { useTheme } from "@/context/ThemeContext";
-import { createChatSession, updateChatSession, StoredMessage } from "@/lib/chatHistory";
+import {
+  ChatAttachmentMeta,
+  createChatSession,
+  updateChatSession,
+  StoredMessage,
+} from "@/lib/chatHistory";
 import Link from "next/link";
 import { ReferencePreviewModal } from "@/components/ReferencePreviewModal";
 import { useRouter, useSearchParams } from "next/navigation";
+import { firebaseBearerAuthHeader } from "@/lib/client-bearer-auth";
 import { toFriendlyErrorMessage } from "@/lib/user-error";
 
 type Source = {
@@ -24,6 +30,9 @@ type Message = {
   role: "user" | "assistant";
   content: string;
   sources?: Source[];
+  attachments?: ChatAttachmentMeta[];
+  /** Shown while uploads run so the thumb row does not pop in late (layout stability). */
+  attachmentPlaceholders?: { id: string; name: string }[];
   isStreaming?: boolean;
   feedback?: "up" | "down";
 };
@@ -31,6 +40,31 @@ type Message = {
 type ConversationTurn = {
   role: "user" | "assistant";
   content: string;
+};
+
+/** Stable unique ids for React keys and Firestore message rows (avoid Date.now collisions). */
+function newClientMessageId(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
+}
+
+/** Short label for attachment chip (full name in title tooltip). */
+function shortImageTitle(name: string, max = 22): string {
+  const n = name.trim();
+  if (n.length <= max) return n;
+  const ext = n.includes(".") ? n.slice(n.lastIndexOf(".")) : "";
+  const base = ext ? n.slice(0, n.length - ext.length) : n;
+  const budget = max - 1 - ext.length;
+  if (budget < 6) return `${n.slice(0, max - 1)}…`;
+  return `${base.slice(0, Math.ceil(budget / 2))}…${base.slice(-Math.floor(budget / 2))}${ext}`;
+}
+
+type LocalChatImage = {
+  id: string;
+  file: File;
+  previewUrl: string;
 };
 
 const LOADING_MESSAGES = [
@@ -54,6 +88,72 @@ const FriendlyLoading = () => {
   return <>{LOADING_MESSAGES[msgIndex]}</>;
 };
 
+function UserAttachmentSkeleton({ name }: { name: string }) {
+  return (
+    <div className="block w-[72px] shrink-0" aria-busy="true" aria-label={name}>
+      <div className="relative h-[72px] w-[72px] overflow-hidden rounded-lg border border-border bg-muted/35">
+        <div
+          className="absolute inset-0 bg-gradient-to-br from-muted/60 via-muted/25 to-muted/60 motion-safe:animate-pulse"
+          aria-hidden
+        />
+        <div className="absolute inset-0 flex items-center justify-center text-muted/50" aria-hidden>
+          <svg className="h-7 w-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={1.5}
+              d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
+            />
+          </svg>
+        </div>
+      </div>
+      <p className="mt-0.5 min-h-[14px] max-w-[72px] truncate text-center text-[10px] leading-[14px] text-muted">
+        {shortImageTitle(name)}
+      </p>
+    </div>
+  );
+}
+
+function UserAttachmentThumb({ att }: { att: ChatAttachmentMeta }) {
+  const [loaded, setLoaded] = useState(false);
+  return (
+    <a
+      href={att.downloadURL}
+      target="_blank"
+      rel="noreferrer"
+      className="block w-[72px] shrink-0 rounded-lg outline-none ring-offset-background transition-shadow hover:ring-2 hover:ring-accent/25 focus-visible:ring-2 focus-visible:ring-accent/40"
+      title={att.name}
+    >
+      <div className="relative h-[72px] w-[72px] overflow-hidden rounded-lg border border-border bg-muted/35 shadow-sm">
+        {!loaded && (
+          <div
+            className="pointer-events-none absolute inset-0 z-[1] bg-muted/45 motion-safe:animate-pulse"
+            aria-hidden
+          />
+        )}
+        {/* eslint-disable-next-line @next/next/no-img-element -- Firebase download URL */}
+        <img
+          src={att.downloadURL}
+          alt=""
+          width={72}
+          height={72}
+          decoding="async"
+          loading="lazy"
+          sizes="72px"
+          className={`relative z-[2] h-full w-full object-cover motion-safe:transition-opacity motion-safe:duration-300 motion-safe:ease-out ${
+            loaded ? "opacity-100" : "opacity-0"
+          }`}
+          onLoad={() => setLoaded(true)}
+          onError={() => setLoaded(true)}
+        />
+      </div>
+      <p className="mt-0.5 min-h-[14px] max-w-[72px] truncate text-center text-[10px] leading-[14px] text-muted">
+        {shortImageTitle(att.name)}
+      </p>
+    </a>
+  );
+}
+
 export default function ChatView() {
   const { user } = useAuth();
   const { theme } = useTheme();
@@ -64,8 +164,13 @@ export default function ChatView() {
   const [isLoading, setIsLoading] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [previewDocId, setPreviewDocId] = useState<string | null>(null);
+  const [selectedImages, setSelectedImages] = useState<LocalChatImage[]>([]);
+  const attachmentInputRef = useRef<HTMLInputElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const selectedImagesRef = useRef<LocalChatImage[]>([]);
+  const dragDepthRef = useRef(0);
+  const [isDropTarget, setIsDropTarget] = useState(false);
   const hasVisibleMessages = messages.some((m) => m.role === "user" || (m.role === "assistant" && !!m.content.trim()));
   const showConversationLayout = hasVisibleMessages || isLoading;
 
@@ -74,17 +179,14 @@ export default function ChatView() {
   }, [messages, isLoading]);
 
   useEffect(() => {
-    if (searchParams.get("new") !== "1") return;
-    setMessages([]);
-    setInput("");
-    setIsLoading(false);
-    setSessionId(null);
-    if (saveTimeoutRef.current) {
-      clearTimeout(saveTimeoutRef.current);
-      saveTimeoutRef.current = null;
-    }
-    router.replace("/chat");
-  }, [searchParams, router]);
+    selectedImagesRef.current = selectedImages;
+  }, [selectedImages]);
+
+  useEffect(() => {
+    return () => {
+      selectedImagesRef.current.forEach((img) => URL.revokeObjectURL(img.previewUrl));
+    };
+  }, []);
 
   // Debounced save to Firestore after AI finishes responding
   const saveSession = useCallback((msgs: Message[]) => {
@@ -98,6 +200,7 @@ export default function ChatView() {
           role: m.role,
           content: m.content,
           sources: m.sources,
+          ...(m.attachments && m.attachments.length > 0 ? { attachments: m.attachments } : {}),
           timestamp: Date.now(),
         }));
       updateChatSession(sessionId, storedMsgs).catch(console.error);
@@ -112,13 +215,128 @@ export default function ChatView() {
       .map((m) => ({ role: m.role, content: m.content }));
   };
 
+  const uploadChatAttachments = async (
+    files: File[],
+    currentSessionId: string,
+    authHeader: { Authorization: string }
+  ): Promise<ChatAttachmentMeta[]> => {
+    if (files.length === 0) return [];
+    const uploaded = await Promise.all(
+      files.map(async (file) => {
+        const form = new FormData();
+        form.append("file", file);
+        form.append("sessionId", currentSessionId);
+        const res = await fetch("/api/chat/attachments", {
+          method: "POST",
+          headers: { ...authHeader },
+          body: form,
+        });
+        const data = (await res.json()) as {
+          success?: boolean;
+          error?: string;
+          attachment?: ChatAttachmentMeta;
+        };
+        if (!res.ok || !data.attachment) {
+          throw new Error(data.error || "Failed to upload attachment");
+        }
+        return data.attachment;
+      })
+    );
+    return uploaded;
+  };
+
+  const clearPendingImages = useCallback(() => {
+    setSelectedImages((prev) => {
+      prev.forEach((img) => URL.revokeObjectURL(img.previewUrl));
+      return [];
+    });
+  }, []);
+
+  const appendImageFiles = useCallback((fileList: FileList | File[]) => {
+    const incoming = Array.from(fileList).filter((f) => f.type.startsWith("image/"));
+    if (incoming.length === 0) return;
+    setSelectedImages((prev) => {
+      const next = [...prev];
+      for (const file of incoming) {
+        if (next.length >= 4) break;
+        next.push({
+          id: newClientMessageId(),
+          file,
+          previewUrl: URL.createObjectURL(file),
+        });
+      }
+      return next;
+    });
+  }, []);
+
+  const removePendingImage = useCallback((id: string) => {
+    setSelectedImages((prev) => {
+      const target = prev.find((p) => p.id === id);
+      if (target) URL.revokeObjectURL(target.previewUrl);
+      return prev.filter((p) => p.id !== id);
+    });
+  }, []);
+
+  const handleComposerDragEnter = (e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    if (!e.dataTransfer.types.includes("Files")) return;
+    dragDepthRef.current += 1;
+    setIsDropTarget(true);
+  };
+
+  const handleComposerDragOver = (e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "copy";
+  };
+
+  const handleComposerDragLeave = (e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    dragDepthRef.current -= 1;
+    if (dragDepthRef.current <= 0) {
+      dragDepthRef.current = 0;
+      setIsDropTarget(false);
+    }
+  };
+
+  const handleComposerDrop = (e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    dragDepthRef.current = 0;
+    setIsDropTarget(false);
+    if (isLoading) return;
+    const { files } = e.dataTransfer;
+    if (files?.length) appendImageFiles(files);
+  };
+
+  useEffect(() => {
+    if (searchParams.get("new") !== "1") return;
+    setMessages([]);
+    setInput("");
+    setIsLoading(false);
+    setSessionId(null);
+    clearPendingImages();
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+      saveTimeoutRef.current = null;
+    }
+    router.replace("/chat");
+  }, [searchParams, router, clearPendingImages]);
+
   const handleSend = async () => {
-    if (!input.trim() || isLoading || !user) return;
+    if ((!input.trim() && selectedImages.length === 0) || isLoading || !user) return;
     
     const userQuery = input.trim();
-    const userMsg: Message = { id: Date.now().toString(), role: "user", content: userQuery };
-    
-    const assistantId = (Date.now() + 1).toString();
+    const pendingThumbs =
+      selectedImages.length > 0
+        ? selectedImages.map((i) => ({ id: i.id, name: i.file.name }))
+        : undefined;
+    const userMsg: Message = {
+      id: newClientMessageId(),
+      role: "user",
+      content: userQuery,
+      ...(pendingThumbs ? { attachmentPlaceholders: pendingThumbs } : {}),
+    };
+
+    const assistantId = newClientMessageId();
     const initialAssistantMsg: Message = { 
       id: assistantId, 
       role: "assistant", 
@@ -147,20 +365,41 @@ export default function ChatView() {
         return;
       }
     }
+    if (!currentSessionId) {
+      setIsLoading(false);
+      return;
+    }
 
     setMessages(prev => [...prev, userMsg, initialAssistantMsg]);
 
     try {
-      const idToken = await user.getIdToken();
+      const authHeader = await firebaseBearerAuthHeader(user);
+      const filesForUpload = selectedImages.map((i) => i.file);
+      const uploadedAttachments = await uploadChatAttachments(
+        filesForUpload,
+        currentSessionId,
+        authHeader
+      );
+
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === userMsg.id
+            ? { ...m, attachments: uploadedAttachments, attachmentPlaceholders: undefined }
+            : m
+        )
+      );
+
       const response = await fetch("/api/chat", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${idToken}`,
+          ...authHeader,
         },
         body: JSON.stringify({
           query: userQuery,
           conversation: buildConversationContext(),
+          sessionId: currentSessionId,
+          attachments: uploadedAttachments,
         }),
       });
 
@@ -254,6 +493,7 @@ export default function ChatView() {
               role: m.role,
               content: m.content,
               sources: m.sources,
+              attachments: m.attachments,
               timestamp: Date.now(),
             }));
           updateChatSession(currentSessionId, storedMsgs).catch(console.error);
@@ -262,15 +502,35 @@ export default function ChatView() {
         }
         return finalMessages;
       });
+      clearPendingImages();
 
     } catch(e) {
       console.error(e);
       const friendly = toFriendlyErrorMessage(e);
-      setMessages(prev => prev.map(msg => 
-        msg.id === assistantId ? { ...msg, content: friendly, isStreaming: false } : msg
-      ));
+      setMessages(prev => prev.map(msg => {
+        if (msg.id === assistantId) {
+          return { ...msg, content: friendly, isStreaming: false };
+        }
+        if (msg.id === userMsg.id) {
+          return { ...msg, attachmentPlaceholders: undefined };
+        }
+        return msg;
+      }));
       setIsLoading(false);
     }
+  };
+
+  const onPickAttachments = () => {
+    attachmentInputRef.current?.click();
+  };
+
+  const onAttachmentFilesSelected = (e: ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []).filter((f) =>
+      f.type.startsWith("image/")
+    );
+    e.target.value = "";
+    if (files.length === 0) return;
+    appendImageFiles(files);
   };
 
   const copyToClipboard = (text: string) => {
@@ -284,12 +544,12 @@ export default function ChatView() {
     );
 
     try {
-      const idToken = await user.getIdToken();
+      const authHeader = await firebaseBearerAuthHeader(user);
       await fetch("/api/events", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${idToken}`,
+          ...authHeader,
         },
         body: JSON.stringify({
           eventName: "user_feedback",
@@ -334,14 +594,33 @@ export default function ChatView() {
             .map(msg => (
               <div key={msg.id} className={`flex flex-col w-full ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
                 {msg.role === 'user' ? (
-                  <div
-                    className={`px-5 py-3 rounded-[8px] inline-block max-w-[85%] text-[15px] leading-relaxed border ${
-                      theme === "dark"
-                        ? "bg-cream text-charcoal border-border"
-                        : "bg-charcoal text-white border-charcoal"
-                    }`}
-                  >
-                    <p className="whitespace-pre-wrap">{msg.content}</p>
+                  <div className="flex max-w-[85%] flex-col items-end gap-2 [contain:layout]">
+                    {(msg.content.trim() ||
+                      (!msg.attachments?.length && !msg.attachmentPlaceholders?.length)) && (
+                      <div
+                        className={`px-5 py-3 rounded-[8px] text-[15px] leading-relaxed border ${
+                          theme === "dark"
+                            ? "bg-cream text-charcoal border-border"
+                            : "bg-charcoal text-white border-charcoal"
+                        }`}
+                      >
+                        <p className="whitespace-pre-wrap">
+                          {msg.content.trim() ||
+                            (msg.attachments?.length ? "Ảnh đính kèm" : "")}
+                        </p>
+                      </div>
+                    )}
+                    {(msg.attachments?.length || msg.attachmentPlaceholders?.length) ? (
+                      <div className="flex flex-wrap justify-end gap-2">
+                        {msg.attachments?.map((att, idx) => (
+                          <UserAttachmentThumb key={`${att.storagePath}-${idx}`} att={att} />
+                        ))}
+                        {!msg.attachments?.length &&
+                          msg.attachmentPlaceholders?.map((p) => (
+                            <UserAttachmentSkeleton key={p.id} name={p.name} />
+                          ))}
+                      </div>
+                    ) : null}
                   </div>
                 ) : (
                   <div className="clay-card px-6 py-6 rounded-[16px] w-full">
@@ -464,7 +743,13 @@ export default function ChatView() {
                                        <svg className="w-4 h-4 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
                                        <span className="text-sm font-semibold truncate group-hover:text-accent transition-colors">{src.fileName}</span>
                                      </div>
-                                     {src.excerpt && <p className="text-xs text-muted leading-relaxed line-clamp-3 italic opacity-80">"{src.excerpt}"</p>}
+                                     {src.excerpt && (
+                                      <p className="text-xs text-muted leading-relaxed line-clamp-3 italic opacity-80">
+                                        <span className="not-italic">&ldquo;</span>
+                                        {src.excerpt}
+                                        <span className="not-italic">&rdquo;</span>
+                                      </p>
+                                    )}
                                      {src.docId ? (
                                        <button
                                          type="button"
@@ -567,30 +852,139 @@ export default function ChatView() {
         </div>
 
         <div className="pt-3 bg-background/95 backdrop-blur z-10 shrink-0 space-y-2">
-          <div className="relative flex items-end w-full max-w-4xl mx-auto bg-surface border border-border rounded-[16px] focus-within:ring-2 focus-within:ring-accent/35 transition-all">
-             <textarea 
-               value={input}
-               onChange={e => setInput(e.target.value)}
-               onKeyDown={e => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
+          <p className="text-center text-[11px] text-muted max-w-4xl mx-auto px-2">
+            Kéo thả hoặc chọn ảnh (tối đa 4). Ảnh xem trước và tên file nằm chung trong khung soạn bên dưới. Sau khi gửi, ảnh hiện dưới tin nhắn.
+          </p>
+          <div
+            className={`relative w-full max-w-4xl mx-auto bg-surface border rounded-[16px] transition-all ${
+              isDropTarget
+                ? "border-accent ring-2 ring-accent/35 border-dashed"
+                : "border-border focus-within:ring-2 focus-within:ring-accent/35"
+            }`}
+            onDragEnter={handleComposerDragEnter}
+            onDragOver={handleComposerDragOver}
+            onDragLeave={handleComposerDragLeave}
+            onDrop={handleComposerDrop}
+          >
+            <input
+              ref={attachmentInputRef}
+              type="file"
+              accept="image/*"
+              multiple
+              className="hidden"
+              onChange={onAttachmentFilesSelected}
+            />
+
+            {isDropTarget && (
+              <div
+                className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center rounded-[16px] bg-background/75 backdrop-blur-[2px]"
+                aria-hidden
+              >
+                <p className="rounded-lg border border-accent/40 bg-surface px-4 py-2 text-sm font-semibold text-accent shadow-sm">
+                  Thả ảnh để đính kèm
+                </p>
+              </div>
+            )}
+
+            {selectedImages.length > 0 && (
+              <div className="flex flex-wrap gap-2 border-b border-border/60 px-3 pb-3 pt-3">
+                {selectedImages.map((img) => (
+                  <div
+                    key={img.id}
+                    className="flex max-w-full items-center gap-2 rounded-xl border border-border bg-muted/20 py-1.5 pl-1.5 pr-1.5 shadow-sm"
+                  >
+                    <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-lg border border-border/80 bg-muted/40">
+                      {/* eslint-disable-next-line @next/next/no-img-element -- blob preview */}
+                      <img
+                        src={img.previewUrl}
+                        alt=""
+                        width={48}
+                        height={48}
+                        className="h-full w-full object-cover"
+                        decoding="async"
+                      />
+                    </div>
+                    <span
+                      className="min-w-0 max-w-[180px] truncate text-[12px] font-medium text-foreground sm:max-w-[240px]"
+                      title={img.file.name}
+                    >
+                      {shortImageTitle(img.file.name, 36)}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => removePendingImage(img.id)}
+                      disabled={isLoading}
+                      className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-muted transition-colors hover:bg-border/90 hover:text-foreground disabled:opacity-40"
+                      aria-label={`Gỡ ${img.file.name}`}
+                      title="Gỡ ảnh"
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="relative flex items-end">
+              <textarea
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
                     e.preventDefault();
                     handleSend();
                   }
-               }}
-               placeholder="Hỏi guideline hoặc mô tả microcopy (vị trí UI, hành động, giới hạn ký tự)…"
-               className="w-full max-h-36 min-h-[60px] py-4 pl-5 pr-14 bg-transparent outline-none resize-none text-[15px] text-foreground overflow-y-auto scrollbar-none"
-               rows={1}
-               disabled={isLoading}
-             />
-             <button 
-               onClick={handleSend}
-               disabled={!input.trim() || isLoading}
-              className="clay-hover-playful absolute right-2 bottom-2 p-3 bg-cream text-charcoal border border-border disabled:bg-surface disabled:text-muted disabled:border-border rounded-[8px] transition-opacity"
-             >
-               <svg className="w-4 h-4 translate-x-[-1px] translate-y-[1px]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" /></svg>
-             </button>
+                }}
+                placeholder="Hỏi guideline hoặc mô tả microcopy (vị trí UI, hành động, giới hạn ký tự)…"
+                className="scrollbar-none w-full max-h-36 min-h-[60px] resize-none overflow-y-auto bg-transparent py-4 pl-5 pr-24 text-[15px] text-foreground outline-none"
+                rows={1}
+                disabled={isLoading}
+              />
+              <button
+                type="button"
+                onClick={onPickAttachments}
+                disabled={isLoading}
+                className="absolute bottom-2 right-14 rounded-[8px] border border-border bg-background p-3 text-foreground transition-opacity disabled:text-muted"
+                title="Đính kèm ảnh để phân tích guideline"
+              >
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828L18 9.828a4 4 0 10-5.657-5.657L5.757 10.757a6 6 0 108.486 8.486L20 13.5"
+                  />
+                </svg>
+              </button>
+              <button
+                type="button"
+                onClick={handleSend}
+                disabled={(!input.trim() && selectedImages.length === 0) || isLoading}
+                className="clay-hover-playful absolute bottom-2 right-2 rounded-[8px] border border-border bg-cream p-3 text-charcoal transition-opacity disabled:border-border disabled:bg-surface disabled:text-muted"
+              >
+                <svg
+                  className="h-4 w-4 translate-x-[-1px] translate-y-[1px]"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2.5}
+                    d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"
+                  />
+                </svg>
+              </button>
+            </div>
           </div>
-          <p className="text-center text-[11px] text-muted mt-3 font-medium">
+
+          {selectedImages.length > 0 && (
+            <p className="text-center text-[11px] text-muted">
+              {selectedImages.length} ảnh sẽ được gửi để AI phân tích ngữ cảnh theo guideline (chỉ tư vấn text).
+            </p>
+          )}
+          <p className="mt-3 text-center text-[11px] font-medium text-muted">
             Trả lời bám tài liệu nội bộ; với microcopy hãy đối chiếu trên UI thật trước khi ship.
           </p>
         </div>

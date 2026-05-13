@@ -5,6 +5,15 @@ import nextTs from "eslint-config-next/typescript";
 const eslintConfig = defineConfig([
   ...nextVitals,
   ...nextTs,
+  {
+    name: "ikc/pragmatic-react-hooks",
+    rules: {
+      // Hydration gates, auth redirects, theme init, and Firestore guards often set local state once in an effect.
+      "react-hooks/set-state-in-effect": "off",
+      // React Compiler rule conflicts with intentional memoization in providers and report summaries.
+      "react-hooks/preserve-manual-memoization": "off",
+    },
+  },
   // Override default ignores of eslint-config-next.
   globalIgnores([
     // Default ignores of eslint-config-next:

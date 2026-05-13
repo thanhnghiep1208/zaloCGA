@@ -15,6 +15,44 @@ function normalizeForSearch(text: string): string {
     .replace(/\p{M}/gu, "");
 }
 
+function clampWindowToNaturalBoundary(
+  text: string,
+  start: number,
+  end: number,
+  lookaround: number = 120
+): { start: number; end: number } {
+  const safeStart = Math.max(0, start);
+  const safeEnd = Math.min(text.length, end);
+  if (safeStart >= safeEnd) return { start: safeStart, end: safeEnd };
+
+  const left = text.slice(Math.max(0, safeStart - lookaround), safeStart);
+  const right = text.slice(safeEnd, Math.min(text.length, safeEnd + lookaround));
+
+  const leftBoundary = Math.max(
+    left.lastIndexOf("\n\n"),
+    left.lastIndexOf(". "),
+    left.lastIndexOf("! "),
+    left.lastIndexOf("? ")
+  );
+  const rightBoundaryCandidates = [
+    right.indexOf("\n\n"),
+    right.indexOf(". "),
+    right.indexOf("! "),
+    right.indexOf("? "),
+  ].filter((v) => v >= 0);
+  const rightBoundary =
+    rightBoundaryCandidates.length > 0 ? Math.min(...rightBoundaryCandidates) : -1;
+
+  const adjustedStart =
+    leftBoundary >= 0 ? safeStart - (left.length - leftBoundary) : safeStart;
+  const adjustedEnd = rightBoundary >= 0 ? safeEnd + rightBoundary + 1 : safeEnd;
+
+  return {
+    start: Math.max(0, adjustedStart),
+    end: Math.min(text.length, adjustedEnd),
+  };
+}
+
 /**
  * Split long documents into scored windows; keep windows whose lexical overlap with the query is highest,
  * then reorder by original position for readable excerpts.
@@ -38,18 +76,19 @@ export function buildBudgetedExcerpt(
     return trimmed.slice(0, maxChars) + (trimmed.length > maxChars ? "\n\n…" : "");
   }
 
-  const windowSize = Math.min(1200, Math.max(400, Math.floor(maxChars / 3)));
-  const step = Math.floor(windowSize * 0.55);
+  const windowSize = Math.min(1400, Math.max(500, Math.floor(maxChars * 0.42)));
+  const step = Math.max(220, Math.floor(windowSize * 0.5));
 
-  type Window = { start: number; score: number; text: string };
+  type Window = { start: number; end: number; score: number; text: string };
   const windows: Window[] = [];
 
   for (let start = 0; start < trimmed.length; start += step) {
     const end = Math.min(trimmed.length, start + windowSize);
-    const slice = trimmed.slice(start, end);
-    const sliceLower = lower.slice(start, end);
+    const bounded = clampWindowToNaturalBoundary(trimmed, start, end);
+    const slice = trimmed.slice(bounded.start, bounded.end);
+    const sliceLower = lower.slice(bounded.start, bounded.end);
     const score = countTermHits(sliceLower, terms);
-    windows.push({ start, score, text: slice });
+    windows.push({ start: bounded.start, end: bounded.end, score, text: slice });
     if (end >= trimmed.length) break;
   }
 
@@ -57,13 +96,14 @@ export function buildBudgetedExcerpt(
 
   const picked: Window[] = [];
   let used = 0;
-  const overlapBudget = 120;
 
   for (const w of windows) {
     if (w.score === 0 && picked.length > 0) break;
-    const overlaps = picked.some(
-      (p) => Math.abs(p.start - w.start) < overlapBudget && p.text === w.text
-    );
+    const overlaps = picked.some((p) => {
+      const intersect = Math.max(0, Math.min(p.end, w.end) - Math.max(p.start, w.start));
+      const minLen = Math.max(1, Math.min(p.end - p.start, w.end - w.start));
+      return intersect / minLen > 0.6;
+    });
     if (overlaps) continue;
 
     const sep = picked.length > 0 ? "\n\n…\n\n" : "";

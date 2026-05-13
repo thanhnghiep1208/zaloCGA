@@ -17,7 +17,17 @@ export type StoredMessage = {
   role: "user" | "assistant";
   content: string;
   sources?: { docId?: string; fileName: string; excerpt?: string; reference?: string }[];
+  attachments?: ChatAttachmentMeta[];
   timestamp: number; // Unix ms
+};
+
+export type ChatAttachmentMeta = {
+  name: string;
+  mimeType: string;
+  sizeBytes: number;
+  storagePath: string;
+  downloadURL: string;
+  expiresAt: number; // Unix ms
 };
 
 export type ChatSession = {
@@ -45,6 +55,7 @@ export async function createChatSession(
     content: m.content,
     timestamp: m.timestamp,
     ...(m.sources && m.sources.length > 0 ? { sources: m.sources } : {}),
+    ...(m.attachments && m.attachments.length > 0 ? { attachments: m.attachments } : {}),
   }));
 
   const docRef = await addDoc(collection(db, "chatSessions"), {
@@ -74,6 +85,7 @@ export async function updateChatSession(
     content: m.content,
     timestamp: m.timestamp,
     ...(m.sources && m.sources.length > 0 ? { sources: m.sources } : {}),
+    ...(m.attachments && m.attachments.length > 0 ? { attachments: m.attachments } : {}),
   }));
 
   await updateDoc(doc(db, "chatSessions", sessionId), {
@@ -90,16 +102,25 @@ export async function deleteChatSession(sessionId: string): Promise<void> {
 
 /** Delete all sessions for a user older than 7 days */
 export async function cleanupOldSessions(userId: string): Promise<void> {
-  const sevenDaysAgo = new Date();
-  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+  try {
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
-  const q = query(
-    collection(db, "chatSessions"),
-    where("userId", "==", userId),
-    where("updatedAt", "<", Timestamp.fromDate(sevenDaysAgo))
-  );
+    const q = query(
+      collection(db, "chatSessions"),
+      where("userId", "==", userId),
+      where("updatedAt", "<", Timestamp.fromDate(sevenDaysAgo))
+    );
 
-  const snapshot = await getDocs(q);
-  const deletes = snapshot.docs.map((d) => deleteDoc(d.ref));
-  await Promise.all(deletes);
+    const snapshot = await getDocs(q);
+    const deletes = snapshot.docs.map((d) => deleteDoc(d.ref));
+    await Promise.all(deletes);
+  } catch (e: unknown) {
+    const code = (e as { code?: string })?.code;
+    if (code === "permission-denied") {
+      console.warn("[cleanupOldSessions] permission denied (check Firestore rules / indexes)");
+      return;
+    }
+    throw e;
+  }
 }

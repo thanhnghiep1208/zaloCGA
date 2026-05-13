@@ -13,8 +13,8 @@ function envInt(name: string, fallback: number): number {
 const FIRESTORE_FETCH_LIMIT = envInt("RETRIEVAL_FIRESTORE_FETCH_LIMIT", 120);
 /** Snippets passed to the LLM after ranking + excerpt trimming. */
 const MAX_SNIPPETS = envInt("RETRIEVAL_MAX_SNIPPETS", 6);
-/** Max characters per document excerpt (~900–1100 tokens depending on language). */
-const MAX_CHARS_PER_SNIPPET = envInt("RETRIEVAL_MAX_CHARS_PER_SNIPPET", 3500);
+/** Max characters per document excerpt (~650–850 tokens depending on language). */
+const MAX_CHARS_PER_SNIPPET = envInt("RETRIEVAL_MAX_CHARS_PER_SNIPPET", 2600);
 
 export class FirebaseRetrievalProvider implements RetrievalProvider {
   async search(queryText: string, limit: number = 100): Promise<RetrievedSnippet[]> {

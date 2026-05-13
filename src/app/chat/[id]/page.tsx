@@ -18,6 +18,14 @@ type StoredMessage = {
   role: "user" | "assistant";
   content: string;
   sources?: { docId?: string; fileName: string; excerpt?: string; reference?: string }[];
+  attachments?: {
+    name: string;
+    mimeType: string;
+    sizeBytes: number;
+    storagePath: string;
+    downloadURL: string;
+    expiresAt: number;
+  }[];
   timestamp: number;
 };
 

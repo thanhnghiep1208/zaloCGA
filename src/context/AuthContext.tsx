@@ -32,7 +32,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           const docSnap = await getDoc(docRef);
           if (docSnap.exists()) {
             const data = docSnap.data();
-            setRole(data.role as any || "user");
+            const r = data.role;
+            setRole(
+              r === "admin" || r === "contributor" || r === "user" ? r : "user"
+            );
           } else {
             setRole("user");
           }
