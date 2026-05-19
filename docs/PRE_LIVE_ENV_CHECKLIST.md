@@ -56,8 +56,9 @@ Neu chi doi env ma khong rollout lai, frontend co the van dung gia tri cu.
 ## 7) Smoke test sau rollout (5-10 phut)
 
 - Firebase Console -> Authentication: bat **Email/Password**, tat **Google**.
-- Admin da tao it nhat 1 tai khoan (xem `docs/FIREBASE_DEPLOY.md` muc Auth).
-- Mo `/login`, dang nhap bang **username + password** (khong co dang ky tu phuc vu).
+- Admin da tao it nhat 1 tai khoan (xem `docs/FIREBASE_DEPLOY.md` muc Auth); Firestore `users/{uid}` dung document ID = Auth UID.
+- Mo `/login`: khong co nut Google; co mo ta *Zalo Content Guidelines* va footer lien he cap tai khoan.
+- Dang nhap bang **username + password** (khong phai email hien thi; khong co dang ky tu phuc vu).
 - Mo `/chat`, gui 1 cau hoi -> co stream response.
 - Kiem tra `/api/chat` khong loi `Unauthorized` neu token hop le.
 - Upload tai lieu bang tai khoan contributor/admin (neu dung ingest).
@@ -66,6 +67,10 @@ Neu chi doi env ma khong rollout lai, frontend co the van dung gia tri cu.
 
 ## 8) Dau hieu cau hinh sai thuong gap
 
+- Production van hien thi Google login / UI cu:
+  - Chua rollout tu commit moi tren live branch (chi deploy rules khong doi Next.js UI).
+- Dang nhap dung mat khau nhung bao *chua duoc cap quyen*:
+  - Thieu `users/{auth.uid}` hoac sai document ID trong Firestore.
 - Loi thieu Firebase client env:
   - `[Firebase] Missing required env vars: ...`
 - Loi Admin SDK:

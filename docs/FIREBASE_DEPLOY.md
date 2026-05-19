@@ -41,10 +41,15 @@ Chi tiet pre-live audit env (bat buoc + khuyen nghi + token tuning):
    - Bật **Email/Password**
    - Tắt **Google**
 2. **Tài khoản admin đầu tiên** (một lần, trước khi có UI admin):
-   - Cách A: Console → Authentication → Users → Add user (email dạng `admin@accounts.internal` nếu domain là `accounts.internal`, đặt password).
-   - Tạo document Firestore `users/{uid}` với fields: `uid`, `username: "admin"`, `email`, `role: "admin"`, `createdAt`.
-   - Cách B: Đăng nhập bằng admin đã có → `/admin/users` → form **Tạo tài khoản mới** (gọi `POST /api/admin/users`).
-3. User mới **không** tự đăng ký: chỉ đăng nhập được sau khi admin tạo profile + Auth user.
+   - **Cách A (Console):**
+     - Authentication → Users → Add user: email `{username}@{domain}` (ví dụ `admin@accounts.internal` nếu `INTERNAL_AUTH_EMAIL_DOMAIN=accounts.internal`), đặt password.
+     - Firestore → collection `users` → **document ID = UID** của user vừa tạo (copy từ tab Authentication), **không** dùng Auto-ID.
+     - Fields gợi ý: `uid`, `username` (ví dụ `"admin"`), `email` (cùng email Auth), `role: "admin"`, `createdAt` (server timestamp).
+   - **Cách B (sau khi đã có admin):** `/admin/users` → **Tạo tài khoản mới** (`POST /api/admin/users`).
+3. User mới **không** tự đăng ký: chỉ đăng nhập được sau khi admin tạo cả Auth user **và** document `users/{uid}`.
+4. Trang `/login` hiển thị form username/password, mô tả *Zalo Content Guidelines*, và footer liên hệ xin cấp tài khoản (email + Zalo — chỉnh trong `src/app/login/page.tsx` nếu đổi người liên hệ).
+
+**Lỗi thường gặp:** đăng nhập đúng mật khẩu nhưng báo *chưa được cấp quyền* → thiếu hoặc sai ID document Firestore (phải khớp `auth.uid`).
 
 ## 4) Deploy security rules
 
@@ -63,6 +68,8 @@ firebase deploy --only apphosting
 
 ## 6) Smoke test in production
 
+- `/login`: form **username + password** (không có Google); copy *Zalo Content Guidelines*; có dòng liên hệ cấp tài khoản
+- Login admin → `/admin/users` → tạo user thử (tùy chọn)
 - Open `/chat` then exit: no empty `chatSessions` doc created
 - Send first message: `chatSessions` doc is created
 - Continue chatting: same session document updates

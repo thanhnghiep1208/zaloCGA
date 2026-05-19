@@ -18,7 +18,9 @@ npm run dev   # smoke test nhanh
 
 Nên thử nhanh các luồng liên quan tới thay đổi của bạn, ví dụ:
 
+- `/login`: username + password (không Google); nếu sửa copy/UI login thì kiểm tra tại đây.
 - Đăng nhập, mở `/chat`, gửi tin (API `/api/chat` có auth).
+- `/admin/users` nếu sửa quản lý tài khoản.
 - Upload tài liệu nếu sửa ingest/admin.
 - Trang landing hoặc metadata nếu sửa SEO.
 
@@ -43,6 +45,7 @@ Nếu team dùng PR: mở PR vào `main`, merge xong mới coi như bước này
 
 - Trong Firebase Console, backend App Hosting đã trỏ **live branch** (thường là `main`).
 - **Chỉ cần push lên đúng branch đó** → Cloud Build/Rollout chạy tự động.
+- **Lưu ý:** thay đổi giao diện Next.js (ví dụ trang `/login`) chỉ lên production qua rollout này — `firebase deploy --only firestore:rules,storage` **không** cập nhật UI app.
 - Theo dõi: **Firebase Console → App Hosting → Rollouts** cho đến trạng thái thành công.
 
 ### Cách B — Deploy thủ công từ máy (hotfix / chưa nối Git)
@@ -68,7 +71,7 @@ firebase deploy --only firestore:rules,storage
 ### Đổi biến môi trường trên App Hosting
 
 1. **Firebase Console → App Hosting → Backend → Environment variables**
-2. Sửa/thêm biến (ví dụ `GEMINI_API_KEY`, `FIREBASE_SERVICE_ACCOUNT_KEY`, các `NEXT_PUBLIC_`*, `NEXT_PUBLIC_SITE_URL`…).
+2. Sửa/thêm biến (ví dụ `GEMINI_API_KEY`, `FIREBASE_SERVICE_ACCOUNT_KEY`, `NEXT_PUBLIC_INTERNAL_AUTH_EMAIL_DOMAIN`, `INTERNAL_AUTH_EMAIL_DOMAIN`, các `NEXT_PUBLIC_*`, `NEXT_PUBLIC_SITE_URL`…).
 3. **Bắt buộc rollout lại** để build nhận giá trị mới (đặc biệt với `NEXT_PUBLIC_`*):
   - push thêm một commit nhỏ, **hoặc**
   - chạy lại `firebase deploy --only apphosting`.

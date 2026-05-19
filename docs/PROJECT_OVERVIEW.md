@@ -87,20 +87,20 @@ Tóm tắt kỹ thuật:
 ### 4.2 Các trang chính
 
 - `src/app/page.tsx`: landing page.
-- `src/app/login/page.tsx`: đăng nhập username/password (map sang email nội bộ cho Firebase).
-- `src/app/admin/users/page.tsx`: admin tạo/xoá/khoá/reset mật khẩu user (`/api/admin/users`).
+- `src/app/login/page.tsx`: đăng nhập username/password (map sang email nội bộ cho Firebase); copy *Zalo Content Guidelines*; footer liên hệ cấp tài khoản (email + Zalo).
 - `src/app/chat/page.tsx`: chat realtime + streaming + lưu session.
 - `src/app/chat/[id]/page.tsx`: xem lại cuộc hội thoại đã lưu.
 - `src/app/admin/library/page.tsx`: quản lý tài liệu.
 - `src/app/admin/upload/page.tsx`: upload + gọi ingest.
-- `src/app/admin/users/page.tsx`: phân quyền user.
+- `src/app/admin/users/page.tsx`: admin tạo user, đổi role, reset mật khẩu, vô hiệu hóa, xóa (gọi `/api/admin/users`).
 
 ### 4.3 Auth context và phân quyền UI
 
 - `src/context/AuthContext.tsx`
   - Lắng nghe `onAuthStateChanged`.
-  - Đọc role từ `users/{uid}` trong Firestore.
+  - Đọc role từ `users/{uid}` trong Firestore; **không** có profile hợp lệ → `signOut` (không fallback role `user`).
 - `ProtectedRoute` dùng để chặn truy cập sai role ở client UI.
+- `src/lib/auth-username.ts`: chuẩn hóa username, map `{username}@{INTERNAL_AUTH_EMAIL_DOMAIN}`.
 
 Lưu ý: bảo vệ ở UI chỉ là lớp hiển thị. Bảo mật thật nằm ở Firestore/Storage rules + API auth server-side.
 
@@ -137,7 +137,14 @@ Chức năng:
   - TXT/CSV: decode text.
 5. Trả về `textContent` để client ghi vào Firestore `documents`.
 
-## 5.3 Retrieval service
+## 5.3 API quản lý user (admin)
+
+- `POST /api/admin/users` — tạo Firebase Auth user + document `users/{uid}`.
+- `PATCH /api/admin/users/[uid]` — đổi role, vô hiệu hóa/kích hoạt (`disabled`).
+- `DELETE /api/admin/users/[uid]` — xóa profile Firestore và user Auth.
+- Guard: `requireAdmin()` trong `src/lib/api-request-auth.ts`.
+
+## 5.4 Retrieval service
 
 - `src/lib/RetrievalService.ts`
   - Prompt hợp nhất, model tự suy luận 2 kiểu intent:
@@ -147,7 +154,7 @@ Chức năng:
 - `src/lib/retrieval/FirebaseRetrievalProvider.ts`
   - Dùng Admin SDK đọc `documents` có `status == "indexed"`.
 
-## 5.4 Firebase Admin init
+## 5.5 Firebase Admin init
 
 - `src/lib/firebase-admin.ts`
   - Ưu tiên `FIREBASE_SERVICE_ACCOUNT_KEY` (JSON string).
@@ -199,8 +206,9 @@ Lịch sử chat theo user:
 
 - `chatSessions`: user chỉ thao tác session của chính mình.
 - `users`:
-  - user đọc/sửa hồ sơ của mình nhưng không tự nâng role.
-  - admin có toàn quyền.
+  - user đọc/sửa hồ sơ của mình nhưng không tự nâng role; **không** được `create` (không tự đăng ký).
+  - chỉ `admin` được `create` document `users/*`.
+  - admin có toàn quyền đọc/ghi/xóa.
 - `documents`:
   - signed-in user được đọc.
   - chỉ `admin|contributor` mới được create/update/delete.
@@ -244,9 +252,21 @@ Lịch sử chat theo user:
 
 ## 8.3 User management flow
 
-1. Admin vào `/admin/users`.
-2. Đổi role qua `setDoc(..., { merge: true })` tại `users/{uid}`.
-3. Rules đảm bảo user thường không thể tự elevate role.
+1. Admin đăng nhập → `/admin/users`.
+2. **Tạo tài khoản:** form username, password, role → `POST /api/admin/users` (tạo Auth + `users/{uid}`).
+3. **Vận hành:** reset mật khẩu, đổi role, disable/enable, xóa user qua `PATCH` / `DELETE` `/api/admin/users/[uid]`.
+4. User cuối chỉ đăng nhập bằng username + password sau khi đã được cấp; không có đăng ký công khai.
+
+**Bootstrap admin lần đầu:** xem `docs/FIREBASE_DEPLOY.md` mục Auth (Console hoặc tạo thủ công `users/{auth.uid}` khớp UID Auth).
+
+## 8.4 Login flow
+
+1. User nhập **username** + password (không phải email hiển thị).
+2. Client map username → `{username}@{INTERNAL_AUTH_EMAIL_DOMAIN}` rồi `signInWithEmailAndPassword`.
+3. Sau khi Auth thành công, đọc `users/{uid}`:
+   - Không có document → `signOut` + thông báo *Tài khoản chưa được cấp quyền*.
+   - Có document hợp lệ → vào app (`/chat` hoặc redirect).
+4. Trang `/login` hiển thị hướng dẫn liên hệ admin để xin cấp tài khoản (email + Zalo).
 
 ---
 
@@ -262,6 +282,10 @@ Bắt buộc (App Hosting -> Backend -> Environment variables):
 - `NEXT_PUBLIC_FIREBASE_APP_ID`
 - `FIREBASE_SERVICE_ACCOUNT_KEY`
 - `GEMINI_API_KEY`
+- `NEXT_PUBLIC_INTERNAL_AUTH_EMAIL_DOMAIN` (client: map username → email Auth)
+- `INTERNAL_AUTH_EMAIL_DOMAIN` (server/API admin; **cùng giá trị** với biến `NEXT_PUBLIC_*`)
+
+Mặc định trong code nếu không set: `accounts.internal` (email Auth dạng `admin@accounts.internal`).
 
 Khuyến nghị:
 
@@ -332,9 +356,13 @@ Nếu không đặt `CHAT_ATTACHMENTS_CRON_SECRET`, route cron trả `503` (chư
 
 ## 11) Troubleshooting nhanh
 
+- **Production vẫn thấy nút Google / UI login cũ:** App Hosting build từ **Git branch live** (`main`). Chỉ `firebase deploy --only firestore:rules` **không** đổi UI Next.js — cần push commit và đợi rollout `Succeeded`.
 - **Thấy UI cũ sau deploy:** thử Incognito / hard refresh / kiểm tra rollout đã `Succeeded`.
-- `**Server configuration error` ở API:** thiếu hoặc sai `FIREBASE_SERVICE_ACCOUNT_KEY` / project id env.
-- `**storage/unauthorized` khi upload:** kiểm tra role user doc và deploy `storage.rules` mới nhất.
+- **Đăng nhập báo *Tài khoản chưa được cấp quyền*:** Auth đã OK nhưng thiếu hoặc sai `users/{auth.uid}` trong Firestore (document ID phải **bằng** UID Firebase Auth, không dùng Auto-ID).
+- **Admin không vào được:** kiểm tra email Auth = `{username}@{INTERNAL_AUTH_EMAIL_DOMAIN}` và field `role: "admin"` trong `users/{uid}`.
+- **Server configuration error** ở API: thiếu hoặc sai `FIREBASE_SERVICE_ACCOUNT_KEY` / project id env.
+- **storage/unauthorized** khi upload: kiểm tra role user doc và deploy `storage.rules` mới nhất.
+- **`googletagmanager.com` ERR_BLOCKED_BY_CLIENT:** ad blocker chặn Google Analytics; không ảnh hưởng đăng nhập/chat nếu không dùng GA.
 - **Hydration mismatch có `bis_skin_checked`:** thường do browser extension chèn DOM, không phải lỗi app.
 
 ---

@@ -15,10 +15,12 @@ npm run build
 
 Smoke test key flows locally:
 
+- `/login`: username + password only (no Google); provisioning contact footer if applicable
+- Sign in with a provisioned test user; sign-out if Firestore profile missing behaves as expected
 - Open `/chat` then leave without sending -> no empty chat session created
 - Send first message -> one `chatSessions` document is created
 - Continue chat -> same session is updated
-- Check admin pages (`/admin/*`) for role-based access behavior
+- Check admin pages (`/admin/*`) for role-based access behavior; `/admin/users` create/disable if auth changed
 
 ## 2) Release to production
 
@@ -53,13 +55,16 @@ Typical vars:
 - `NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID`
 - `NEXT_PUBLIC_FIREBASE_APP_ID`
 - `FIREBASE_SERVICE_ACCOUNT_KEY`
-- AI provider keys used by `/api/*`
+- `NEXT_PUBLIC_INTERNAL_AUTH_EMAIL_DOMAIN` and `INTERNAL_AUTH_EMAIL_DOMAIN` (same value; username → Auth email mapping)
+- `GEMINI_API_KEY` and other AI keys used by `/api/*`
+- See `docs/PRE_LIVE_ENV_CHECKLIST.md` for the full pre-live list
 
 ## 4) Post-release validation
 
 Right after rollout:
 
-- Open production site and test `/chat`, `/chat/[id]`, and one admin page
+- Open production `/login` (confirm no Google sign-in; username/password flow)
+- Test `/chat`, `/chat/[id]`, and one admin page
 - Verify Firestore writes for chat history are correct
 - Watch App Hosting logs for 5-10 minutes
 - Check error monitoring (if enabled)

@@ -1,6 +1,8 @@
 # Internal Knowledge Chat
 
-Trợ lý nội bộ cho tra cứu guideline nội dung và soạn microcopy UX dựa trên tài liệu nội bộ Zalo.
+Trợ lý nội bộ **Zalo Content Guidelines** — tra cứu guideline nội dung và soạn microcopy UX từ kho tài liệu nội bộ.
+
+**Đăng nhập:** username + password (admin cấp tài khoản; không đăng ký công khai, không Google). Thiết lập Auth/Firestore: `docs/FIREBASE_DEPLOY.md`.
 
 ## Project docs
 

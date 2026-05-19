@@ -64,5 +64,5 @@ Khi thêm màn admin hoặc form: ưu tiên `clay-card` + token `border-border`,
 
 - `src/app/layout.tsx` — font, `lang="vi"`, providers.
 - `src/app/globals.css` — theme, Tailwind `@theme`, clay utilities.
-- `src/app/page.tsx`, `src/app/login/page.tsx` — landing & đăng nhập (card glass, gradient ambient).
+- `src/app/page.tsx`, `src/app/login/page.tsx` — landing & đăng nhập (card glass, gradient ambient; login: username/password, copy *Zalo Content Guidelines*, footer liên hệ cấp tài khoản).
 - `src/context/ThemeContext.tsx` — toggle theme.
