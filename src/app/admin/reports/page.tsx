@@ -6,6 +6,10 @@ import { db } from "@/lib/firebase";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { useAuth } from "@/context/AuthContext";
 
+const ANALYTICS_EVENT_LIMIT = 500;
+const CHAT_SESSION_SAMPLE_LIMIT = 300;
+const RE_QUERY_GAP_MS = 2 * 60 * 1000;
+
 type AnalyticsEvent = {
   id: string;
   eventName: string;
@@ -13,8 +17,163 @@ type AnalyticsEvent = {
   createdAt?: Timestamp;
 };
 
+type ChatSessionRow = {
+  id: string;
+  userId: string;
+  messages: { role: string; timestamp?: number }[];
+};
+
+type TopUserRow = {
+  uid: string;
+  username: string;
+  queryCount: number;
+  avgRelevance: number;
+  feedbackTotal: number;
+};
+
+type DauDayRow = {
+  date: string;
+  label: string;
+  count: number;
+};
+
+type UserBehaviorSummary = {
+  topUsers: TopUserRow[];
+  dauLast7Days: DauDayRow[];
+  avgQueriesPerSession: number;
+  reQueryRate: number;
+  sessionsSampled: number;
+  totalUserQueriesInSessions: number;
+};
+
+function dayKeyFromTimestamp(ts?: Timestamp): string | null {
+  return ts ? new Date(ts.seconds * 1000).toISOString().slice(0, 10) : null;
+}
+
+function lastNDaysUtc(n: number): string[] {
+  const days: string[] = [];
+  const today = new Date();
+  today.setUTCHours(0, 0, 0, 0);
+  for (let i = n - 1; i >= 0; i--) {
+    const d = new Date(today);
+    d.setUTCDate(d.getUTCDate() - i);
+    days.push(d.toISOString().slice(0, 10));
+  }
+  return days;
+}
+
+function formatDayLabel(isoDate: string): string {
+  const d = new Date(`${isoDate}T12:00:00.000Z`);
+  return d.toLocaleDateString("vi-VN", { weekday: "short", day: "2-digit", month: "2-digit" });
+}
+
+function computeUserBehavior(
+  events: AnalyticsEvent[],
+  usernameByUid: Map<string, string>,
+  sessions: ChatSessionRow[]
+): UserBehaviorSummary {
+  const userStats = new Map<
+    string,
+    { queryCount: number; relevanceSum: number; relevanceN: number; feedbackTotal: number }
+  >();
+
+  const ensureUser = (uid: string) => {
+    if (!userStats.has(uid)) {
+      userStats.set(uid, { queryCount: 0, relevanceSum: 0, relevanceN: 0, feedbackTotal: 0 });
+    }
+    return userStats.get(uid)!;
+  };
+
+  const dauSets = new Map<string, Set<string>>();
+  lastNDaysUtc(7).forEach((day) => dauSets.set(day, new Set()));
+
+  events.forEach((e) => {
+    const payload = e.payload || {};
+    const uid = String(payload.user_id || "");
+    if (!uid) return;
+
+    if (e.eventName === "query_sent") {
+      const stats = ensureUser(uid);
+      stats.queryCount += 1;
+      const day = dayKeyFromTimestamp(e.createdAt);
+      if (day && dauSets.has(day)) {
+        dauSets.get(day)!.add(uid);
+      }
+    }
+
+    if (e.eventName === "response_delivered") {
+      const score = Number(payload.relevance_score ?? NaN);
+      if (!Number.isNaN(score) && score >= 0) {
+        const stats = ensureUser(uid);
+        stats.relevanceSum += score;
+        stats.relevanceN += 1;
+      }
+    }
+
+    if (e.eventName === "user_feedback") {
+      const stats = ensureUser(uid);
+      stats.feedbackTotal += 1;
+    }
+  });
+
+  const topUsers: TopUserRow[] = [...userStats.entries()]
+    .map(([uid, s]) => ({
+      uid,
+      username: usernameByUid.get(uid) || uid.slice(0, 8) + "…",
+      queryCount: s.queryCount,
+      avgRelevance: s.relevanceN ? Number((s.relevanceSum / s.relevanceN).toFixed(2)) : 0,
+      feedbackTotal: s.feedbackTotal,
+    }))
+    .sort((a, b) => b.queryCount - a.queryCount || b.feedbackTotal - a.feedbackTotal)
+    .slice(0, 10);
+
+  const dauLast7Days: DauDayRow[] = lastNDaysUtc(7).map((date) => ({
+    date,
+    label: formatDayLabel(date),
+    count: dauSets.get(date)?.size ?? 0,
+  }));
+
+  let totalUserQueriesInSessions = 0;
+  let reQueryCount = 0;
+
+  sessions.forEach((session) => {
+    const userMsgs = (session.messages || [])
+      .filter((m) => m.role === "user")
+      .map((m) => Number(m.timestamp || 0))
+      .filter((t) => t > 0)
+      .sort((a, b) => a - b);
+
+    totalUserQueriesInSessions += userMsgs.length;
+
+    for (let i = 1; i < userMsgs.length; i++) {
+      if (userMsgs[i] - userMsgs[i - 1] <= RE_QUERY_GAP_MS) {
+        reQueryCount += 1;
+      }
+    }
+  });
+
+  const sessionsSampled = sessions.length;
+  const avgQueriesPerSession = sessionsSampled
+    ? Number((totalUserQueriesInSessions / sessionsSampled).toFixed(1))
+    : 0;
+  const reQueryRate = totalUserQueriesInSessions
+    ? Math.round((reQueryCount / totalUserQueriesInSessions) * 100)
+    : 0;
+
+  return {
+    topUsers,
+    dauLast7Days,
+    avgQueriesPerSession,
+    reQueryRate,
+    sessionsSampled,
+    totalUserQueriesInSessions,
+  };
+}
+
 export default function AdminReportsPage() {
   const [events, setEvents] = useState<AnalyticsEvent[]>([]);
+  const [chatSessions, setChatSessions] = useState<ChatSessionRow[]>([]);
+  const [usernameByUid, setUsernameByUid] = useState<Map<string, string>>(new Map());
   const [loading, setLoading] = useState(true);
   const { user, role, loading: authLoading } = useAuth();
 
@@ -25,26 +184,96 @@ export default function AdminReportsPage() {
       return;
     }
 
-    const q = query(
+    let eventsReady = false;
+    let usersReady = false;
+    let sessionsReady = false;
+
+    const maybeDone = () => {
+      if (eventsReady && usersReady && sessionsReady) setLoading(false);
+    };
+
+    const eventsQ = query(
       collection(db, "analyticsEvents"),
       orderBy("createdAt", "desc"),
-      limit(300)
+      limit(ANALYTICS_EVENT_LIMIT)
     );
-    const unsub = onSnapshot(
-      q,
+    const unsubEvents = onSnapshot(
+      eventsQ,
       (snap) => {
         setEvents(snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<AnalyticsEvent, "id">) })));
-        setLoading(false);
+        eventsReady = true;
+        maybeDone();
       },
       (err) => {
         if (err.code !== "permission-denied") {
           console.error("Failed to load analytics events", err);
         }
-        setLoading(false);
+        eventsReady = true;
+        maybeDone();
       }
     );
-    return () => unsub();
+
+    const usersQ = query(collection(db, "users"), orderBy("createdAt", "desc"));
+    const unsubUsers = onSnapshot(
+      usersQ,
+      (snap) => {
+        const map = new Map<string, string>();
+        snap.docs.forEach((d) => {
+          const data = d.data() as { uid?: string; username?: string };
+          const uid = data.uid ?? d.id;
+          const name = String(data.username || "").trim();
+          if (uid && name) map.set(uid, name);
+        });
+        setUsernameByUid(map);
+        usersReady = true;
+        maybeDone();
+      },
+      (err) => {
+        if (err.code !== "permission-denied") {
+          console.error("Failed to load users for analytics", err);
+        }
+        usersReady = true;
+        maybeDone();
+      }
+    );
+
+    const sessionsQ = query(
+      collection(db, "chatSessions"),
+      orderBy("updatedAt", "desc"),
+      limit(CHAT_SESSION_SAMPLE_LIMIT)
+    );
+    const unsubSessions = onSnapshot(
+      sessionsQ,
+      (snap) => {
+        setChatSessions(
+          snap.docs.map((d) => {
+            const data = d.data() as Omit<ChatSessionRow, "id">;
+            return { id: d.id, ...data };
+          })
+        );
+        sessionsReady = true;
+        maybeDone();
+      },
+      (err) => {
+        if (err.code !== "permission-denied") {
+          console.error("Failed to load chat sessions for analytics", err);
+        }
+        sessionsReady = true;
+        maybeDone();
+      }
+    );
+
+    return () => {
+      unsubEvents();
+      unsubUsers();
+      unsubSessions();
+    };
   }, [user, role, authLoading]);
+
+  const userBehavior = useMemo(
+    () => computeUserBehavior(events, usernameByUid, chatSessions),
+    [events, usernameByUid, chatSessions]
+  );
 
   const summary = useMemo(() => {
     const byName: Record<string, number> = {};
@@ -72,8 +301,7 @@ export default function AdminReportsPage() {
     let thumbsUp = 0;
     let thumbsDown = 0;
 
-    const dayOf = (ts?: Timestamp) =>
-      ts ? new Date(ts.seconds * 1000).toISOString().slice(0, 10) : null;
+    const dayOf = dayKeyFromTimestamp;
 
     events.forEach((e) => {
       byName[e.eventName] = (byName[e.eventName] || 0) + 1;
@@ -214,13 +442,15 @@ export default function AdminReportsPage() {
     };
   }, [events, loading]);
 
+  const maxDau = Math.max(1, ...userBehavior.dauLast7Days.map((d) => d.count));
+
   return (
     <ProtectedRoute allowedRoles={["admin"]}>
       <div className="space-y-8">
         <div>
           <h1 className="text-2xl font-light tracking-tight">Analytics Reports</h1>
           <p className="text-sm text-muted">
-            Theo dõi Upload/Parsing, Query/Response, Performance và Retention từ telemetry events.
+            Theo dõi Upload/Parsing, Query/Response, Performance, Retention và User Behavior.
           </p>
         </div>
 
@@ -230,9 +460,10 @@ export default function AdminReportsPage() {
           </summary>
           <div className="mt-3 space-y-3 text-muted">
             <p>
-              Chỉ tài khoản <strong className="text-foreground">admin</strong> xem được trang này. Số liệu
-              lấy từ collection Firestore <code className="text-xs">analyticsEvents</code> (tối đa 300 event
-              mới nhất, cập nhật realtime).
+              Chỉ tài khoản <strong className="text-foreground">admin</strong> xem được trang này. Telemetry:{" "}
+              <code className="text-xs">analyticsEvents</code> (tối đa {ANALYTICS_EVENT_LIMIT} event mới nhất).
+              User Behavior thêm mẫu <code className="text-xs">chatSessions</code> ({CHAT_SESSION_SAMPLE_LIMIT}{" "}
+              session gần nhất) để tính query/session và re-query.
             </p>
             <div>
               <p className="font-medium text-foreground mb-1">Các loại event</p>
@@ -253,13 +484,12 @@ export default function AdminReportsPage() {
               </ul>
             </div>
             <p>
-              <strong className="text-foreground">Success rate</strong> trên UI là tỷ lệ thumbs up trên tổng
-              feedback, không phải tỷ lệ API thành công. <strong className="text-foreground">Response quality</strong>{" "}
-              là điểm overlap token heuristic (0–1), không phải chấm điểm LLM.
+              <strong className="text-foreground">Re-query rate</strong> dùng tin nhắn user trong{" "}
+              <code className="text-xs">chatSessions</code> (hai lượt cách nhau ≤ 2 phút), vì{" "}
+              <code className="text-xs">query_sent</code> chưa có <code className="text-xs">session_id</code>.
             </p>
             <p>
-              Google Analytics (<code className="text-xs">NEXT_PUBLIC_GA_ID</code>) là kênh riêng; không hiển
-              thị ở đây. Tài liệu đầy đủ: <code className="text-xs">docs/PROJECT_OVERVIEW.md</code> mục 8.6.
+              Tài liệu: <code className="text-xs">docs/PROJECT_OVERVIEW.md</code> mục 8.6.
             </p>
           </div>
         </details>
@@ -273,12 +503,75 @@ export default function AdminReportsPage() {
             <p className="font-medium text-foreground">Chưa có dữ liệu telemetry</p>
             <p>
               Dashboard sẽ có số liệu sau khi có hoạt động thật: upload + ingest tài liệu, chat qua /chat, và
-              (tuỳ chọn) phản hồi 👍/👎. Kiểm tra role admin và collection{" "}
-              <code className="text-xs">analyticsEvents</code> trên Firestore nếu vẫn trống sau khi đã dùng app.
+              (tuỳ chọn) phản hồi 👍/👎.
             </p>
           </div>
         ) : (
           <>
+            <section className="space-y-4">
+              <h2 className="text-[22px] font-light">User Behavior</h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="clay-card p-4">
+                  <p className="text-xs text-muted">Avg queries / session</p>
+                  <p className="text-2xl font-light">{userBehavior.avgQueriesPerSession}</p>
+                  <p className="text-xs text-muted mt-1">
+                    {userBehavior.sessionsSampled} sessions (mẫu gần nhất)
+                  </p>
+                </div>
+                <div className="clay-card p-4">
+                  <p className="text-xs text-muted">Re-query rate</p>
+                  <p className="text-2xl font-light">{userBehavior.reQueryRate}%</p>
+                  <p className="text-xs text-muted mt-1">
+                    user msg thứ 2+ trong 2 phút / tổng {userBehavior.totalUserQueriesInSessions} query
+                  </p>
+                </div>
+                <div className="clay-card p-4 md:col-span-2">
+                  <p className="text-xs text-muted mb-2">DAU (7 ngày) — unique user từ query_sent</p>
+                  <div className="flex items-end gap-2 h-20">
+                    {userBehavior.dauLast7Days.map((day) => (
+                      <div key={day.date} className="flex-1 flex flex-col items-center gap-1 min-w-0">
+                        <span className="text-xs font-medium">{day.count}</span>
+                        <div
+                          className="w-full rounded-t-[4px] bg-accent/80 min-h-[4px]"
+                          style={{ height: `${Math.max(8, (day.count / maxDau) * 100)}%` }}
+                          title={`${day.date}: ${day.count} users`}
+                        />
+                        <span className="text-[10px] text-muted truncate w-full text-center">{day.label}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="clay-card p-4 overflow-x-auto">
+                <p className="text-sm font-medium text-foreground mb-3">Top users</p>
+                {userBehavior.topUsers.length === 0 ? (
+                  <p className="text-sm text-muted">Chưa có query_sent trong mẫu event.</p>
+                ) : (
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="text-left text-xs text-muted border-b border-border">
+                        <th className="pb-2 pr-4 font-medium">Username</th>
+                        <th className="pb-2 pr-4 font-medium text-right">Queries</th>
+                        <th className="pb-2 pr-4 font-medium text-right">Avg relevance</th>
+                        <th className="pb-2 font-medium text-right">Feedback</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {userBehavior.topUsers.map((row) => (
+                        <tr key={row.uid} className="border-b border-border/50 last:border-0">
+                          <td className="py-2 pr-4">{row.username}</td>
+                          <td className="py-2 pr-4 text-right tabular-nums">{row.queryCount}</td>
+                          <td className="py-2 pr-4 text-right tabular-nums">{row.avgRelevance}</td>
+                          <td className="py-2 text-right tabular-nums">{row.feedbackTotal}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            </section>
+
             <section className="space-y-4">
               <h2 className="text-[22px] font-light">Metrics Upload & Parsing</h2>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -342,19 +635,33 @@ export default function AdminReportsPage() {
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                 <div className="clay-card p-4">
                   <p className="text-xs text-muted">Latency by complexity</p>
-                  <p className="text-sm mt-1">Guideline: <span className="font-semibold">{summary.latencyGuideline} ms</span></p>
-                  <p className="text-sm">Microcopy: <span className="font-semibold">{summary.latencyMicrocopy} ms</span></p>
+                  <p className="text-sm mt-1">
+                    Guideline: <span className="font-semibold">{summary.latencyGuideline} ms</span>
+                  </p>
+                  <p className="text-sm">
+                    Microcopy: <span className="font-semibold">{summary.latencyMicrocopy} ms</span>
+                  </p>
                 </div>
                 <div className="clay-card p-4">
                   <p className="text-xs text-muted">Usage funnel</p>
-                  <p className="text-sm mt-1">Upload → Parse: <span className="font-semibold">{summary.uploadToParseSuccess}%</span></p>
-                  <p className="text-sm">Parse → Query: <span className="font-semibold">{summary.parseToQuery}%</span></p>
-                  <p className="text-sm">Query → Accepted: <span className="font-semibold">{summary.queryToAccepted}%</span></p>
+                  <p className="text-sm mt-1">
+                    Upload → Parse: <span className="font-semibold">{summary.uploadToParseSuccess}%</span>
+                  </p>
+                  <p className="text-sm">
+                    Parse → Query: <span className="font-semibold">{summary.parseToQuery}%</span>
+                  </p>
+                  <p className="text-sm">
+                    Query → Accepted: <span className="font-semibold">{summary.queryToAccepted}%</span>
+                  </p>
                 </div>
                 <div className="clay-card p-4">
                   <p className="text-xs text-muted">Retention</p>
-                  <p className="text-sm mt-1">D1: <span className="font-semibold">{summary.retentionD1}%</span></p>
-                  <p className="text-sm">D7: <span className="font-semibold">{summary.retentionD7}%</span></p>
+                  <p className="text-sm mt-1">
+                    D1: <span className="font-semibold">{summary.retentionD1}%</span>
+                  </p>
+                  <p className="text-sm">
+                    D7: <span className="font-semibold">{summary.retentionD7}%</span>
+                  </p>
                 </div>
                 <div className="clay-card p-4">
                   <p className="text-xs text-muted">Knowledge usage (top referenced sources)</p>
@@ -363,7 +670,10 @@ export default function AdminReportsPage() {
                       <span className="text-xs text-muted">Chưa đủ dữ liệu</span>
                     ) : (
                       summary.topReferencedSources.map(([fileName, count]) => (
-                        <span key={fileName} className="text-xs px-2 py-0.5 rounded-[4px] bg-white/5 border border-border">
+                        <span
+                          key={fileName}
+                          className="text-xs px-2 py-0.5 rounded-[4px] bg-white/5 border border-border"
+                        >
                           {fileName} ({count})
                         </span>
                       ))

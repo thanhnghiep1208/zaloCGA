@@ -50,10 +50,12 @@ service cloud.firestore {
         && (resource.data.userId == request.auth.uid || isAdmin());
     }
 
-    // Chat history: each user can only access their own sessions.
+    // Chat history: owner access; admin read for analytics dashboard.
     match /chatSessions/{sessionId} {
       allow create: if signedIn() && request.resource.data.userId == request.auth.uid;
-      allow read, update, delete: if signedIn() && resource.data.userId == request.auth.uid;
+      allow read: if signedIn()
+        && (resource.data.userId == request.auth.uid || isAdmin());
+      allow update, delete: if signedIn() && resource.data.userId == request.auth.uid;
     }
 
     // User profiles are admin-provisioned only (no self-registration).
