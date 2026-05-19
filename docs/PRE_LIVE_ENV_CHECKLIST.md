@@ -59,6 +59,7 @@ Neu chi doi env ma khong rollout lai, frontend co the van dung gia tri cu.
 - Admin da tao it nhat 1 tai khoan (xem `docs/FIREBASE_DEPLOY.md` muc Auth); Firestore `users/{uid}` dung document ID = Auth UID.
 - Mo `/login`: khong co nut Google; co mo ta *Zalo Content Guidelines* va footer lien he cap tai khoan.
 - Dang nhap bang **username + password** (khong phai email hien thi; khong co dang ky tu phuc vu).
+- (Tuy chon) Cung user dang nhap tren 2 trinh duyet -> ca hai vao `/chat` duoc (da phiên la mac dinh; xem `docs/FIREBASE_DEPLOY.md` muc 3.2).
 - Mo `/chat`, gui 1 cau hoi -> co stream response.
 - Kiem tra `/api/chat` khong loi `Unauthorized` neu token hop le.
 - Upload tai lieu bang tai khoan contributor/admin (neu dung ingest).

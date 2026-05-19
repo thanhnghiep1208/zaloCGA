@@ -3,6 +3,13 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import { onAuthStateChanged, signOut, User } from "firebase/auth";
 import { auth, db } from "@/lib/firebase";
+import {
+  clearAuthSessionId,
+  getOrCreateAuthSessionId,
+  registerAuthSession,
+  subscribeCurrentAuthSessionRevoked,
+  touchAuthSession,
+} from "@/lib/auth-sessions";
 import { doc, getDoc } from "firebase/firestore";
 
 export type UserRole = "admin" | "contributor" | "user";
@@ -79,6 +86,33 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
     return () => unsubscribe();
   }, []);
+
+  useEffect(() => {
+    if (!user) return;
+
+    const sessionId = getOrCreateAuthSessionId();
+    if (!sessionId) return;
+
+    let heartbeat: ReturnType<typeof setInterval> | undefined;
+
+    void registerAuthSession(user.uid).catch((err) => {
+      console.error("Failed to register auth session", err);
+    });
+
+    const unsubRevoked = subscribeCurrentAuthSessionRevoked(sessionId, () => {
+      clearAuthSessionId();
+      void signOut(auth);
+    });
+
+    heartbeat = setInterval(() => {
+      void touchAuthSession(sessionId).catch(() => {});
+    }, 60_000);
+
+    return () => {
+      unsubRevoked();
+      if (heartbeat) clearInterval(heartbeat);
+    };
+  }, [user]);
 
   return (
     <AuthContext.Provider value={{ user, role, loading }}>

@@ -14,6 +14,7 @@ import {
   query,
   setDoc,
 } from "firebase/firestore";
+import { AuthSessionsPanel } from "@/components/AuthSessionsPanel";
 import { FormEvent, useEffect, useState } from "react";
 
 type FirestoreTimestampLike = { seconds: number; nanoseconds?: number };
@@ -49,6 +50,8 @@ export default function AdminUsersPage() {
   const [resetUid, setResetUid] = useState<string | null>(null);
   const [resetPassword, setResetPassword] = useState("");
   const [resetting, setResetting] = useState(false);
+  const [sessionsUserId, setSessionsUserId] = useState<string | null>(null);
+  const [sessionsUsername, setSessionsUsername] = useState("");
 
   useEffect(() => {
     if (authLoading) return;
@@ -293,6 +296,32 @@ export default function AdminUsersPage() {
           </form>
         </div>
 
+        {sessionsUserId && (
+          <div className="space-y-2">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h2 className="text-lg font-semibold">
+                Phiên đăng nhập — {sessionsUsername || sessionsUserId}
+              </h2>
+              <button
+                type="button"
+                onClick={() => {
+                  setSessionsUserId(null);
+                  setSessionsUsername("");
+                }}
+                className="rounded-xl border border-border px-3 py-1.5 text-sm"
+              >
+                Đóng
+              </button>
+            </div>
+            <AuthSessionsPanel
+              userId={sessionsUserId}
+              adminView
+              title="Thiết bị / phiên đang ghi nhận"
+              description="Admin có thể đăng xuất từ xa từng phiên. Khoá tài khoản hoặc reset mật khẩu sẽ thu hồi tất cả phiên."
+            />
+          </div>
+        )}
+
         {resetUid && (
           <div className="clay-card p-6 space-y-3 border border-accent/30">
             <h2 className="text-lg font-semibold">Đặt lại mật khẩu</h2>
@@ -372,6 +401,16 @@ export default function AdminUsersPage() {
                           : "—"}
                       </td>
                       <td className="p-4 text-right space-x-1">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSessionsUserId(u.profileUid);
+                            setSessionsUsername(u.username ?? u.profileUid);
+                          }}
+                          className="text-muted hover:text-foreground font-medium px-2 py-1.5 rounded-[8px] hover:bg-accent/12 transition-colors"
+                        >
+                          Phiên
+                        </button>
                         <button
                           type="button"
                           onClick={() => {

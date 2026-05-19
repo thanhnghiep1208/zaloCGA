@@ -51,6 +51,30 @@ Chi tiet pre-live audit env (bat buoc + khuyen nghi + token tuning):
 
 **Lỗi thường gặp:** đăng nhập đúng mật khẩu nhưng báo *chưa được cấp quyền* → thiếu hoặc sai ID document Firestore (phải khớp `auth.uid`).
 
+## 3.2) Đăng nhập đa phiên / đa máy (FAQ)
+
+**Có cho phép không?** Có. Một user có thể đăng nhập cùng lúc trên nhiều máy/trình duyệt. App không giới hạn số phiên; Firebase Auth cấp refresh token riêng cho từng client.
+
+**Smoke test (local hoặc production):**
+
+1. Đăng nhập user thử trên Chrome (hoặc cửa sổ ẩn danh A).
+2. Đăng nhập **cùng** username/password trên Firefox hoặc cửa sổ ẩn danh B.
+3. Cả hai mở `/chat` → đều vào được, gửi tin được.
+4. Đăng xuất trên A → B vẫn đăng nhập (hành vi mong đợi).
+
+**Troubleshooting:**
+
+| Triệu chứng | Giải thích |
+|-------------|------------|
+| Máy A đăng xuất nhưng máy B vẫn dùng được | `signOut` chỉ xóa session local trên máy A; không có “đăng xuất tất cả thiết bị”. |
+| Admin disable user nhưng một máy vẫn vào vài phút | Token cũ còn hiệu lực đến khi refresh; sau đó sẽ `auth/user-disabled`. |
+| Muốn đăng xuất một máy, giữ máy khác | User: `/account/sessions` → *Đăng xuất phiên*. Admin: `/admin/users` → **Phiên**. |
+| Lỗi tải danh sách phiên | Deploy `firestore.rules` + `firestore.indexes.json` (collection `authSessions`). |
+
+**Quản lý phiên:** sau deploy rules/index, user vào `/account/sessions` hoặc admin bấm **Phiên** trên từng user.
+
+Chi tiết kiến trúc: [PROJECT_OVERVIEW.md](./PROJECT_OVERVIEW.md) mục 8.5.
+
 ## 4) Deploy security rules
 
 ```bash
@@ -69,6 +93,7 @@ firebase deploy --only apphosting
 ## 6) Smoke test in production
 
 - `/login`: form **username + password** (không có Google); copy *Zalo Content Guidelines*; có dòng liên hệ cấp tài khoản
+- **Đa phiên:** cùng user đăng nhập trên 2 trình duyệt → cả hai vào `/chat` (xem mục 3.2)
 - Login admin → `/admin/users` → tạo user thử (tùy chọn)
 - Open `/chat` then exit: no empty `chatSessions` doc created
 - Send first message: `chatSessions` doc is created

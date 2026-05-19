@@ -3,6 +3,10 @@
 import { useAuth } from "@/context/AuthContext";
 import { signOut } from "firebase/auth";
 import { auth } from "@/lib/firebase";
+import {
+  getAuthSessionId,
+  removeAuthSessionOnLogout,
+} from "@/lib/auth-sessions";
 import { usePathname, useRouter } from "next/navigation";
 import { SITE_HEADER_TITLE } from "@/lib/branding";
 import { useTheme } from "@/context/ThemeContext";
@@ -24,6 +28,7 @@ export function Header({ onOpenMenu }: HeaderProps) {
       router.replace("/login");
       // Use a small delay to ensure navigation starts before the session is cleared
       await new Promise(resolve => setTimeout(resolve, 100));
+      await removeAuthSessionOnLogout(getAuthSessionId());
       await signOut(auth);
     } catch (e) {
       console.error("Failed to signout", e);

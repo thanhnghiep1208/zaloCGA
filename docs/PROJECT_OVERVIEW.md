@@ -104,6 +104,8 @@ Tóm tắt kỹ thuật:
 
 Lưu ý: bảo vệ ở UI chỉ là lớp hiển thị. Bảo mật thật nằm ở Firestore/Storage rules + API auth server-side.
 
+**Đăng nhập đa phiên (hiện trạng):** một tài khoản **có thể** đăng nhập đồng thời trên nhiều trình duyệt/máy. App dùng Firebase Auth mặc định (mỗi client một refresh token); **không** có registry phiên, không giới hạn “một thiết bị”. Chi tiết: mục 8.5.
+
 ---
 
 ## 5) Cấu trúc backend
@@ -268,6 +270,40 @@ Lịch sử chat theo user:
    - Có document hợp lệ → vào app (`/chat` hoặc redirect).
 4. Trang `/login` hiển thị hướng dẫn liên hệ admin để xin cấp tài khoản (email + Zalo).
 
+## 8.5 Đăng nhập đa phiên / đa máy
+
+**Kết luận:** được phép — cùng username/password trên laptop, điện thoại, hoặc nhiều trình duyệt cùng lúc.
+
+### Phân biệt thuật ngữ
+
+| Khái niệm | Ý nghĩa trong app |
+|-----------|-------------------|
+| **Phiên đăng nhập (auth)** | Firebase Authentication: ID token + refresh token trên từng client (`src/lib/firebase.ts`, `AuthContext`). |
+| **Cuộc chat (`chatSessions`)** | Lịch sử hội thoại trong Firestore, gắn `userId` — **không** phải phiên đăng nhập. |
+
+### Cách hoạt động
+
+- Mỗi máy/trình duyệt đăng nhập → Firebase cấp token riêng; API chỉ gọi `verifyIdToken` (không kiểm tra thiết bị) — xem `src/lib/api-request-auth.ts`.
+- Cùng `uid` → cùng quyền, cùng lịch sử chat (Firestore listener trên `chatSessions` theo `userId`).
+- Nhiều tab cùng trình duyệt thường chia sẻ trạng thái Auth (persistence mặc định của Firebase).
+
+### Hành vi vận hành
+
+- **Đăng xuất trên một máy** (`Header` → `signOut`): xóa bản ghi `authSessions` của thiết bị đó; máy khác vẫn đăng nhập.
+- **Admin vô hiệu hóa** (`PATCH` user `disabled: true`): đánh dấu `revoked` mọi phiên + Auth `disabled` chặn refresh token.
+- **Admin reset mật khẩu:** Firebase thường thu hồi refresh token cũ; các máy có thể bị đăng xuất khi token hết hạn.
+
+### Quản lý phiên (đã có)
+
+- **`/account/sessions`:** User xem danh sách thiết bị/trình duyệt, trạng thái *Đang hoạt động*, đăng xuất từ xa phiên khác.
+- **Admin → Manage Users → Phiên:** Xem/đăng xuất phiên của từng user.
+- Collection Firestore `authSessions` (heartbeat ~60s, `revoked` để kick client).
+- Admin **khoá** hoặc **reset mật khẩu** → API đánh dấu `revoked` trên mọi phiên của user đó.
+
+### Chưa có trong sản phẩm
+
+- Giới hạn N máy hoặc “chỉ một phiên”, cảnh báo đăng nhập thiết bị mới.
+
 ---
 
 ## 9) Environment variables
@@ -364,6 +400,7 @@ Nếu không đặt `CHAT_ATTACHMENTS_CRON_SECRET`, route cron trả `503` (chư
 - **storage/unauthorized** khi upload: kiểm tra role user doc và deploy `storage.rules` mới nhất.
 - **`googletagmanager.com` ERR_BLOCKED_BY_CLIENT:** ad blocker chặn Google Analytics; không ảnh hưởng đăng nhập/chat nếu không dùng GA.
 - **Hydration mismatch có `bis_skin_checked`:** thường do browser extension chèn DOM, không phải lỗi app.
+- **Đăng xuất máy A nhưng máy B vẫn vào được:** đúng thiết kế — không có đăng xuất toàn cục trừ khi admin `disabled` hoặc reset mật khẩu (xem mục 8.5).
 
 ---
 

@@ -5,6 +5,7 @@ import {
   requireUidFromRequest,
 } from "@/lib/api-request-auth";
 import { adminAuth, adminDb } from "@/lib/firebase-admin";
+import { revokeAllAuthSessionsForUser } from "@/lib/admin-auth-sessions";
 import { validatePatchAdminUserBody } from "@/lib/admin-users";
 
 type RouteContext = { params: Promise<{ uid: string }> };
@@ -68,6 +69,10 @@ export async function PATCH(req: Request, context: RouteContext) {
 
     if (Object.keys(firestoreUpdate).length > 0) {
       await profileRef.set(firestoreUpdate, { merge: true });
+    }
+
+    if (disabled === true || password !== undefined) {
+      await revokeAllAuthSessionsForUser(uid);
     }
 
     return NextResponse.json({ ok: true, uid });
