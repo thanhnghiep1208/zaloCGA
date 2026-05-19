@@ -96,7 +96,7 @@ export default function LoginPage() {
             Internal Portal
           </h1>
           <p className="text-muted text-[15px] max-w-sm mx-auto leading-relaxed">
-            Đăng nhập bằng tài khoản do admin cấp để truy cập knowledge base.
+            Đăng nhập bằng tài khoản do admin cấp để truy cập Zalo Content Guidelines.
           </p>
         </div>
 
@@ -165,6 +165,21 @@ export default function LoginPage() {
             )}
           </button>
         </form>
+
+        <p className="text-center text-[13px] text-muted leading-relaxed pt-4 border-t border-border/60">
+          Để được cấp tài khoản vui lòng liên hệ:{" "}
+          <a
+            href="mailto:Nghiepnt@vng.com.vn"
+            className="text-link font-medium hover:underline"
+          >
+            Nghiepnt@vng.com.vn
+          </a>
+          {" — "}
+          Zalo:{" "}
+          <a href="tel:0933312887" className="text-link font-medium hover:underline">
+            0933312887
+          </a>
+        </p>
       </div>
     </main>
   );
