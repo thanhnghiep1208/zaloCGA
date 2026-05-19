@@ -1,15 +1,19 @@
 import { NextResponse } from "next/server";
 import { ApiAuthError, requireUidFromRequest } from "@/lib/api-request-auth";
-import { logAnalyticsEvent, type LoggedEventName } from "@/lib/analytics-events";
+import {
+  CLIENT_ANALYTICS_EVENTS,
+  logAnalyticsEvent,
+  type ClientLoggedEventName,
+} from "@/lib/analytics-events";
 
-const ALLOWED_EVENTS: LoggedEventName[] = ["file_uploaded", "user_feedback"];
+const ALLOWED_EVENTS: ClientLoggedEventName[] = CLIENT_ANALYTICS_EVENTS;
 
 export async function POST(req: Request) {
   try {
     const uid = await requireUidFromRequest(req);
     const body = await req.json();
     const { eventName, payload } = body as {
-      eventName?: LoggedEventName;
+      eventName?: ClientLoggedEventName;
       payload?: Record<string, unknown>;
     };
 

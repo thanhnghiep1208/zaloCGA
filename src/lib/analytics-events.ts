@@ -6,7 +6,28 @@ export type LoggedEventName =
   | "parse_success"
   | "query_sent"
   | "response_delivered"
-  | "user_feedback";
+  | "user_feedback"
+  | "session_started"
+  | "session_ended"
+  | "response_copied";
+
+/** Events the client may POST to /api/events (server adds user_id). */
+export type ClientLoggedEventName = Extract<
+  LoggedEventName,
+  | "file_uploaded"
+  | "user_feedback"
+  | "session_started"
+  | "session_ended"
+  | "response_copied"
+>;
+
+export const CLIENT_ANALYTICS_EVENTS: ClientLoggedEventName[] = [
+  "file_uploaded",
+  "user_feedback",
+  "session_started",
+  "session_ended",
+  "response_copied",
+];
 
 export async function logAnalyticsEvent(
   eventName: LoggedEventName,

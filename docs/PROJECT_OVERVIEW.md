@@ -235,12 +235,15 @@ Telemetry nội bộ phục vụ dashboard **Analytics Reports** (`/admin/report
 | `query_sent` | Server → `/api/chat` | `query_text`, `type` (`guideline` \| `microcopy`), `user_id` |
 | `response_delivered` | Server → `/api/chat` (sau stream xong) | `response_type`, `relevance_score`, `latency_ms`, `referenced_sources[]`, `user_id` |
 | `user_feedback` | Client → `POST /api/events` (nút 👍/👎 trên `/chat`) | `feedback` (`thumbs_up` \| `thumbs_down`), `session_id`, `message_id`, `user_id` |
+| `session_started` | Client → `POST /api/events` (tin chat đầu tiên tạo session trên `/chat`) | `session_id`, `user_id` |
+| `session_ended` | Client → `POST /api/events` (unmount `/chat` hoặc idle 10 phút) | `session_id`, `duration_ms`, `query_count`, `user_id` |
+| `response_copied` | Client → `POST /api/events` (nút copy câu trả lời) | `session_id`, `message_id`, `user_id` |
 
 **Phân loại query/response:** `inferQueryType()` trong `src/lib/analytics-events.ts` — heuristic từ khóa (microcopy, toast, button, …); mặc định `guideline`.
 
 **Relevance score:** `estimateRelevanceScore()` — overlap token đơn giản giữa câu hỏi và câu trả lời (0–1), không phải đánh giá LLM.
 
-**Giới hạn dashboard:** trang reports đọc tối đa **300** event mới nhất (`orderBy createdAt desc`).
+**Giới hạn dashboard:** trang reports đọc tối đa **500** event mới nhất (`orderBy createdAt desc`).
 
 ---
 
@@ -358,8 +361,9 @@ Telemetry nội bộ phục vụ dashboard **Analytics Reports** (`/admin/report
 1. User/contributor upload tài liệu → `file_uploaded`.
 2. Ingest thành công → `parse_success`.
 3. User chat → `query_sent` rồi `response_delivered` (kèm latency, relevance, nguồn được trích dẫn).
-4. User bấm 👍/👎 → `user_feedback`.
-5. Trang reports subscribe realtime `analyticsEvents` (tối đa 300 bản ghi) và aggregate thành các chỉ số dưới đây.
+4. User bấm 👍/👎 → `user_feedback`; copy câu trả lời → `response_copied`.
+5. Phiên chat: tin đầu tiên → `session_started`; rời trang hoặc idle 10 phút → `session_ended` (`duration_ms`, `query_count`).
+6. Trang reports subscribe realtime `analyticsEvents` (tối đa 500 bản ghi) và aggregate thành các chỉ số dưới đây.
 
 ### Nhóm metric trên UI
 

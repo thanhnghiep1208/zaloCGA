@@ -16,7 +16,10 @@ import Link from "next/link";
 import { ReferencePreviewModal } from "@/components/ReferencePreviewModal";
 import { useRouter, useSearchParams } from "next/navigation";
 import { firebaseBearerAuthHeader } from "@/lib/client-bearer-auth";
+import { postClientAnalyticsEvent } from "@/lib/client-analytics-event";
 import { toFriendlyErrorMessage } from "@/lib/user-error";
+
+const SESSION_IDLE_MS = 10 * 60 * 1000;
 
 type Source = {
   docId?: string;
@@ -170,6 +173,11 @@ export default function ChatView() {
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const selectedImagesRef = useRef<LocalChatImage[]>([]);
   const dragDepthRef = useRef(0);
+  const sessionIdRef = useRef<string | null>(null);
+  const sessionStartedAtRef = useRef<number | null>(null);
+  const sessionQueryCountRef = useRef(0);
+  const sessionEndedSentRef = useRef(false);
+  const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [isDropTarget, setIsDropTarget] = useState(false);
   const hasVisibleMessages = messages.some((m) => m.role === "user" || (m.role === "assistant" && !!m.content.trim()));
   const showConversationLayout = hasVisibleMessages || isLoading;
@@ -183,10 +191,46 @@ export default function ChatView() {
   }, [selectedImages]);
 
   useEffect(() => {
+    sessionIdRef.current = sessionId;
+  }, [sessionId]);
+
+  const endSessionAnalytics = useCallback(async () => {
+    if (!user) return;
+    const sid = sessionIdRef.current;
+    if (!sid || sessionEndedSentRef.current || sessionStartedAtRef.current == null) return;
+    sessionEndedSentRef.current = true;
+    if (idleTimerRef.current) {
+      clearTimeout(idleTimerRef.current);
+      idleTimerRef.current = null;
+    }
+    const duration_ms = Date.now() - sessionStartedAtRef.current;
+    await postClientAnalyticsEvent(user, "session_ended", {
+      session_id: sid,
+      duration_ms,
+      query_count: sessionQueryCountRef.current,
+    });
+  }, [user]);
+
+  const resetSessionIdleTimer = useCallback(() => {
+    if (!sessionIdRef.current || sessionEndedSentRef.current) return;
+    if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
+    idleTimerRef.current = setTimeout(() => {
+      void endSessionAnalytics();
+    }, SESSION_IDLE_MS);
+  }, [endSessionAnalytics]);
+
+  useEffect(() => {
     return () => {
       selectedImagesRef.current.forEach((img) => URL.revokeObjectURL(img.previewUrl));
     };
   }, []);
+
+  useEffect(() => {
+    return () => {
+      if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
+      void endSessionAnalytics();
+    };
+  }, [endSessionAnalytics]);
 
   // Debounced save to Firestore after AI finishes responding
   const saveSession = useCallback((msgs: Message[]) => {
@@ -309,17 +353,24 @@ export default function ChatView() {
 
   useEffect(() => {
     if (searchParams.get("new") !== "1") return;
-    setMessages([]);
-    setInput("");
-    setIsLoading(false);
-    setSessionId(null);
-    clearPendingImages();
-    if (saveTimeoutRef.current) {
-      clearTimeout(saveTimeoutRef.current);
-      saveTimeoutRef.current = null;
-    }
-    router.replace("/chat");
-  }, [searchParams, router, clearPendingImages]);
+    void (async () => {
+      await endSessionAnalytics();
+      setMessages([]);
+      setInput("");
+      setIsLoading(false);
+      setSessionId(null);
+      sessionIdRef.current = null;
+      sessionStartedAtRef.current = null;
+      sessionQueryCountRef.current = 0;
+      sessionEndedSentRef.current = false;
+      clearPendingImages();
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+        saveTimeoutRef.current = null;
+      }
+      router.replace("/chat");
+    })();
+  }, [searchParams, router, clearPendingImages, endSessionAnalytics]);
 
   const handleSend = async () => {
     if ((!input.trim() && selectedImages.length === 0) || isLoading || !user) return;
@@ -359,6 +410,13 @@ export default function ChatView() {
         };
         currentSessionId = await createChatSession(user.uid, [firstStoredMessage]);
         setSessionId(currentSessionId);
+        sessionIdRef.current = currentSessionId;
+        sessionStartedAtRef.current = Date.now();
+        sessionQueryCountRef.current = 0;
+        sessionEndedSentRef.current = false;
+        void postClientAnalyticsEvent(user, "session_started", {
+          session_id: currentSessionId,
+        });
       } catch (e) {
         console.error("Failed to create chat session", e);
         setIsLoading(false);
@@ -369,6 +427,9 @@ export default function ChatView() {
       setIsLoading(false);
       return;
     }
+
+    sessionQueryCountRef.current += 1;
+    resetSessionIdleTimer();
 
     setMessages(prev => [...prev, userMsg, initialAssistantMsg]);
 
@@ -503,6 +564,7 @@ export default function ChatView() {
         return finalMessages;
       });
       clearPendingImages();
+      resetSessionIdleTimer();
 
     } catch(e) {
       console.error(e);
@@ -533,8 +595,20 @@ export default function ChatView() {
     appendImageFiles(files);
   };
 
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text);
+  const copyToClipboard = async (text: string, messageId: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      const sid = sessionIdRef.current;
+      if (user && sid) {
+        void postClientAnalyticsEvent(user, "response_copied", {
+          session_id: sid,
+          message_id: messageId,
+        });
+      }
+      resetSessionIdleTimer();
+    } catch (e) {
+      console.error("Failed to copy response", e);
+    }
   };
 
   const handleFeedback = async (messageId: string, value: "up" | "down") => {
@@ -543,26 +617,13 @@ export default function ChatView() {
       prev.map((msg) => (msg.id === messageId ? { ...msg, feedback: value } : msg))
     );
 
-    try {
-      const authHeader = await firebaseBearerAuthHeader(user);
-      await fetch("/api/events", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...authHeader,
-        },
-        body: JSON.stringify({
-          eventName: "user_feedback",
-          payload: {
-            feedback: value === "up" ? "thumbs_up" : "thumbs_down",
-            session_id: sessionId,
-            message_id: messageId,
-          },
-        }),
-      });
-    } catch (e) {
-      console.error("Failed to log feedback", e);
-    }
+    const sid = sessionIdRef.current;
+    void postClientAnalyticsEvent(user, "user_feedback", {
+      feedback: value === "up" ? "thumbs_up" : "thumbs_down",
+      session_id: sid ?? undefined,
+      message_id: messageId,
+    });
+    resetSessionIdleTimer();
   };
 
   return (
@@ -811,7 +872,7 @@ export default function ChatView() {
                         </svg>
                       </button>
                       <button 
-                        onClick={() => copyToClipboard(msg.content)}
+                        onClick={() => void copyToClipboard(msg.content, msg.id)}
                         className="ml-1 text-muted hover:text-foreground transition-colors p-1.5 rounded-md hover:bg-border/80 flex items-center gap-1.5 text-xs font-medium"
                         title="Copy answer"
                       >

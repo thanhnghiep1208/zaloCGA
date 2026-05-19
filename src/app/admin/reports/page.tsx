@@ -41,9 +41,12 @@ type UserBehaviorSummary = {
   topUsers: TopUserRow[];
   dauLast7Days: DauDayRow[];
   avgQueriesPerSession: number;
+  avgSessionDurationMin: number | null;
   reQueryRate: number;
   sessionsSampled: number;
   totalUserQueriesInSessions: number;
+  responseCopiedCount: number;
+  sessionMetricsSource: "telemetry" | "chatSessions";
 };
 
 function dayKeyFromTimestamp(ts?: Timestamp): string | null {
@@ -116,6 +119,23 @@ function computeUserBehavior(
     }
   });
 
+  const sessionEndedRows: { query_count: number; duration_ms: number }[] = [];
+  let responseCopiedCount = 0;
+
+  events.forEach((e) => {
+    const payload = e.payload || {};
+    if (e.eventName === "session_ended") {
+      const qc = Number(payload.query_count ?? NaN);
+      const dm = Number(payload.duration_ms ?? NaN);
+      if (!Number.isNaN(qc) && qc >= 0 && !Number.isNaN(dm) && dm >= 0) {
+        sessionEndedRows.push({ query_count: qc, duration_ms: dm });
+      }
+    }
+    if (e.eventName === "response_copied") {
+      responseCopiedCount += 1;
+    }
+  });
+
   const topUsers: TopUserRow[] = [...userStats.entries()]
     .map(([uid, s]) => ({
       uid,
@@ -152,10 +172,22 @@ function computeUserBehavior(
     }
   });
 
-  const sessionsSampled = sessions.length;
-  const avgQueriesPerSession = sessionsSampled
+  let sessionsSampled = sessions.length;
+  let avgQueriesPerSession = sessionsSampled
     ? Number((totalUserQueriesInSessions / sessionsSampled).toFixed(1))
     : 0;
+  let avgSessionDurationMin: number | null = null;
+  let sessionMetricsSource: "telemetry" | "chatSessions" = "chatSessions";
+
+  if (sessionEndedRows.length > 0) {
+    const totalQ = sessionEndedRows.reduce((s, r) => s + r.query_count, 0);
+    const totalD = sessionEndedRows.reduce((s, r) => s + r.duration_ms, 0);
+    sessionsSampled = sessionEndedRows.length;
+    avgQueriesPerSession = Number((totalQ / sessionEndedRows.length).toFixed(1));
+    avgSessionDurationMin = Math.round(totalD / sessionEndedRows.length / 60_000);
+    sessionMetricsSource = "telemetry";
+  }
+
   const reQueryRate = totalUserQueriesInSessions
     ? Math.round((reQueryCount / totalUserQueriesInSessions) * 100)
     : 0;
@@ -164,9 +196,12 @@ function computeUserBehavior(
     topUsers,
     dauLast7Days,
     avgQueriesPerSession,
+    avgSessionDurationMin,
     reQueryRate,
     sessionsSampled,
     totalUserQueriesInSessions,
+    responseCopiedCount,
+    sessionMetricsSource,
   };
 }
 
@@ -481,8 +516,22 @@ export default function AdminReportsPage() {
                 <li>
                   <code className="text-xs">user_feedback</code> — 👍/👎 trên /chat
                 </li>
+                <li>
+                  <code className="text-xs">session_started</code>,{" "}
+                  <code className="text-xs">session_ended</code> — phiên /chat (bắt đầu ở tin đầu; kết thúc
+                  khi rời trang hoặc idle 10 phút)
+                </li>
+                <li>
+                  <code className="text-xs">response_copied</code> — user copy câu trả lời
+                </li>
               </ul>
             </div>
+            <p>
+              <strong className="text-foreground">Avg queries / session</strong> và{" "}
+              <strong className="text-foreground">thời lượng phiên</strong> ưu tiên{" "}
+              <code className="text-xs">session_ended</code> trong mẫu event; nếu chưa có thì fallback{" "}
+              <code className="text-xs">chatSessions</code>.
+            </p>
             <p>
               <strong className="text-foreground">Re-query rate</strong> dùng tin nhắn user trong{" "}
               <code className="text-xs">chatSessions</code> (hai lượt cách nhau ≤ 2 phút), vì{" "}
@@ -510,13 +559,31 @@ export default function AdminReportsPage() {
           <>
             <section className="space-y-4">
               <h2 className="text-[22px] font-light">User Behavior</h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 <div className="clay-card p-4">
                   <p className="text-xs text-muted">Avg queries / session</p>
                   <p className="text-2xl font-light">{userBehavior.avgQueriesPerSession}</p>
                   <p className="text-xs text-muted mt-1">
-                    {userBehavior.sessionsSampled} sessions (mẫu gần nhất)
+                    {userBehavior.sessionsSampled}{" "}
+                    {userBehavior.sessionMetricsSource === "telemetry"
+                      ? "session_ended"
+                      : "chatSessions"}{" "}
+                    (mẫu)
                   </p>
+                </div>
+                <div className="clay-card p-4">
+                  <p className="text-xs text-muted">Avg session duration</p>
+                  <p className="text-2xl font-light">
+                    {userBehavior.avgSessionDurationMin != null
+                      ? `${userBehavior.avgSessionDurationMin} min`
+                      : "—"}
+                  </p>
+                  <p className="text-xs text-muted mt-1">từ session_ended</p>
+                </div>
+                <div className="clay-card p-4">
+                  <p className="text-xs text-muted">Response copies</p>
+                  <p className="text-2xl font-light">{userBehavior.responseCopiedCount}</p>
+                  <p className="text-xs text-muted mt-1">implicit positive signal</p>
                 </div>
                 <div className="clay-card p-4">
                   <p className="text-xs text-muted">Re-query rate</p>
