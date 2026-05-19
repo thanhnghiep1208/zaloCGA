@@ -212,7 +212,7 @@ export default function AdminReportsPage() {
         : 0,
       topReferencedSources,
     };
-  }, [events]);
+  }, [events, loading]);
 
   return (
     <ProtectedRoute allowedRoles={["admin"]}>
@@ -224,9 +224,58 @@ export default function AdminReportsPage() {
           </p>
         </div>
 
+        <details className="clay-card p-4 text-sm">
+          <summary className="cursor-pointer font-medium text-foreground">
+            Hướng dẫn & nguồn dữ liệu
+          </summary>
+          <div className="mt-3 space-y-3 text-muted">
+            <p>
+              Chỉ tài khoản <strong className="text-foreground">admin</strong> xem được trang này. Số liệu
+              lấy từ collection Firestore <code className="text-xs">analyticsEvents</code> (tối đa 300 event
+              mới nhất, cập nhật realtime).
+            </p>
+            <div>
+              <p className="font-medium text-foreground mb-1">Các loại event</p>
+              <ul className="list-disc pl-5 space-y-1">
+                <li>
+                  <code className="text-xs">file_uploaded</code> — upload tại /admin/upload
+                </li>
+                <li>
+                  <code className="text-xs">parse_success</code> — ingest thành công (/api/ingest)
+                </li>
+                <li>
+                  <code className="text-xs">query_sent</code>,{" "}
+                  <code className="text-xs">response_delivered</code> — mỗi lượt chat (/api/chat)
+                </li>
+                <li>
+                  <code className="text-xs">user_feedback</code> — 👍/👎 trên /chat
+                </li>
+              </ul>
+            </div>
+            <p>
+              <strong className="text-foreground">Success rate</strong> trên UI là tỷ lệ thumbs up trên tổng
+              feedback, không phải tỷ lệ API thành công. <strong className="text-foreground">Response quality</strong>{" "}
+              là điểm overlap token heuristic (0–1), không phải chấm điểm LLM.
+            </p>
+            <p>
+              Google Analytics (<code className="text-xs">NEXT_PUBLIC_GA_ID</code>) là kênh riêng; không hiển
+              thị ở đây. Tài liệu đầy đủ: <code className="text-xs">docs/PROJECT_OVERVIEW.md</code> mục 8.6.
+            </p>
+          </div>
+        </details>
+
         {summary.loading ? (
           <div className="clay-card p-4 text-sm text-muted">
             Loading metrics...
+          </div>
+        ) : events.length === 0 ? (
+          <div className="clay-card p-4 text-sm text-muted space-y-2">
+            <p className="font-medium text-foreground">Chưa có dữ liệu telemetry</p>
+            <p>
+              Dashboard sẽ có số liệu sau khi có hoạt động thật: upload + ingest tài liệu, chat qua /chat, và
+              (tuỳ chọn) phản hồi 👍/👎. Kiểm tra role admin và collection{" "}
+              <code className="text-xs">analyticsEvents</code> trên Firestore nếu vẫn trống sau khi đã dùng app.
+            </p>
           </div>
         ) : (
           <>

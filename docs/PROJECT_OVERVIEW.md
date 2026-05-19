@@ -35,7 +35,7 @@ Tài liệu này là bản tổng hợp end-to-end cho dự án: kiến trúc t�
 
 - **Client App (Next.js client components):**
   - Đăng nhập, chat UI, sidebar lịch sử
-  - Trang admin: thư viện tài liệu, upload, quản lý users
+  - Trang admin: thư viện tài liệu, upload, quản lý users, báo cáo analytics (admin)
 - **API Routes (Next.js server routes):**
   - `POST /api/chat`: xác thực + retrieval + stream câu trả lời
   - `POST /api/ingest`: xác thực + quyền contributor/admin + parse nội dung file
@@ -43,6 +43,7 @@ Tài liệu này là bản tổng hợp end-to-end cho dự án: kiến trúc t�
   - `documents`: kho tri thức đã index
   - `chatSessions`: lịch sử chat theo user
   - `users`: profile + role (`user`, `contributor`, `admin`)
+  - `analyticsEvents`: telemetry nội bộ (server ghi, admin đọc dashboard)
 - **Storage:**
   - Bucket chứa file upload tại `documents/`*
 
@@ -93,6 +94,7 @@ Tóm tắt kỹ thuật:
 - `src/app/admin/library/page.tsx`: quản lý tài liệu.
 - `src/app/admin/upload/page.tsx`: upload + gọi ingest.
 - `src/app/admin/users/page.tsx`: admin tạo user, đổi role, reset mật khẩu, vô hiệu hóa, xóa (gọi `/api/admin/users`).
+- `src/app/admin/reports/page.tsx`: **Analytics Reports** — dashboard telemetry (chỉ `admin`). Chi tiết: mục 8.6.
 
 ### 4.3 Auth context và phân quyền UI
 
@@ -146,7 +148,19 @@ Chức năng:
 - `DELETE /api/admin/users/[uid]` — xóa profile Firestore và user Auth.
 - Guard: `requireAdmin()` trong `src/lib/api-request-auth.ts`.
 
-## 5.4 Retrieval service
+## 5.4 API telemetry (`POST /api/events`)
+
+File: `src/app/api/events/route.ts`
+
+Chức năng:
+
+1. Verify Firebase ID token.
+2. Chỉ chấp nhận `file_uploaded` và `user_feedback` từ client (whitelist).
+3. Ghi event vào Firestore `analyticsEvents` qua `logAnalyticsEvent()` (kèm `user_id`).
+
+Các event khác (`parse_success`, `query_sent`, `response_delivered`) được ghi **server-side** trong `/api/ingest` và `/api/chat`.
+
+## 5.5 Retrieval service
 
 - `src/lib/RetrievalService.ts`
   - Prompt hợp nhất, model tự suy luận 2 kiểu intent:
@@ -156,7 +170,7 @@ Chức năng:
 - `src/lib/retrieval/FirebaseRetrievalProvider.ts`
   - Dùng Admin SDK đọc `documents` có `status == "indexed"`.
 
-## 5.5 Firebase Admin init
+## 5.6 Firebase Admin init
 
 - `src/lib/firebase-admin.ts`
   - Ưu tiên `FIREBASE_SERVICE_ACCOUNT_KEY` (JSON string).
@@ -200,6 +214,34 @@ Lịch sử chat theo user:
 - `messages[]` (role/content/sources/timestamp)
 - `createdAt`, `updatedAt`
 
+## 6.4 Collection `analyticsEvents`
+
+Telemetry nội bộ phục vụ dashboard **Analytics Reports** (`/admin/reports`). Mỗi document:
+
+| Field | Mô tả |
+| --- | --- |
+| `eventName` | Loại sự kiện (xem bảng dưới) |
+| `payload` | Object tuỳ loại event (thường có `user_id`) |
+| `createdAt` | Server timestamp khi ghi |
+
+**Quy tắc ghi:** chỉ server (Admin SDK) được `create`; client **không** ghi trực tiếp Firestore (`firestore.rules`: `write: false`).
+
+### Các loại event
+
+| `eventName` | Nguồn ghi | Payload chính |
+| --- | --- | --- |
+| `file_uploaded` | Client → `POST /api/events` (sau upload Storage, từ `/admin/upload`) | `file_type`, `size`, `user_id` |
+| `parse_success` | Server → `/api/ingest` | `rule_count_extracted`, `latency_ms`, `user_id` |
+| `query_sent` | Server → `/api/chat` | `query_text`, `type` (`guideline` \| `microcopy`), `user_id` |
+| `response_delivered` | Server → `/api/chat` (sau stream xong) | `response_type`, `relevance_score`, `latency_ms`, `referenced_sources[]`, `user_id` |
+| `user_feedback` | Client → `POST /api/events` (nút 👍/👎 trên `/chat`) | `feedback` (`thumbs_up` \| `thumbs_down`), `session_id`, `message_id`, `user_id` |
+
+**Phân loại query/response:** `inferQueryType()` trong `src/lib/analytics-events.ts` — heuristic từ khóa (microcopy, toast, button, …); mặc định `guideline`.
+
+**Relevance score:** `estimateRelevanceScore()` — overlap token đơn giản giữa câu hỏi và câu trả lời (0–1), không phải đánh giá LLM.
+
+**Giới hạn dashboard:** trang reports đọc tối đa **300** event mới nhất (`orderBy createdAt desc`).
+
 ---
 
 ## 7) Security model
@@ -214,6 +256,9 @@ Lịch sử chat theo user:
 - `documents`:
   - signed-in user được đọc.
   - chỉ `admin|contributor` mới được create/update/delete.
+- `analyticsEvents`:
+  - chỉ `admin` được đọc (dashboard).
+  - client/API user **không** ghi trực tiếp; ghi qua Admin SDK trên server.
 
 ## 7.2 Storage Rules (`storage.rules`)
 
@@ -303,6 +348,59 @@ Lịch sử chat theo user:
 ### Chưa có trong sản phẩm
 
 - Giới hạn N máy hoặc “chỉ một phiên”, cảnh báo đăng nhập thiết bị mới.
+
+## 8.6 Analytics Reports flow
+
+**Truy cập:** Sidebar → **Analytics Reports** (`/admin/reports`) — chỉ user có `role: "admin"`. `ProtectedRoute` + Firestore rules chặn role khác.
+
+**Luồng dữ liệu:**
+
+1. User/contributor upload tài liệu → `file_uploaded`.
+2. Ingest thành công → `parse_success`.
+3. User chat → `query_sent` rồi `response_delivered` (kèm latency, relevance, nguồn được trích dẫn).
+4. User bấm 👍/👎 → `user_feedback`.
+5. Trang reports subscribe realtime `analyticsEvents` (tối đa 300 bản ghi) và aggregate thành các chỉ số dưới đây.
+
+### Nhóm metric trên UI
+
+**Upload & Parsing**
+
+| Chỉ số UI | Cách tính (tóm tắt) |
+| --- | --- |
+| Số lượng file upload | Đếm `file_uploaded` |
+| PDF / Word / khác | Phân loại từ `payload.file_type` |
+| Kích thước trung bình | Trung bình `payload.size` (KB) |
+| Tỷ lệ parse thành công | `parse_success` / `file_uploaded` × 100% |
+| Avg parse latency | Trung bình `latency_ms` trên `parse_success` |
+| Coverage rules | Tổng / trung bình `rule_count_extracted` trên `parse_success` |
+
+**Query & Response**
+
+| Chỉ số UI | Cách tính (tóm tắt) |
+| --- | --- |
+| Invocation count | Đếm `query_sent` (guideline vs microcopy) |
+| Success rate (proxy) | 👍 / (👍 + 👎) × 100% — *không* phải tỷ lệ HTTP thành công |
+| Response quality | Trung bình `relevance_score` trên `response_delivered` |
+| Feedback rate | (👍 + 👎) / số `response_delivered` × 100% |
+| Avg response latency | Trung bình `latency_ms` trên `response_delivered` |
+
+**Hiệu suất & Retention**
+
+| Chỉ số UI | Cách tính (tóm tắt) |
+| --- | --- |
+| Latency by complexity | Avg latency theo `response_type` guideline / microcopy |
+| Usage funnel | Upload→Parse, Parse→Query, Query→Accepted (%) |
+| Retention D1 / D7 | % user quay lại đúng ngày +1 / +7 sau ngày đầu có event (theo `user_id`) |
+| Top referenced sources | File được trích dẫn nhiều nhất trong `referenced_sources` |
+
+### Khi dashboard trống hoặc toàn số 0
+
+- Chưa có traffic thật: cần ít nhất một lượt upload+ingest và/hoặc chat có feedback.
+- Role không phải admin: listener Firestore trả `permission-denied`, UI không có số liệu.
+- Môi trường mới deploy: collection `analyticsEvents` rỗng cho đến khi có hoạt động.
+- **Google Analytics** (`NEXT_PUBLIC_GA_ID`) là kênh riêng (gtag); **không** đổ vào trang Analytics Reports này.
+
+**File liên quan:** `src/app/admin/reports/page.tsx`, `src/lib/analytics-events.ts`, `src/app/api/events/route.ts`, `src/app/api/chat/route.ts`, `src/app/api/ingest/route.ts`.
 
 ---
 

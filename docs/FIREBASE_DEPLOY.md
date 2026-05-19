@@ -100,4 +100,5 @@ firebase deploy --only apphosting
 - Continue chatting: same session document updates
 - Upload document with contributor/admin account: success
 - Open admin pages with regular user account: blocked
+- Admin → **Analytics Reports** (`/admin/reports`): hiển thị metrics sau khi có event trong `analyticsEvents` (upload, chat, feedback)
 
