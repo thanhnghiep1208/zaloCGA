@@ -32,6 +32,20 @@ export async function requireUidFromRequest(req: Request): Promise<string> {
   }
 }
 
+/** Require Firestore role admin (users/{uid}). */
+export async function requireAdmin(uid: string): Promise<void> {
+  if (!adminDb) {
+    console.error("[api-auth] adminDb not initialized");
+    throw new ApiAuthError("Server configuration error", 500);
+  }
+
+  const snap = await adminDb.collection("users").doc(uid).get();
+  const role = snap.exists ? snap.get("role") : null;
+  if (role !== "admin") {
+    throw new ApiAuthError("Forbidden", 403);
+  }
+}
+
 /** Require Firestore role admin or contributor (users/{uid}). */
 export async function requireContributorOrAdmin(uid: string): Promise<void> {
   if (!adminDb) {

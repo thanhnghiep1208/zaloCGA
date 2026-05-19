@@ -29,10 +29,22 @@ Set these in **Firebase App Hosting > Backend > Environment variables**:
 - `FIREBASE_SERVICE_ACCOUNT_KEY` (full JSON string of service account)
 - `GEMINI_API_KEY` (cho `/api/chat` và `/api/ingest`)
 - Tùy chọn: `NEXT_PUBLIC_SITE_URL` (canonical URL cho metadata/OG), `NEXT_PUBLIC_GA_ID`
+- `NEXT_PUBLIC_INTERNAL_AUTH_EMAIL_DOMAIN` và `INTERNAL_AUTH_EMAIL_DOMAIN` (cùng giá trị, ví dụ `accounts.internal`)
 
 Chi tiet pre-live audit env (bat buoc + khuyen nghi + token tuning):
 
 - [PRE_LIVE_ENV_CHECKLIST.md](./PRE_LIVE_ENV_CHECKLIST.md)
+
+## 3.1) Auth: username/password (admin cấp tài khoản)
+
+1. **Firebase Console → Authentication → Sign-in method**
+   - Bật **Email/Password**
+   - Tắt **Google**
+2. **Tài khoản admin đầu tiên** (một lần, trước khi có UI admin):
+   - Cách A: Console → Authentication → Users → Add user (email dạng `admin@accounts.internal` nếu domain là `accounts.internal`, đặt password).
+   - Tạo document Firestore `users/{uid}` với fields: `uid`, `username: "admin"`, `email`, `role: "admin"`, `createdAt`.
+   - Cách B: Đăng nhập bằng admin đã có → `/admin/users` → form **Tạo tài khoản mới** (gọi `POST /api/admin/users`).
+3. User mới **không** tự đăng ký: chỉ đăng nhập được sau khi admin tạo profile + Auth user.
 
 ## 4) Deploy security rules
 

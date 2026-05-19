@@ -30,31 +30,18 @@ service cloud.firestore {
       allow read, update, delete: if signedIn() && resource.data.userId == request.auth.uid;
     }
 
-    // User profile + role documents (users cannot self-elevate role).
+    // User profiles are admin-provisioned only (no self-registration).
     match /users/{userId} {
       allow read: if ownUserDoc(userId) || isAdmin();
 
-      // Create: own doc as normal user, OR admin creating canonical users/{auth.uid} (uid field must match doc id).
-      // Bootstrap: one designated Google account may create their own doc with role "admin" (matches Auth JWT email).
-      allow create: if ownUserDoc(userId)
-        && (!request.resource.data.keys().hasAny(["role"])
-            || request.resource.data.role == "user"
-            || (request.resource.data.role == "admin"
-                && request.auth.token.email != null
-                && request.auth.token.email == "thanhnghiep1208@gmail.com"))
-        || (isAdmin()
-            && request.resource.data.uid == userId);
+      allow create: if isAdmin()
+        && request.resource.data.uid == userId;
 
-      // Update: admin may change anything; user may not change role field (except bootstrap email may set admin once if still user).
       allow update: if isAdmin()
         || (ownUserDoc(userId)
-            && !request.resource.data.diff(resource.data).affectedKeys().hasAny(["role"]))
-        || (ownUserDoc(userId)
-            && resource.data.role == "user"
-            && request.resource.data.role == "admin"
-            && request.auth.token.email != null
-            && request.auth.token.email == "thanhnghiep1208@gmail.com"
-            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["role"]));
+            && !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+              "role", "username", "uid", "email", "createdAt", "createdBy"
+            ]));
 
       allow delete: if isAdmin();
     }

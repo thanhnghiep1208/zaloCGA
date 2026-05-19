@@ -48,7 +48,7 @@ Tài liệu này là bản tổng hợp end-to-end cho dự án: kiến trúc t�
 
 ### 3.2 Luồng dữ liệu cấp cao
 
-1. User đăng nhập qua Firebase Auth.
+1. User đăng nhập qua Firebase Auth (username + password; admin cấp tài khoản, không đăng ký công khai).
 2. Client gọi API kèm `Authorization: Bearer <idToken>`.
 3. API verify token bằng Firebase Admin.
 4. API đọc dữ liệu Firestore (retrieval/index) và/hoặc xử lý file.
@@ -87,7 +87,8 @@ Tóm tắt kỹ thuật:
 ### 4.2 Các trang chính
 
 - `src/app/page.tsx`: landing page.
-- `src/app/login/page.tsx`: đăng nhập.
+- `src/app/login/page.tsx`: đăng nhập username/password (map sang email nội bộ cho Firebase).
+- `src/app/admin/users/page.tsx`: admin tạo/xoá/khoá/reset mật khẩu user (`/api/admin/users`).
 - `src/app/chat/page.tsx`: chat realtime + streaming + lưu session.
 - `src/app/chat/[id]/page.tsx`: xem lại cuộc hội thoại đã lưu.
 - `src/app/admin/library/page.tsx`: quản lý tài liệu.
@@ -162,7 +163,8 @@ Chức năng:
 Tài liệu người dùng/role:
 
 - `uid`
-- `email`
+- `username` (đăng nhập hiển thị cho user)
+- `email` (synthetic: `{username}@{INTERNAL_AUTH_EMAIL_DOMAIN}`)
 - `role`: `user | contributor | admin`
 - `createdAt` (nếu có)
 

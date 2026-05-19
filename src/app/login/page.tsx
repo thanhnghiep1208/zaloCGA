@@ -1,56 +1,69 @@
 "use client";
 
 import { useState } from "react";
-import { signInWithPopup, GoogleAuthProvider, type User } from "firebase/auth";
+import { signInWithEmailAndPassword, signOut } from "firebase/auth";
 import { auth, db } from "@/lib/firebase";
-import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
+import { doc, getDoc } from "firebase/firestore";
 import { useRouter } from "next/navigation";
 import { trackEvent } from "@/lib/gtag";
+import {
+  isValidUsername,
+  normalizeUsername,
+  usernameToAuthEmail,
+} from "@/lib/auth-username";
 
+function toFriendlyLoginError(err: unknown): string {
+  const code = (err as { code?: string })?.code;
+  if (code === "auth/invalid-credential" || code === "auth/wrong-password") {
+    return "Tên đăng nhập hoặc mật khẩu không đúng.";
+  }
+  if (code === "auth/user-disabled") {
+    return "Tài khoản đã bị vô hiệu hóa. Liên hệ admin.";
+  }
+  if (code === "auth/too-many-requests") {
+    return "Đăng nhập quá nhiều lần. Vui lòng thử lại sau.";
+  }
+  if (err instanceof Error) return err.message;
+  return "Đăng nhập thất bại. Vui lòng thử lại.";
+}
 
 export default function LoginPage() {
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const router = useRouter();
 
-  const syncUserToFirestore = async (user: User) => {
-    try {
-      const docRef = doc(db, "users", user.uid);
-      const docSnap = await getDoc(docRef);
-      
-      const targetRole = user.email === 'thanhnghiep1208@gmail.com' ? 'admin' : 'user';
-
-      if (!docSnap.exists()) {
-        await setDoc(docRef, {
-          uid: user.uid,
-          email: user.email,
-          displayName: user.displayName,
-          role: targetRole,
-          createdAt: serverTimestamp()
-        });
-      } else {
-        // Nếu user đã tồn tại nhưng có email là thanhnghiep1208@gmail.com mà chưa là admin thì tự động nâng cấp  
-        if (targetRole === 'admin' && docSnap.data().role !== 'admin') {
-           await setDoc(docRef, { role: 'admin' }, { merge: true });
-        }
-      }
-    } catch (err) {
-      console.error("Could not sync user to firestore", err);
-    }
-  };
-
-  const handleGoogleSignIn = async () => {
+  const handleSignIn = async (e: React.FormEvent) => {
+    e.preventDefault();
     setLoading(true);
     setError("");
-    try {
-      const provider = new GoogleAuthProvider();
-      const cred = await signInWithPopup(auth, provider);
-      await syncUserToFirestore(cred.user);
-      trackEvent("login", { method: "Google" });
-      router.push("/chat");
 
+    const normalized = normalizeUsername(username);
+    if (!isValidUsername(normalized)) {
+      setError(
+        "Tên đăng nhập không hợp lệ (3–32 ký tự: chữ thường, số, . _ -)."
+      );
+      setLoading(false);
+      return;
+    }
+
+    try {
+      const email = usernameToAuthEmail(normalized);
+      const cred = await signInWithEmailAndPassword(auth, email, password);
+
+      const docRef = doc(db, "users", cred.user.uid);
+      const docSnap = await getDoc(docRef);
+      if (!docSnap.exists()) {
+        await signOut(auth);
+        setError("Tài khoản chưa được cấp quyền. Vui lòng liên hệ admin.");
+        return;
+      }
+
+      trackEvent("login", { method: "password" });
+      router.push("/chat");
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Failed to sign in with Google");
+      setError(toFriendlyLoginError(err));
     } finally {
       setLoading(false);
     }
@@ -65,39 +78,93 @@ export default function LoginPage() {
       <div className="relative clay-card p-8 md:p-10 w-full max-w-[28rem] space-y-8 rounded-2xl shadow-[var(--shadow-md)] ring-1 ring-black/[0.04] dark:ring-white/[0.06]">
         <div className="text-center space-y-4 pb-2">
           <div className="w-16 h-16 bg-accent/25 border border-border rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-[var(--shadow-xs)]">
-            <svg className="w-8 h-8 text-accent" fill="none" strokeWidth={1.5} stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 20.25c4.97 0 9-3.694 9-8.25s-4.03-8.25-9-8.25S3 7.444 3 12c0 2.104.859 4.023 2.273 5.38.432.447.74 1.04.586 1.641a4.483 4.483 0 0 1-.923 1.785A5.969 5.969 0 0 0 6 21c1.282 0 2.47-.402 3.445-1.087.81.22 1.668.337 2.555.337Z" /></svg>
+            <svg
+              className="w-8 h-8 text-accent"
+              fill="none"
+              strokeWidth={1.5}
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M15.75 5.25a3 3 0 0 1 3 3m3 0a6 6 0 0 1-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1 1 21.75 8.25Z"
+              />
+            </svg>
           </div>
-          <h1 className="text-3xl md:text-[2rem] font-semibold text-foreground tracking-[-0.04em]">Internal Portal</h1>
-          <p className="text-muted text-[15px] max-w-sm mx-auto leading-relaxed">Sign in securely using your company Google account to access the knowledge base.</p>
+          <h1 className="text-3xl md:text-[2rem] font-semibold text-foreground tracking-[-0.04em]">
+            Internal Portal
+          </h1>
+          <p className="text-muted text-[15px] max-w-sm mx-auto leading-relaxed">
+            Đăng nhập bằng tài khoản do admin cấp để truy cập knowledge base.
+          </p>
         </div>
-        
+
         {error && (
-          <div className="bg-red-50 text-red-600 text-[13px] p-3 rounded-lg border border-red-100 text-center font-medium">
+          <div className="bg-red-50 text-red-600 text-[13px] p-3 rounded-lg border border-red-100 text-center font-medium dark:bg-red-950/40 dark:text-red-300 dark:border-red-900/50">
             {error}
           </div>
         )}
 
-        <div className="pt-2">
-          <button 
-            type="button" 
-            onClick={handleGoogleSignIn}
+        <form onSubmit={handleSignIn} className="pt-2 space-y-4">
+          <div className="space-y-1.5">
+            <label htmlFor="username" className="text-sm font-medium text-foreground">
+              Tên đăng nhập
+            </label>
+            <input
+              id="username"
+              name="username"
+              type="text"
+              autoComplete="username"
+              required
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              disabled={loading}
+              className="w-full rounded-xl border border-border bg-background px-4 py-3 text-[15px] outline-none focus:ring-2 focus:ring-accent/40"
+              placeholder="ten.dang.nhap"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <label htmlFor="password" className="text-sm font-medium text-foreground">
+              Mật khẩu
+            </label>
+            <input
+              id="password"
+              name="password"
+              type="password"
+              autoComplete="current-password"
+              required
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              disabled={loading}
+              className="w-full rounded-xl border border-border bg-background px-4 py-3 text-[15px] outline-none focus:ring-2 focus:ring-accent/40"
+            />
+          </div>
+          <button
+            type="submit"
             disabled={loading}
-            className="clay-hover-playful w-full bg-cream text-charcoal border border-border py-3.5 rounded-xl font-semibold transition-opacity disabled:opacity-50 flex items-center justify-center gap-3 shadow-[var(--shadow-xs)]"
+            className="clay-hover-playful w-full bg-charcoal text-cream border border-border py-3.5 rounded-xl font-semibold transition-opacity disabled:opacity-50 flex items-center justify-center gap-3 shadow-[var(--shadow-xs)]"
           >
             {loading ? (
-               <div className="flex gap-1.5 items-center">
-                 <div className="w-2 h-2 rounded-full bg-foreground/60 animate-bounce" style={{ animationDelay: '0ms' }}></div>
-                 <div className="w-2 h-2 rounded-full bg-foreground/60 animate-bounce" style={{ animationDelay: '150ms' }}></div>
-                 <div className="w-2 h-2 rounded-full bg-foreground/60 animate-bounce" style={{ animationDelay: '300ms' }}></div>
-               </div>
+              <div className="flex gap-1.5 items-center">
+                <div
+                  className="w-2 h-2 rounded-full bg-foreground/60 animate-bounce"
+                  style={{ animationDelay: "0ms" }}
+                />
+                <div
+                  className="w-2 h-2 rounded-full bg-foreground/60 animate-bounce"
+                  style={{ animationDelay: "150ms" }}
+                />
+                <div
+                  className="w-2 h-2 rounded-full bg-foreground/60 animate-bounce"
+                  style={{ animationDelay: "300ms" }}
+                />
+              </div>
             ) : (
-                <>
-                  <svg className="w-5 h-5 flex-shrink-0" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
-                  <span className="text-[15px]">Sign in with Google</span>
-                </>
+              <span className="text-[15px]">Đăng nhập</span>
             )}
           </button>
-        </div>
+        </form>
       </div>
     </main>
   );

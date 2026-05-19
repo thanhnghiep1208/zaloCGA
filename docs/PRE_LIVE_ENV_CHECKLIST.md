@@ -14,6 +14,8 @@ Dat trong **Firebase Console -> App Hosting -> Backend -> Environment variables*
 - `NEXT_PUBLIC_FIREBASE_APP_ID`
 - `GEMINI_API_KEY`
 - `FIREBASE_SERVICE_ACCOUNT_KEY` (khuyen nghi dung Secret Manager, xem muc 3)
+- `NEXT_PUBLIC_INTERNAL_AUTH_EMAIL_DOMAIN` (domain noi bo map username -> Firebase email, vi du `accounts.internal`)
+- `INTERNAL_AUTH_EMAIL_DOMAIN` (cung gia tri, dung tren server/API)
 
 ## 2) Khuyen nghi cho production
 
@@ -53,7 +55,9 @@ Neu chi doi env ma khong rollout lai, frontend co the van dung gia tri cu.
 
 ## 7) Smoke test sau rollout (5-10 phut)
 
-- Mo `/login` va dang nhap thanh cong.
+- Firebase Console -> Authentication: bat **Email/Password**, tat **Google**.
+- Admin da tao it nhat 1 tai khoan (xem `docs/FIREBASE_DEPLOY.md` muc Auth).
+- Mo `/login`, dang nhap bang **username + password** (khong co dang ky tu phuc vu).
 - Mo `/chat`, gui 1 cau hoi -> co stream response.
 - Kiem tra `/api/chat` khong loi `Unauthorized` neu token hop le.
 - Upload tai lieu bang tai khoan contributor/admin (neu dung ingest).
