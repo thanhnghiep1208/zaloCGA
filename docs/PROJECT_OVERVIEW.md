@@ -364,6 +364,7 @@ Telemetry nội bộ phục vụ dashboard **Analytics Reports** (`/admin/report
 4. User bấm 👍/👎 → `user_feedback`; copy câu trả lời → `response_copied`.
 5. Phiên chat: tin đầu tiên → `session_started`; rời trang hoặc idle 10 phút → `session_ended` (`duration_ms`, `query_count`).
 6. Trang reports subscribe realtime `analyticsEvents` (tối đa 500 bản ghi) và aggregate thành các chỉ số dưới đây.
+7. **User detail:** admin nhấn một dòng trong bảng Top users → modal hiển thị timeline 30 ngày, danh sách `query_sent`, tỷ lệ feedback cá nhân, tài liệu được tham chiếu nhiều nhất (từ `response_delivered.referenced_sources` trong cùng mẫu event).
 
 ### Nhóm metric trên UI
 

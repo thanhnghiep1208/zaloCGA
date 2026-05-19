@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { collection, limit, onSnapshot, orderBy, query, Timestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
+import { UserAnalyticsDetailModal } from "@/components/UserAnalyticsDetailModal";
 import { useAuth } from "@/context/AuthContext";
 
 const ANALYTICS_EVENT_LIMIT = 500;
@@ -209,6 +210,9 @@ export default function AdminReportsPage() {
   const [events, setEvents] = useState<AnalyticsEvent[]>([]);
   const [chatSessions, setChatSessions] = useState<ChatSessionRow[]>([]);
   const [usernameByUid, setUsernameByUid] = useState<Map<string, string>>(new Map());
+  const [selectedUser, setSelectedUser] = useState<{ uid: string; username: string } | null>(
+    null
+  );
   const [loading, setLoading] = useState(true);
   const { user, role, loading: authLoading } = useAuth();
 
@@ -611,7 +615,8 @@ export default function AdminReportsPage() {
               </div>
 
               <div className="clay-card p-4 overflow-x-auto">
-                <p className="text-sm font-medium text-foreground mb-3">Top users</p>
+                <p className="text-sm font-medium text-foreground mb-1">Top users</p>
+                <p className="text-xs text-muted mb-3">Nhấn một dòng để xem chi tiết hoạt động.</p>
                 {userBehavior.topUsers.length === 0 ? (
                   <p className="text-sm text-muted">Chưa có query_sent trong mẫu event.</p>
                 ) : (
@@ -626,7 +631,13 @@ export default function AdminReportsPage() {
                     </thead>
                     <tbody>
                       {userBehavior.topUsers.map((row) => (
-                        <tr key={row.uid} className="border-b border-border/50 last:border-0">
+                        <tr
+                          key={row.uid}
+                          className="border-b border-border/50 last:border-0 cursor-pointer hover:bg-accent/8 transition-colors"
+                          onClick={() =>
+                            setSelectedUser({ uid: row.uid, username: row.username })
+                          }
+                        >
                           <td className="py-2 pr-4">{row.username}</td>
                           <td className="py-2 pr-4 text-right tabular-nums">{row.queryCount}</td>
                           <td className="py-2 pr-4 text-right tabular-nums">{row.avgRelevance}</td>
@@ -751,6 +762,13 @@ export default function AdminReportsPage() {
             </section>
           </>
         )}
+
+        <UserAnalyticsDetailModal
+          uid={selectedUser?.uid ?? null}
+          username={selectedUser?.username ?? ""}
+          events={events}
+          onClose={() => setSelectedUser(null)}
+        />
       </div>
     </ProtectedRoute>
   );
