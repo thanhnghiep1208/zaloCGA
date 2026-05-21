@@ -35,7 +35,7 @@ export default function AdminReportsPage() {
     lastRefreshedAt,
     error,
     refresh,
-  } = useAnalyticsReportsData(user?.uid, role, authLoading);
+  } = useAnalyticsReportsData(user, role, authLoading);
 
   const filteredEvents = useMemo(
     () => events.filter((e) => eventInRange(e, timeRange)),

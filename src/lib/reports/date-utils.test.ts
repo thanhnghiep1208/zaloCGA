@@ -23,10 +23,6 @@ describe("dayKeyFromTimestamp", () => {
     const key = dayKeyFromTimestamp({
       seconds: 1_700_000_000,
       nanoseconds: 0,
-      toDate: () => new Date(1_700_000_000_000),
-      toMillis: () => 1_700_000_000_000,
-      isEqual: () => false,
-      toJSON: () => ({ seconds: 1_700_000_000, nanoseconds: 0 }),
     });
     expect(key).toMatch(/^\d{4}-\d{2}-\d{2}$/);
   });
@@ -49,10 +45,6 @@ function ts(iso: string) {
   return {
     seconds: Math.floor(ms / 1000),
     nanoseconds: 0,
-    toDate: () => new Date(ms),
-    toMillis: () => ms,
-    isEqual: () => false,
-    toJSON: () => ({ seconds: Math.floor(ms / 1000), nanoseconds: 0 }),
   };
 }
 

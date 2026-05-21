@@ -1,8 +1,17 @@
 "use client";
 
-import type { ChangeEvent, DragEvent, RefObject } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  type ChangeEvent,
+  type DragEvent,
+  type RefObject,
+} from "react";
 import type { LocalChatImage } from "@/types/chat";
 import { shortImageTitle } from "@/lib/chat/utils";
+
+const TEXTAREA_MIN_HEIGHT_PX = 60;
 
 type Props = {
   input: string;
@@ -37,6 +46,27 @@ export function ChatComposer({
   onDragLeave,
   onDrop,
 }: Props) {
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const syncTextareaHeight = useCallback(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = `${TEXTAREA_MIN_HEIGHT_PX}px`;
+    const next = Math.max(el.scrollHeight, TEXTAREA_MIN_HEIGHT_PX);
+    el.style.height = `${next}px`;
+    el.style.overflowY = el.scrollHeight > el.clientHeight ? "auto" : "hidden";
+  }, []);
+
+  useEffect(() => {
+    syncTextareaHeight();
+  }, [input, syncTextareaHeight]);
+
+  useEffect(() => {
+    const onResize = () => syncTextareaHeight();
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, [syncTextareaHeight]);
+
   return (
     <div className="pt-3 bg-background/95 backdrop-blur z-10 shrink-0 space-y-2">
       <p className="text-center text-[11px] text-muted max-w-4xl mx-auto px-2">
@@ -115,6 +145,7 @@ export function ChatComposer({
 
         <div className="relative flex items-end">
           <textarea
+            ref={textareaRef}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => {
@@ -124,9 +155,10 @@ export function ChatComposer({
               }
             }}
             placeholder="Hỏi guideline hoặc mô tả microcopy (vị trí UI, hành động, giới hạn ký tự)…"
-            className="scrollbar-none w-full max-h-36 min-h-[60px] resize-none overflow-y-auto bg-transparent py-4 pl-5 pr-24 text-[15px] text-foreground outline-none"
+            className="scrollbar-none w-full min-h-[60px] max-h-[min(50vh,400px)] resize-none bg-transparent py-4 pl-5 pr-24 text-[15px] leading-relaxed text-foreground outline-none"
             rows={1}
             disabled={isLoading}
+            aria-label="Nội dung tin nhắn"
           />
           <button
             type="button"

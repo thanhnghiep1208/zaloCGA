@@ -1,19 +1,24 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { collection, getDocs, limit, orderBy, query } from "firebase/firestore";
-import { db } from "@/lib/firebase";
-import {
-  ANALYTICS_EVENT_LIMIT,
-  CHAT_SESSION_SAMPLE_LIMIT,
-  type AnalyticsEvent,
-  type ChatSessionRow,
-} from "@/lib/reports/types";
+import type { User } from "firebase/auth";
+import { firebaseBearerAuthHeader } from "@/lib/client-bearer-auth";
+import { toFriendlyErrorMessage } from "@/lib/user-error";
+import type { AnalyticsEvent, ChatSessionRow } from "@/lib/reports/types";
 
 export const REPORTS_AUTO_REFRESH_MS = 6 * 60 * 60 * 1000;
 
+type ReportsApiResponse = {
+  success: boolean;
+  events?: AnalyticsEvent[];
+  chatSessions?: ChatSessionRow[];
+  usernameByUid?: Record<string, string>;
+  error?: string;
+  userMessage?: string;
+};
+
 export function useAnalyticsReportsData(
-  userId: string | undefined,
+  user: User | null,
   role: string | null | undefined,
   authLoading: boolean
 ) {
@@ -26,72 +31,49 @@ export function useAnalyticsReportsData(
   const [error, setError] = useState<string | null>(null);
   const fetchIdRef = useRef(0);
 
-  const fetchReportsData = useCallback(async (isManualOrScheduled = false) => {
-    if (!userId || (role !== "admin" && role !== "contributor")) return;
+  const fetchReportsData = useCallback(
+    async (isManualOrScheduled = false) => {
+      if (!user || (role !== "admin" && role !== "contributor")) return;
 
-    const fetchId = ++fetchIdRef.current;
-    if (isManualOrScheduled) {
-      setRefreshing(true);
-    } else {
-      setLoading(true);
-    }
-    setError(null);
+      const fetchId = ++fetchIdRef.current;
+      if (isManualOrScheduled) {
+        setRefreshing(true);
+      } else {
+        setLoading(true);
+      }
+      setError(null);
 
-    try {
-      const eventsQ = query(
-        collection(db, "analyticsEvents"),
-        orderBy("createdAt", "desc"),
-        limit(ANALYTICS_EVENT_LIMIT)
-      );
-      const usersQ = query(collection(db, "users"), orderBy("createdAt", "desc"));
-      const sessionsQ = query(
-        collection(db, "chatSessions"),
-        orderBy("updatedAt", "desc"),
-        limit(CHAT_SESSION_SAMPLE_LIMIT)
-      );
+      try {
+        const authHeader = await firebaseBearerAuthHeader(user);
+        const res = await fetch("/api/admin/reports", {
+          headers: { ...authHeader },
+        });
+        const data = (await res.json()) as ReportsApiResponse;
 
-      const [eventsSnap, usersSnap, sessionsSnap] = await Promise.all([
-        getDocs(eventsQ),
-        getDocs(usersQ),
-        getDocs(sessionsQ),
-      ]);
+        if (fetchId !== fetchIdRef.current) return;
 
-      if (fetchId !== fetchIdRef.current) return;
+        if (!res.ok || !data.success) {
+          throw new Error(
+            data.userMessage || data.error || "Không tải được dữ liệu báo cáo."
+          );
+        }
 
-      setEvents(
-        eventsSnap.docs.map((d) => ({
-          id: d.id,
-          ...(d.data() as Omit<AnalyticsEvent, "id">),
-        }))
-      );
-
-      const map = new Map<string, string>();
-      usersSnap.docs.forEach((d) => {
-        const data = d.data() as { uid?: string; username?: string };
-        const uid = data.uid ?? d.id;
-        const name = String(data.username || "").trim();
-        if (uid && name) map.set(uid, name);
-      });
-      setUsernameByUid(map);
-
-      setChatSessions(
-        sessionsSnap.docs.map((d) => {
-          const data = d.data() as Omit<ChatSessionRow, "id">;
-          return { id: d.id, ...data };
-        })
-      );
-
-      setLastRefreshedAt(new Date());
-    } catch (err) {
-      if (fetchId !== fetchIdRef.current) return;
-      console.error("Failed to load analytics reports", err);
-      setError("Không tải được dữ liệu báo cáo. Thử bấm Cập nhật lại.");
-    } finally {
-      if (fetchId !== fetchIdRef.current) return;
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, [userId, role]);
+        setEvents(data.events ?? []);
+        setUsernameByUid(new Map(Object.entries(data.usernameByUid ?? {})));
+        setChatSessions(data.chatSessions ?? []);
+        setLastRefreshedAt(new Date());
+      } catch (err) {
+        if (fetchId !== fetchIdRef.current) return;
+        console.error("Failed to load analytics reports", err);
+        setError(toFriendlyErrorMessage(err));
+      } finally {
+        if (fetchId !== fetchIdRef.current) return;
+        setLoading(false);
+        setRefreshing(false);
+      }
+    },
+    [user, role]
+  );
 
   const refresh = useCallback(() => {
     void fetchReportsData(true);
@@ -99,7 +81,7 @@ export function useAnalyticsReportsData(
 
   useEffect(() => {
     if (authLoading) return;
-    if (!userId || (role !== "admin" && role !== "contributor")) {
+    if (!user || (role !== "admin" && role !== "contributor")) {
       setLoading(false);
       return;
     }
@@ -114,7 +96,7 @@ export function useAnalyticsReportsData(
       fetchIdRef.current += 1;
       window.clearInterval(intervalId);
     };
-  }, [userId, role, authLoading, fetchReportsData]);
+  }, [user, role, authLoading, fetchReportsData]);
 
   return {
     events,

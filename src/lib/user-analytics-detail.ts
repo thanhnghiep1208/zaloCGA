@@ -1,10 +1,10 @@
-import type { Timestamp } from "firebase/firestore";
+import type { FirestoreTimestampLike } from "@/lib/reports/types";
 
 export type AnalyticsEventLike = {
   id: string;
   eventName: string;
   payload: Record<string, unknown>;
-  createdAt?: Timestamp;
+  createdAt?: FirestoreTimestampLike;
 };
 
 export type UserQueryRow = {
@@ -49,7 +49,7 @@ const ACTIVITY_EVENT_NAMES = new Set([
   "response_copied",
 ]);
 
-function dayKeyFromTimestamp(ts?: Timestamp): string | null {
+function dayKeyFromTimestamp(ts?: FirestoreTimestampLike): string | null {
   return ts ? new Date(ts.seconds * 1000).toISOString().slice(0, 10) : null;
 }
 
@@ -70,7 +70,7 @@ function formatDayLabel(isoDate: string): string {
   return d.toLocaleDateString("vi-VN", { weekday: "short", day: "2-digit", month: "2-digit" });
 }
 
-function formatEventTime(ts?: Timestamp): { atLabel: string; atMs: number } {
+function formatEventTime(ts?: FirestoreTimestampLike): { atLabel: string; atMs: number } {
   if (!ts) return { atLabel: "—", atMs: 0 };
   const at = new Date(ts.seconds * 1000);
   return {

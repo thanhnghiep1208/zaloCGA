@@ -4,15 +4,19 @@ export const ANALYTICS_EVENT_LIMIT = 500;
 export const CHAT_SESSION_SAMPLE_LIMIT = 300;
 export const RE_QUERY_GAP_MS = 2 * 60 * 1000;
 
-export type AnalyticsEvent = AnalyticsEventLike;
+/** Firestore timestamp fields as plain data (client SDK, Admin SDK, or JSON API). */
+export type FirestoreTimestampLike = {
+  seconds: number;
+  nanoseconds?: number;
+};
 
-import type { Timestamp } from "firebase/firestore";
+export type AnalyticsEvent = AnalyticsEventLike;
 
 export type ChatSessionRow = {
   id: string;
   userId: string;
   messages: { role: string; timestamp?: number }[];
-  updatedAt?: Timestamp;
+  updatedAt?: FirestoreTimestampLike;
 };
 
 export type TopUserRow = {

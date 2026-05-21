@@ -1,5 +1,4 @@
-import type { Timestamp } from "firebase/firestore";
-import type { AnalyticsEvent, ChatSessionRow } from "@/lib/reports/types";
+import type { AnalyticsEvent, ChatSessionRow, FirestoreTimestampLike } from "@/lib/reports/types";
 
 export type ReportsTimeRange = "today" | "7d" | "30d";
 
@@ -21,7 +20,7 @@ export function getRangeStartMs(range: ReportsTimeRange, now: Date = new Date())
   return end - days * MS_PER_DAY;
 }
 
-export function timestampToMs(ts?: Timestamp): number | null {
+export function timestampToMs(ts?: FirestoreTimestampLike): number | null {
   if (!ts) return null;
   return ts.seconds * 1000;
 }
@@ -65,7 +64,7 @@ export function reportsTimeRangeLabel(range: ReportsTimeRange): string {
   return "30 ngày";
 }
 
-export function dayKeyFromTimestamp(ts?: Timestamp): string | null {
+export function dayKeyFromTimestamp(ts?: FirestoreTimestampLike): string | null {
   return ts ? new Date(ts.seconds * 1000).toISOString().slice(0, 10) : null;
 }
 
