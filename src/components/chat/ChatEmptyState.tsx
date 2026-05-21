@@ -19,12 +19,34 @@ export function ChatEmptyState() {
             />
           </svg>
         </div>
-        <div className="space-y-2 text-foreground">
-          <h3 className="text-xl font-medium tracking-tight">Bắt đầu một câu hỏi</h3>
-          <p className="text-sm text-muted leading-relaxed">
-            Ví dụ tra cứu: quy tắc CTA, thuật ngữ, tone & voice. Ví dụ microcopy: toast lỗi upload, nhãn
-            nút, empty state — kèm ngữ cảnh và giới hạn ký tự nếu có.
-          </p>
+        <div className="space-y-3 text-foreground">
+          <h3 className="text-xl font-medium tracking-tight">
+            Prompt theo mẫu nếu bạn cần hỗ trợ viết
+          </h3>
+          <div className="text-sm text-muted leading-relaxed text-left space-y-3">
+            <div>
+              <p className="text-foreground/90">1. Goal:</p>
+              <p className="italic">
+                - Bạn muốn truyền đạt điều gì đến người đọc, và muốn đạt được gì từ content này?
+              </p>
+            </div>
+            <div>
+              <p className="text-foreground/90">2. Người đọc sẽ thấy nội dung này vào hoàn cảnh:</p>
+              <p className="italic">- Context &amp; usecase cho content này là gì?</p>
+            </div>
+            <div>
+              <p className="text-foreground/90">3. Nội dung này giúp:</p>
+              <p className="italic">
+                - Người đọc hiểu được gì hoặc làm được gì khi đọc content này?
+              </p>
+            </div>
+            <div>
+              <p className="text-foreground/90">4. Định dạng UI:</p>
+              <p className="italic">
+                - Fullscreen, btm sheet, snackbar,…hay chỉ là title, CTA,…?
+              </p>
+            </div>
+          </div>
         </div>
       </div>
     </div>

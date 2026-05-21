@@ -27,7 +27,7 @@ export function useAnalyticsReportsData(
   const fetchIdRef = useRef(0);
 
   const fetchReportsData = useCallback(async (isManualOrScheduled = false) => {
-    if (!userId || role !== "admin") return;
+    if (!userId || (role !== "admin" && role !== "contributor")) return;
 
     const fetchId = ++fetchIdRef.current;
     if (isManualOrScheduled) {
@@ -99,7 +99,7 @@ export function useAnalyticsReportsData(
 
   useEffect(() => {
     if (authLoading) return;
-    if (!userId || role !== "admin") {
+    if (!userId || (role !== "admin" && role !== "contributor")) {
       setLoading(false);
       return;
     }

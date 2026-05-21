@@ -50,17 +50,17 @@ service cloud.firestore {
         && (resource.data.userId == request.auth.uid || isAdmin());
     }
 
-    // Chat history: owner access; admin read for analytics dashboard.
+    // Chat history: owner access; contributor/admin read for analytics dashboard.
     match /chatSessions/{sessionId} {
       allow create: if signedIn() && request.resource.data.userId == request.auth.uid;
       allow read: if signedIn()
-        && (resource.data.userId == request.auth.uid || isAdmin());
+        && (resource.data.userId == request.auth.uid || isContributorOrAdmin());
       allow update, delete: if signedIn() && resource.data.userId == request.auth.uid;
     }
 
     // User profiles are admin-provisioned only (no self-registration).
     match /users/{userId} {
-      allow read: if ownUserDoc(userId) || isAdmin();
+      allow read: if ownUserDoc(userId) || isContributorOrAdmin();
 
       allow create: if isAdmin()
         && request.resource.data.uid == userId;
@@ -80,9 +80,9 @@ service cloud.firestore {
       allow create, update, delete: if isContributorOrAdmin();
     }
 
-    // Analytics events are server-written. Admin can read for dashboard.
+    // Analytics events are server-written. Contributor/admin can read for dashboard.
     match /analyticsEvents/{eventId} {
-      allow read: if isAdmin();
+      allow read: if isContributorOrAdmin();
       allow write: if false;
     }
   }

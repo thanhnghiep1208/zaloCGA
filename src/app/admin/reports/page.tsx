@@ -70,7 +70,7 @@ export default function AdminReportsPage() {
   const maxDau = Math.max(1, ...userBehavior.dauByDay.map((d) => d.count));
 
   return (
-    <ProtectedRoute allowedRoles={["admin"]}>
+    <ProtectedRoute allowedRoles={["admin", "contributor"]}>
       <div className="space-y-8">
         <div>
           <h1 className="text-2xl font-light tracking-tight">Analytics Reports</h1>
