@@ -3,21 +3,23 @@ export const USERNAME_MIN_LENGTH = 3;
 export const USERNAME_MAX_LENGTH = 32;
 export const USERNAME_PATTERN = /^[a-z0-9._-]+$/;
 
-const DEFAULT_INTERNAL_AUTH_EMAIL_DOMAIN = "accounts.internal";
+import { getClientInternalAuthEmailDomain } from "@/lib/env/client";
+import { resolveInternalAuthEmailDomain } from "@/lib/env/internal-auth-domain";
+
+let cachedServerDomain: string | undefined;
 
 export function getInternalAuthEmailDomain(): string {
-  const fromEnv =
-    typeof process !== "undefined"
-      ? process.env.NEXT_PUBLIC_INTERNAL_AUTH_EMAIL_DOMAIN ||
-        process.env.INTERNAL_AUTH_EMAIL_DOMAIN
-      : undefined;
-  const domain = (fromEnv ?? DEFAULT_INTERNAL_AUTH_EMAIL_DOMAIN).trim().toLowerCase();
-  if (!domain || domain.includes("@")) {
-    throw new Error(
-      "Invalid INTERNAL_AUTH_EMAIL_DOMAIN: use a domain only (e.g. accounts.internal)"
-    );
+  if (typeof window !== "undefined") {
+    return getClientInternalAuthEmailDomain();
   }
-  return domain;
+  if (cachedServerDomain !== undefined) {
+    return cachedServerDomain;
+  }
+  cachedServerDomain = resolveInternalAuthEmailDomain({
+    public: process.env.NEXT_PUBLIC_INTERNAL_AUTH_EMAIL_DOMAIN,
+    internal: process.env.INTERNAL_AUTH_EMAIL_DOMAIN,
+  });
+  return cachedServerDomain;
 }
 
 /** Lowercase, trimmed username for storage and login. */

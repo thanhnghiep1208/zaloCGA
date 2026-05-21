@@ -56,15 +56,18 @@ Typical vars:
 - `NEXT_PUBLIC_FIREBASE_APP_ID`
 - `FIREBASE_SERVICE_ACCOUNT_KEY`
 - `NEXT_PUBLIC_INTERNAL_AUTH_EMAIL_DOMAIN` and `INTERNAL_AUTH_EMAIL_DOMAIN` (same value; username → Auth email mapping)
-- `GEMINI_API_KEY` and other AI keys used by `/api/*`
+- `GEMINI_API_KEY` (chat + ingest PDF; default model `gemini-3.5-flash`)
+- Optional: `GEMINI_CHAT_MODELS` (comma-separated fallback list for `/api/chat`)
 - See `docs/PRE_LIVE_ENV_CHECKLIST.md` for the full pre-live list
 
 ## 4) Post-release validation
 
 Right after rollout:
 
+- Run `npm run validate:env` locally if env changed (auth domain pair)
 - Open production `/login` (confirm no Google sign-in; username/password flow)
 - Test `/chat`, `/chat/[id]`, and one admin page
+- Admin `/admin/reports`: time-range filters and manual refresh
 - Verify Firestore writes for chat history are correct
 - Watch App Hosting logs for 5-10 minutes
 - Check error monitoring (if enabled)

@@ -8,6 +8,7 @@ import {
   requireUidFromRequest,
 } from "@/lib/api-request-auth";
 import { logAnalyticsEvent } from "@/lib/analytics-events";
+import { GEMINI_FLASH_MODEL } from "@/lib/gemini-models";
 
 // Initialize Gemini for Server-side extraction via v1beta
 const ai = new GoogleGenAI({ 
@@ -59,11 +60,11 @@ export async function POST(req: Request) {
     let extractedText = "";
     const parseStart = Date.now();
 
-    // 2. Extract using Gemini 3 Flash Preview (AI OCR & Parsing)
+    // 2. Extract using Gemini 3.5 Flash (AI OCR & Parsing)
     if (isPdf) {
        try {
          const result = await ai.models.generateContent({
-           model: "gemini-3-flash-preview",
+           model: GEMINI_FLASH_MODEL,
            contents: [
              {
                role: "user",
@@ -76,9 +77,10 @@ export async function POST(req: Request) {
          });
 
          extractedText = result.text || "";
-       } catch (aiError: any) {
+       } catch (aiError: unknown) {
          console.error("Gemini Extraction Failure:", aiError);
-         throw new Error(`AI Extraction Engine failed: ${aiError.message}`);
+         const msg = aiError instanceof Error ? aiError.message : String(aiError);
+         throw new Error(`AI Extraction Engine failed: ${msg}`);
        }
     } else if (isDocx) {
        try {

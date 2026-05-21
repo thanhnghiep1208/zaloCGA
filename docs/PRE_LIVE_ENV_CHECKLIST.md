@@ -12,10 +12,16 @@ Dat trong **Firebase Console -> App Hosting -> Backend -> Environment variables*
 - `NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET`
 - `NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID`
 - `NEXT_PUBLIC_FIREBASE_APP_ID`
-- `GEMINI_API_KEY`
+- `GEMINI_API_KEY` (chat `/api/chat` + PDF ingest `/api/ingest`; model mac dinh `gemini-3.5-flash`)
 - `FIREBASE_SERVICE_ACCOUNT_KEY` (khuyen nghi dung Secret Manager, xem muc 3)
 - `NEXT_PUBLIC_INTERNAL_AUTH_EMAIL_DOMAIN` (domain noi bo map username -> Firebase email, vi du `accounts.internal`)
-- `INTERNAL_AUTH_EMAIL_DOMAIN` (cung gia tri, dung tren server/API)
+- `INTERNAL_AUTH_EMAIL_DOMAIN` (**bat buoc cung gia tri** voi bien `NEXT_PUBLIC_*`; server fail startup neu khac nhau)
+
+> Kiem tra local: `npm run validate:env` (doc `.env.example`). Runtime server goi `src/instrumentation.ts` de validate cap domain.
+
+## 1b) Gemini (tuy chon)
+
+- `GEMINI_CHAT_MODELS` — danh sach model chat, phan cach bang dau phay. Mac dinh: `gemini-3.5-flash,gemini-3-flash-preview,gemini-2.5-flash`
 
 ## 2) Khuyen nghi cho production
 
@@ -30,7 +36,15 @@ Dat trong **Firebase Console -> App Hosting -> Backend -> Environment variables*
   - Gan secret vao backend env theo huong dan App Hosting.
 - Dam bao service account co quyen toi thieu can thiet (Firestore/Auth/Storage theo luong app).
 
-## 4) Bien toi uu token/chat (tuy chon, nen dat ro)
+## 4) Kiem tra truoc build (khuyen nghi)
+
+```bash
+npm run validate:env
+npm test
+npm run build
+```
+
+## 5) Bien toi uu token/chat (tuy chon, nen dat ro)
 
 - `RETRIEVAL_MAX_SNIPPETS` (goi y: `8`-`10` neu can tong hop nhieu nguon)
 - `RETRIEVAL_MAX_CHARS_PER_SNIPPET` (goi y: `2500`-`4000`)
@@ -40,12 +54,12 @@ Dat trong **Firebase Console -> App Hosting -> Backend -> Environment variables*
 
 > Neu chua dat cac bien tren, app van chay bang gia tri mac dinh trong code.
 
-## 5) Availability cho NEXT_PUBLIC_* (quan trong)
+## 6) Availability cho NEXT_PUBLIC_* (quan trong)
 
 Voi `NEXT_PUBLIC`_*, dam bao bien co hieu luc trong giai doan **BUILD**.
 Neu chi doi env ma khong rollout lai, frontend co the van dung gia tri cu.
 
-## 6) Quy trinh cap nhat env dung
+## 7) Quy trinh cap nhat env dung
 
 1. Cap nhat env trong Firebase App Hosting backend.
 2. Rollout lai de build/runtime nhan gia tri moi:
@@ -53,10 +67,11 @@ Neu chi doi env ma khong rollout lai, frontend co the van dung gia tri cu.
   - Chay `firebase deploy --only apphosting`.
 3. Kiem tra rollout thanh cong trong Firebase Console -> App Hosting -> Rollouts.
 
-## 7) Smoke test sau rollout (5-10 phut)
+## 8) Smoke test sau rollout (5-10 phut)
 
 - Firebase Console -> Authentication: bat **Email/Password**, tat **Google**.
 - Admin da tao it nhat 1 tai khoan (xem `docs/FIREBASE_DEPLOY.md` muc Auth); Firestore `users/{uid}` dung document ID = Auth UID.
+- Mo `/admin/reports`: theo [ANALYTICS_REPORTS.md](./ANALYTICS_REPORTS.md#smoke-test-admin).
 - Mo `/login`: khong co nut Google; co mo ta *Zalo Content Guidelines* va footer lien he cap tai khoan.
 - Dang nhap bang **username + password** (khong phai email hien thi; khong co dang ky tu phuc vu).
 - (Tuy chon) Cung user dang nhap tren 2 trinh duyet -> ca hai vao `/chat` duoc (da phiên la mac dinh; xem `docs/FIREBASE_DEPLOY.md` muc 3.2).
@@ -66,7 +81,7 @@ Neu chi doi env ma khong rollout lai, frontend co the van dung gia tri cu.
 - Mo trang admin bang user thuong -> bi chan dung (403/redirect).
 - Kiem tra log App Hosting khong co loi env thieu.
 
-## 8) Dau hieu cau hinh sai thuong gap
+## 9) Dau hieu cau hinh sai thuong gap
 
 - Production van hien thi Google login / UI cu:
   - Chua rollout tu commit moi tren live branch (chi deploy rules khong doi Next.js UI).

@@ -23,7 +23,7 @@ Tài liệu này là bản tổng hợp end-to-end cho dự án: kiến trúc t�
 - **Frontend + Backend app:** Next.js App Router (`src/app/`*)
 - **Auth / DB / Storage:** Firebase Auth, Firestore, Firebase Storage
 - **Server admin access:** Firebase Admin SDK
-- **LLM:** Google GenAI (`gemini-3-flash-preview`)
+- **LLM:** Google GenAI (`gemini-3.5-flash`, fallback `gemini-3-flash-preview` / `gemini-2.5-flash`)
 - **DOCX parsing:** `mammoth`
 - **Deploy runtime:** Firebase App Hosting (Cloud Run managed)
 
@@ -94,7 +94,7 @@ Tóm tắt kỹ thuật:
 - `src/app/admin/library/page.tsx`: quản lý tài liệu.
 - `src/app/admin/upload/page.tsx`: upload + gọi ingest.
 - `src/app/admin/users/page.tsx`: admin tạo user, đổi role, reset mật khẩu, vô hiệu hóa, xóa (gọi `/api/admin/users`).
-- `src/app/admin/reports/page.tsx`: **Analytics Reports** — dashboard telemetry (chỉ `admin`). Chi tiết: mục 8.6.
+- `src/app/admin/reports/page.tsx`: **Analytics Reports** — dashboard telemetry (chỉ `admin`). Chi tiết: [ANALYTICS_REPORTS.md](./ANALYTICS_REPORTS.md).
 
 ### 4.3 Auth context và phân quyền UI
 
@@ -136,7 +136,7 @@ Chức năng:
 2. Check role `admin|contributor`.
 3. Validate `fileUrl` chỉ cho phép URL Firebase Storage bucket hiện tại (chống SSRF).
 4. Tải binary file và parse:
-  - PDF: dùng Gemini OCR/text extraction.
+  - PDF: dùng Gemini (`gemini-3.5-flash` — xem `src/lib/gemini-models.ts`).
   - DOCX: dùng `mammoth`.
   - TXT/CSV: decode text.
 5. Trả về `textContent` để client ghi vào Firestore `documents`.
@@ -167,10 +167,18 @@ Các event khác (`parse_success`, `query_sent`, `response_delivered`) được 
     - Tra cứu guideline
     - Soạn microcopy UX
   - Luôn yêu cầu `SOURCES_USED` ở cuối câu trả lời.
+  - Chat model: mặc định `gemini-3.5-flash`, fallback `gemini-3-flash-preview` → `gemini-2.5-flash` (override bằng `GEMINI_CHAT_MODELS`, comma-separated).
+- `src/lib/gemini-models.ts` — hằng số model Gemini dùng chung (chat + ingest PDF).
 - `src/lib/retrieval/FirebaseRetrievalProvider.ts`
   - Dùng Admin SDK đọc `documents` có `status == "indexed"`.
 
-## 5.6 Firebase Admin init
+## 5.6 Env validation (server)
+
+- `src/lib/env/internal-auth-domain.ts` — parse và so khớp `NEXT_PUBLIC_INTERNAL_AUTH_EMAIL_DOMAIN` với `INTERNAL_AUTH_EMAIL_DOMAIN`.
+- `src/instrumentation.ts` — khi Node runtime khởi động, gọi `validateServerEnv()`; **fail startup** nếu hai biến domain được set nhưng khác nhau.
+- Local / CI: `npm run validate:env` (đọc `.env` / `.env.local`). Mẫu biến: `.env.example`.
+
+## 5.7 Firebase Admin init
 
 - `src/lib/firebase-admin.ts`
   - Ưu tiên `FIREBASE_SERVICE_ACCOUNT_KEY` (JSON string).
@@ -216,34 +224,9 @@ Lịch sử chat theo user:
 
 ## 6.4 Collection `analyticsEvents`
 
-Telemetry nội bộ phục vụ dashboard **Analytics Reports** (`/admin/reports`). Mỗi document:
+Telemetry nội bộ cho dashboard **Analytics Reports** (`/admin/reports`). Schema: `eventName`, `payload`, `createdAt` (server timestamp). Chỉ Admin SDK được `create` (`firestore.rules`: client `write: false`).
 
-| Field | Mô tả |
-| --- | --- |
-| `eventName` | Loại sự kiện (xem bảng dưới) |
-| `payload` | Object tuỳ loại event (thường có `user_id`) |
-| `createdAt` | Server timestamp khi ghi |
-
-**Quy tắc ghi:** chỉ server (Admin SDK) được `create`; client **không** ghi trực tiếp Firestore (`firestore.rules`: `write: false`).
-
-### Các loại event
-
-| `eventName` | Nguồn ghi | Payload chính |
-| --- | --- | --- |
-| `file_uploaded` | Client → `POST /api/events` (sau upload Storage, từ `/admin/upload`) | `file_type`, `size`, `user_id` |
-| `parse_success` | Server → `/api/ingest` | `rule_count_extracted`, `latency_ms`, `user_id` |
-| `query_sent` | Server → `/api/chat` | `query_text`, `type` (`guideline` \| `microcopy`), `user_id` |
-| `response_delivered` | Server → `/api/chat` (sau stream xong) | `response_type`, `relevance_score`, `latency_ms`, `referenced_sources[]`, `user_id` |
-| `user_feedback` | Client → `POST /api/events` (nút 👍/👎 trên `/chat`) | `feedback` (`thumbs_up` \| `thumbs_down`), `session_id`, `message_id`, `user_id` |
-| `session_started` | Client → `POST /api/events` (tin chat đầu tiên tạo session trên `/chat`) | `session_id`, `user_id` |
-| `session_ended` | Client → `POST /api/events` (unmount `/chat` hoặc idle 10 phút) | `session_id`, `duration_ms`, `query_count`, `user_id` |
-| `response_copied` | Client → `POST /api/events` (nút copy câu trả lời) | `session_id`, `message_id`, `user_id` |
-
-**Phân loại query/response:** `inferQueryType()` trong `src/lib/analytics-events.ts` — heuristic từ khóa (microcopy, toast, button, …); mặc định `guideline`.
-
-**Relevance score:** `estimateRelevanceScore()` — overlap token đơn giản giữa câu hỏi và câu trả lời (0–1), không phải đánh giá LLM.
-
-**Giới hạn dashboard:** trang reports đọc tối đa **500** event mới nhất (`orderBy createdAt desc`).
+Bảng đầy đủ loại event, luồng ghi, giới hạn mẫu 500/300, filter thời gian và metric UI: **[ANALYTICS_REPORTS.md](./ANALYTICS_REPORTS.md)**.
 
 ---
 
@@ -352,60 +335,11 @@ Telemetry nội bộ phục vụ dashboard **Analytics Reports** (`/admin/report
 
 - Giới hạn N máy hoặc “chỉ một phiên”, cảnh báo đăng nhập thiết bị mới.
 
-## 8.6 Analytics Reports flow
+## 8.6 Analytics Reports
 
-**Truy cập:** Sidebar → **Analytics Reports** (`/admin/reports`) — chỉ user có `role: "admin"`. `ProtectedRoute` + Firestore rules chặn role khác.
+Dashboard tại `/admin/reports` (admin only): telemetry từ `analyticsEvents`, polling **6 giờ** + nút **Cập nhật**, filter **Hôm nay / 7 / 30 ngày** (UTC).
 
-**Luồng dữ liệu:**
-
-1. User/contributor upload tài liệu → `file_uploaded`.
-2. Ingest thành công → `parse_success`.
-3. User chat → `query_sent` rồi `response_delivered` (kèm latency, relevance, nguồn được trích dẫn).
-4. User bấm 👍/👎 → `user_feedback`; copy câu trả lời → `response_copied`.
-5. Phiên chat: tin đầu tiên → `session_started`; rời trang hoặc idle 10 phút → `session_ended` (`duration_ms`, `query_count`).
-6. Trang reports subscribe realtime `analyticsEvents` (tối đa 500 bản ghi) và aggregate thành các chỉ số dưới đây.
-7. **User detail:** admin nhấn một dòng trong bảng Top users → modal hiển thị timeline 30 ngày, danh sách `query_sent`, tỷ lệ feedback cá nhân, tài liệu được tham chiếu nhiều nhất (từ `response_delivered.referenced_sources` trong cùng mẫu event).
-
-### Nhóm metric trên UI
-
-**Upload & Parsing**
-
-| Chỉ số UI | Cách tính (tóm tắt) |
-| --- | --- |
-| Số lượng file upload | Đếm `file_uploaded` |
-| PDF / Word / khác | Phân loại từ `payload.file_type` |
-| Kích thước trung bình | Trung bình `payload.size` (KB) |
-| Tỷ lệ parse thành công | `parse_success` / `file_uploaded` × 100% |
-| Avg parse latency | Trung bình `latency_ms` trên `parse_success` |
-| Coverage rules | Tổng / trung bình `rule_count_extracted` trên `parse_success` |
-
-**Query & Response**
-
-| Chỉ số UI | Cách tính (tóm tắt) |
-| --- | --- |
-| Invocation count | Đếm `query_sent` (guideline vs microcopy) |
-| Success rate (proxy) | 👍 / (👍 + 👎) × 100% — *không* phải tỷ lệ HTTP thành công |
-| Response quality | Trung bình `relevance_score` trên `response_delivered` |
-| Feedback rate | (👍 + 👎) / số `response_delivered` × 100% |
-| Avg response latency | Trung bình `latency_ms` trên `response_delivered` |
-
-**Hiệu suất & Retention**
-
-| Chỉ số UI | Cách tính (tóm tắt) |
-| --- | --- |
-| Latency by complexity | Avg latency theo `response_type` guideline / microcopy |
-| Usage funnel | Upload→Parse, Parse→Query, Query→Accepted (%) |
-| Retention D1 / D7 | % user quay lại đúng ngày +1 / +7 sau ngày đầu có event (theo `user_id`) |
-| Top referenced sources | File được trích dẫn nhiều nhất trong `referenced_sources` |
-
-### Khi dashboard trống hoặc toàn số 0
-
-- Chưa có traffic thật: cần ít nhất một lượt upload+ingest và/hoặc chat có feedback.
-- Role không phải admin: listener Firestore trả `permission-denied`, UI không có số liệu.
-- Môi trường mới deploy: collection `analyticsEvents` rỗng cho đến khi có hoạt động.
-- **Google Analytics** (`NEXT_PUBLIC_GA_ID`) là kênh riêng (gtag); **không** đổ vào trang Analytics Reports này.
-
-**File liên quan:** `src/app/admin/reports/page.tsx`, `src/lib/analytics-events.ts`, `src/app/api/events/route.ts`, `src/app/api/chat/route.ts`, `src/app/api/ingest/route.ts`.
+**Tài liệu đầy đủ:** [ANALYTICS_REPORTS.md](./ANALYTICS_REPORTS.md) — event schema, metric definitions, code map, troubleshooting, smoke test.
 
 ---
 
@@ -424,7 +358,11 @@ Bắt buộc (App Hosting -> Backend -> Environment variables):
 - `NEXT_PUBLIC_INTERNAL_AUTH_EMAIL_DOMAIN` (client: map username → email Auth)
 - `INTERNAL_AUTH_EMAIL_DOMAIN` (server/API admin; **cùng giá trị** với biến `NEXT_PUBLIC_*`)
 
-Mặc định trong code nếu không set: `accounts.internal` (email Auth dạng `admin@accounts.internal`).
+Mặc định trong code nếu không set: `accounts.internal` (email Auth dạng `admin@accounts.internal`). Server **từ chối khởi động** nếu hai biến domain được set nhưng khác nhau.
+
+Tùy chọn (Gemini):
+
+- `GEMINI_CHAT_MODELS` — danh sách model chat, phân tách bằng dấu phẩy. Mặc định: `gemini-3.5-flash`, `gemini-3-flash-preview`, `gemini-2.5-flash` (thử lần lượt khi model trước lỗi).
 
 Khuyến nghị:
 
@@ -473,11 +411,13 @@ Nếu backend App Hosting đã nối GitHub branch live (`main`), push code lên
 ## 10.3 Checklist release ngắn
 
 1. `npm install` (khi có đổi dependency)
-2. `npm run build`
-3. Smoke test local các flow chính
-4. Commit + push
-5. Theo dõi App Hosting rollout đến `Succeeded`
-6. Smoke test production + log monitor
+2. `npm run validate:env` (kiểm tra cặp domain auth, tùy chọn trước deploy)
+3. `npm test` (Vitest — reports, chat stream, env, retrieval)
+4. `npm run build`
+5. Smoke test local các flow chính
+6. Commit + push
+7. Theo dõi App Hosting rollout đến `Succeeded`
+8. Smoke test production + log monitor
 
 ## 10.4 Cron xóa ảnh chat hết TTL (Storage)
 
@@ -500,6 +440,8 @@ Nếu không đặt `CHAT_ATTACHMENTS_CRON_SECRET`, route cron trả `503` (chư
 - **Đăng nhập báo *Tài khoản chưa được cấp quyền*:** Auth đã OK nhưng thiếu hoặc sai `users/{auth.uid}` trong Firestore (document ID phải **bằng** UID Firebase Auth, không dùng Auto-ID).
 - **Admin không vào được:** kiểm tra email Auth = `{username}@{INTERNAL_AUTH_EMAIL_DOMAIN}` và field `role: "admin"` trong `users/{uid}`.
 - **Server configuration error** ở API: thiếu hoặc sai `FIREBASE_SERVICE_ACCOUNT_KEY` / project id env.
+- **Startup crash env domain:** `INTERNAL_AUTH_EMAIL_DOMAIN` và `NEXT_PUBLIC_INTERNAL_AUTH_EMAIL_DOMAIN` khác nhau — đặt cùng một giá trị (ví dụ `accounts.internal`).
+- **Chat/ingest Gemini lỗi model:** kiểm tra `GEMINI_API_KEY` và quyền model `gemini-3.5-flash`; fallback tự thử model trong `GEMINI_CHAT_MODELS`.
 - **storage/unauthorized** khi upload: kiểm tra role user doc và deploy `storage.rules` mới nhất.
 - **`googletagmanager.com` ERR_BLOCKED_BY_CLIENT:** ad blocker chặn Google Analytics; không ảnh hưởng đăng nhập/chat nếu không dùng GA.
 - **Hydration mismatch có `bis_skin_checked`:** thường do browser extension chèn DOM, không phải lỗi app.
@@ -509,7 +451,9 @@ Nếu không đặt `CHAT_ATTACHMENTS_CRON_SECRET`, route cron trả `503` (chư
 
 ## 12) Tài liệu liên quan
 
+- `docs/ANALYTICS_REPORTS.md` - dashboard `/admin/reports` (telemetry, filter, metrics)
 - `docs/HUONG_DAN_LEN_LIVE.md` - runbook deploy hằng ngày (tiếng Việt)
 - `docs/RELEASE_PROCESS.md` - quy trình release tổng quát
 - `docs/FIREBASE_DEPLOY.md` - checklist Firebase deploy/env
+- `docs/PRE_LIVE_ENV_CHECKLIST.md` - audit env trước production
 

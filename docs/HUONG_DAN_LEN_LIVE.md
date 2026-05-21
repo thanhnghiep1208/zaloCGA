@@ -11,9 +11,11 @@ Dự án deploy production qua **Firebase App Hosting**. Sau khi cập nhật t�
 ## Bước 1 — Kiểm tra trên máy
 
 ```bash
-npm install   # nếu vừa đổi package.json
+npm install          # nếu vừa đổi package.json
+npm run validate:env # kiểm tra cặp INTERNAL_AUTH / NEXT_PUBLIC domain
+npm test             # Vitest (reports, env, chat stream, …)
 npm run build
-npm run dev   # smoke test nhanh
+npm run dev          # smoke test nhanh
 ```
 
 Nên thử nhanh các luồng liên quan tới thay đổi của bạn, ví dụ:
@@ -22,6 +24,7 @@ Nên thử nhanh các luồng liên quan tới thay đổi của bạn, ví dụ
 - Đăng nhập, mở `/chat`, gửi tin (API `/api/chat` có auth).
 - `/admin/users` nếu sửa quản lý tài khoản.
 - Upload tài liệu nếu sửa ingest/admin.
+- `/admin/reports` nếu sửa analytics (filter thời gian, nút Cập nhật).
 - Trang landing hoặc metadata nếu sửa SEO.
 
 ---
@@ -71,8 +74,9 @@ firebase deploy --only firestore:rules,storage
 ### Đổi biến môi trường trên App Hosting
 
 1. **Firebase Console → App Hosting → Backend → Environment variables**
-2. Sửa/thêm biến (ví dụ `GEMINI_API_KEY`, `FIREBASE_SERVICE_ACCOUNT_KEY`, `NEXT_PUBLIC_INTERNAL_AUTH_EMAIL_DOMAIN`, `INTERNAL_AUTH_EMAIL_DOMAIN`, các `NEXT_PUBLIC_*`, `NEXT_PUBLIC_SITE_URL`…).
-3. **Bắt buộc rollout lại** để build nhận giá trị mới (đặc biệt với `NEXT_PUBLIC_`*):
+2. Sửa/thêm biến (ví dụ `GEMINI_API_KEY`, `GEMINI_CHAT_MODELS` (tùy chọn), `FIREBASE_SERVICE_ACCOUNT_KEY`, `NEXT_PUBLIC_INTERNAL_AUTH_EMAIL_DOMAIN`, `INTERNAL_AUTH_EMAIL_DOMAIN` — **hai biến domain phải cùng giá trị**, các `NEXT_PUBLIC_*`, `NEXT_PUBLIC_SITE_URL`…).
+3. Local: `npm run validate:env` trước khi push (đọc `.env.example`).
+4. **Bắt buộc rollout lại** để build nhận giá trị mới (đặc biệt với `NEXT_PUBLIC_`*):
   - push thêm một commit nhỏ, **hoặc**
   - chạy lại `firebase deploy --only apphosting`.
 
@@ -82,6 +86,7 @@ firebase deploy --only firestore:rules,storage
 
 - Mở URL production (ví dụ `https://…hosted.app`).
 - Thử cửa sổ ẩn danh hoặc hard refresh (Cmd+Shift+R) nếu nghi cache.
+- Admin: **Analytics Reports** — checklist trong [ANALYTICS_REPORTS.md](./ANALYTICS_REPORTS.md#smoke-test-admin).
 - Xem log lỗi: **App Hosting → Logs** trong vài phút đầu.
 
 ---

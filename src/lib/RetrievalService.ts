@@ -1,4 +1,5 @@
 import { GoogleGenAI } from "@google/genai";
+import { DEFAULT_GEMINI_CHAT_MODELS } from "@/lib/gemini-models";
 import { RetrievalProvider, RetrievedSnippet } from "./retrieval/interfaces";
 import { FirebaseRetrievalProvider } from "./retrieval/FirebaseRetrievalProvider";
 
@@ -17,10 +18,7 @@ function envList(name: string, fallback: string[]): string[] {
     .filter(Boolean);
 }
 
-const CHAT_MODELS = envList("GEMINI_CHAT_MODELS", [
-  "gemini-3-flash-preview",
-  "gemini-2.5-flash",
-]);
+const CHAT_MODELS = envList("GEMINI_CHAT_MODELS", DEFAULT_GEMINI_CHAT_MODELS);
 
 function extractErrorMessage(error: unknown): string {
   if (error instanceof Error) return error.message;
@@ -127,7 +125,7 @@ KẾT THÚC MỌI CÂU TRẢ LỜI PHẢI LUÔN CÓ (dòng cuối):
       if (!process.env.GEMINI_API_KEY || !process.env.GEMINI_API_KEY.trim()) {
         throw new Error("GEMINI_API_KEY is missing on server runtime.");
       }
-      console.log(`[ChatService] Sending ${contextText.length} chars of context to Gemini 3.`);
+      console.log(`[ChatService] Sending ${contextText.length} chars of context to Gemini.`);
       let lastErr: unknown = null;
       for (const model of CHAT_MODELS) {
         try {

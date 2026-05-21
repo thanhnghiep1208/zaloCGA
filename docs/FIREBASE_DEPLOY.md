@@ -27,7 +27,8 @@ Set these in **Firebase App Hosting > Backend > Environment variables**:
 - `NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID`
 - `NEXT_PUBLIC_FIREBASE_APP_ID`
 - `FIREBASE_SERVICE_ACCOUNT_KEY` (full JSON string of service account)
-- `GEMINI_API_KEY` (cho `/api/chat` và `/api/ingest`)
+- `GEMINI_API_KEY` (cho `/api/chat` và `/api/ingest`; model mặc định `gemini-3.5-flash`, xem `src/lib/gemini-models.ts`)
+- Tùy chọn: `GEMINI_CHAT_MODELS` (danh sách model chat fallback, phân cách dấu phẩy)
 - Tùy chọn: `NEXT_PUBLIC_SITE_URL` (canonical URL cho metadata/OG), `NEXT_PUBLIC_GA_ID`
 - `NEXT_PUBLIC_INTERNAL_AUTH_EMAIL_DOMAIN` và `INTERNAL_AUTH_EMAIL_DOMAIN` (cùng giá trị, ví dụ `accounts.internal`)
 
@@ -100,5 +101,5 @@ firebase deploy --only apphosting
 - Continue chatting: same session document updates
 - Upload document with contributor/admin account: success
 - Open admin pages with regular user account: blocked
-- Admin → **Analytics Reports** (`/admin/reports`): hiển thị metrics sau khi có event trong `analyticsEvents` (upload, chat, feedback)
+- Admin → **Analytics Reports** (`/admin/reports`): xem [ANALYTICS_REPORTS.md](./ANALYTICS_REPORTS.md) (filter thời gian, refresh 6h, smoke test).
 
