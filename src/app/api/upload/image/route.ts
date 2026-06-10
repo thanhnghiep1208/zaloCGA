@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { randomUUID } from "crypto";
-import { ApiAuthError, requireContributorOrAdmin, requireUidFromRequest } from "@/lib/api-request-auth";
+import { requireContributorOrAdmin, requireUidFromRequest } from "@/lib/api-request-auth";
 import { adminStorage, adminStorageBucketName } from "@/lib/firebase-admin";
-import { toFriendlyErrorMessage } from "@/lib/user-error";
+import { nextJsonFriendlyApiError } from "@/lib/server-json-response";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -86,24 +86,10 @@ export async function POST(req: Request) {
       sizeBytes: file.size,
     });
   } catch (error: unknown) {
-    if (error instanceof ApiAuthError) {
-      return NextResponse.json(
-        { success: false, error: error.message, userMessage: toFriendlyErrorMessage(error.message) },
-        { status: error.status }
-      );
-    }
-    const err = error as { message?: string; stack?: string };
-    console.error("Inline image upload error:", error);
-    const details = err.message || "Failed to upload image";
-    return NextResponse.json(
-      {
-        success: false,
-        error: details,
-        userMessage: toFriendlyErrorMessage(details),
-        ...(process.env.NODE_ENV === "development" ? { stack: err.stack } : {}),
-      },
-      { status: 500 }
-    );
+    return nextJsonFriendlyApiError(error, {
+      logLabel: "Inline image upload error:",
+      fallbackDetail: "Failed to upload image",
+    });
   }
 }
 

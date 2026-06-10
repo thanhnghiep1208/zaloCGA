@@ -9,11 +9,30 @@ import { db, storage } from "@/lib/firebase";
 import { ref, deleteObject } from "firebase/storage";
 import { trackEvent } from "@/lib/gtag";
 import { useAuth } from "@/context/AuthContext";
+import { firebaseBearerAuthHeader } from "@/lib/client-bearer-auth";
 import { useTheme } from "@/context/ThemeContext";
 
+type FirestoreTimestampLike = { seconds: number; nanoseconds?: number };
+
+/** Row shape for admin library table (Firestore `documents` + id). */
+type LibraryDocumentRow = {
+  id: string;
+  status?: string;
+  type?: string;
+  mimeType?: string;
+  fileName?: string;
+  title?: string;
+  tags?: string[];
+  fileUrl?: string;
+  storagePath?: string;
+  sizeBytes?: number;
+  description?: string;
+  uploadedEmail?: string | null;
+  uploadedAt?: FirestoreTimestampLike;
+};
 
 export default function AdminLibraryPage() {
-  const [documents, setDocuments] = useState<any[]>([]);
+  const [documents, setDocuments] = useState<LibraryDocumentRow[]>([]);
   const [loading, setLoading] = useState(true);
 
   const [search, setSearch] = useState("");
@@ -31,7 +50,10 @@ export default function AdminLibraryPage() {
 
     const q = query(collection(db, "documents"), orderBy("uploadedAt", "desc"));
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      const docsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      const docsData: LibraryDocumentRow[] = snapshot.docs.map((d) => ({
+        id: d.id,
+        ...(d.data() as Omit<LibraryDocumentRow, "id">),
+      }));
       setDocuments(docsData);
       setLoading(false);
     }, (error) => {
@@ -56,10 +78,10 @@ export default function AdminLibraryPage() {
     try {
       if (type === "inline_doc") {
         if (!user) throw new Error("Not authenticated");
-        const token = await user.getIdToken();
+        const authHeader = await firebaseBearerAuthHeader(user);
         const res = await fetch(`/api/documents/inline/${encodeURIComponent(id)}`, {
           method: "DELETE",
-          headers: { Authorization: `Bearer ${token}` },
+          headers: { ...authHeader },
         });
         if (!res.ok) {
           const data = (await res.json()) as { error?: string };
@@ -128,7 +150,7 @@ export default function AdminLibraryPage() {
       const qs = search.toLowerCase();
       const displayName = (d.fileName || d.title || "").toLowerCase();
       const matchesName = displayName.includes(qs);
-      const matchesTags = d.tags?.some((t: string) => t.toLowerCase().includes(qs));
+      const matchesTags = d.tags?.some((t) => t.toLowerCase().includes(qs));
       if (!matchesName && !matchesTags) return false;
     }
     return true;
@@ -226,13 +248,13 @@ export default function AdminLibraryPage() {
                           </div>
                        </td>
                        <td className="p-4">
-                         <span className={`inline-flex px-2.5 py-1 rounded-md text-xs font-medium border ${getStatusColor(doc.status)}`}>
+                         <span className={`inline-flex px-2.5 py-1 rounded-md text-xs font-medium border ${getStatusColor(doc.status ?? "")}`}>
                            {doc.status}
                          </span>
                        </td>
                        <td className="p-4 text-muted">
                           <div className="flex gap-1 flex-wrap max-w-[200px]">
-                            {doc.tags?.length ? doc.tags.map((t: string) => (
+                            {doc.tags?.length ? doc.tags.map((t) => (
                                <span key={t} className="bg-border/50 text-xs px-2 py-0.5 rounded text-foreground">{t}</span>
                             )) : "—"}
                           </div>
@@ -252,14 +274,21 @@ export default function AdminLibraryPage() {
                              Edit
                            </Link>
                          ) : null}
-                          <button 
-                            onClick={() => handleToggleActive(doc.id, doc.status)} 
+                          <button
+                            onClick={() => handleToggleActive(doc.id, String(doc.status ?? ""))} 
                             className="text-foreground hover:text-link font-medium px-3 py-1.5 rounded-[8px] hover:bg-accent/12 transition-colors mr-2"
                           >
                             {doc.status === "inactive" ? "Activate" : "Deactivate"}
                           </button>
                           <button 
-                            onClick={() => handleDelete(doc.id, doc.storagePath, doc.fileName || doc.title, doc.type)} 
+                            onClick={() =>
+                              handleDelete(
+                                doc.id,
+                                doc.storagePath,
+                                String(doc.fileName || doc.title || "document"),
+                                doc.type
+                              )
+                            } 
                             className="text-muted hover:text-foreground font-medium px-3 py-1.5 rounded-[8px] hover:bg-accent/12 transition-colors"
                           >
                             Delete

@@ -6,6 +6,7 @@ import StarterKit from "@tiptap/starter-kit";
 import { EditorContent, useEditor } from "@tiptap/react";
 import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/context/AuthContext";
+import { firebaseBearerAuthHeader } from "@/lib/client-bearer-auth";
 import { toFriendlyErrorMessage } from "@/lib/user-error";
 
 type InlineDraftPayload = {
@@ -151,7 +152,7 @@ export function InlineDocumentEditor({
 
     setImageUploading(true);
     try {
-      const token = await user.getIdToken();
+      const authHeader = await firebaseBearerAuthHeader(user);
       const form = new FormData();
       form.append("file", file);
       form.append("docId", "draft-inline");
@@ -159,7 +160,7 @@ export function InlineDocumentEditor({
       const res = await fetch("/api/upload/image", {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${token}`,
+          ...authHeader,
         },
         body: form,
       });
