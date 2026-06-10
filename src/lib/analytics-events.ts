@@ -4,12 +4,15 @@ import { adminDb } from "@/lib/firebase-admin";
 export type LoggedEventName =
   | "file_uploaded"
   | "parse_success"
+  | "parse_failed"
   | "query_sent"
   | "response_delivered"
   | "user_feedback"
   | "session_started"
   | "session_ended"
-  | "response_copied";
+  | "response_copied"
+  | "document_viewed"
+  | "attachment_uploaded";
 
 /** Events the client may POST to /api/events (server adds user_id). */
 export type ClientLoggedEventName = Extract<
@@ -19,6 +22,7 @@ export type ClientLoggedEventName = Extract<
   | "session_started"
   | "session_ended"
   | "response_copied"
+  | "document_viewed"
 >;
 
 export const CLIENT_ANALYTICS_EVENTS: ClientLoggedEventName[] = [
@@ -27,6 +31,7 @@ export const CLIENT_ANALYTICS_EVENTS: ClientLoggedEventName[] = [
   "session_started",
   "session_ended",
   "response_copied",
+  "document_viewed",
 ];
 
 export async function logAnalyticsEvent(

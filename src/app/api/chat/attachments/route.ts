@@ -3,6 +3,7 @@ import { randomUUID } from "crypto";
 import { requireUidFromRequest } from "@/lib/api-request-auth";
 import { adminStorage, adminStorageBucketName } from "@/lib/firebase-admin";
 import { nextJsonFriendlyApiError } from "@/lib/server-json-response";
+import { logAnalyticsEvent } from "@/lib/analytics-events";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -64,6 +65,13 @@ export async function POST(req: Request) {
           expiresAt: String(expiresAt),
         },
       },
+    });
+
+    void logAnalyticsEvent("attachment_uploaded", {
+      user_id: uid,
+      session_id: sessionId,
+      file_type: file.type,
+      size: file.size,
     });
 
     return NextResponse.json({

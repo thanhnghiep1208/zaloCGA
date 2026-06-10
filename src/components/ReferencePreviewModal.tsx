@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import { doc, getDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { useAuth } from "@/context/AuthContext";
+import { postClientAnalyticsEvent } from "@/lib/client-analytics-event";
 
 type ReferenceDoc = {
   fileName?: string;
@@ -17,6 +19,7 @@ type ReferencePreviewModalProps = {
 };
 
 export function ReferencePreviewModal({ docId, onClose }: ReferencePreviewModalProps) {
+  const { user } = useAuth();
   const [data, setData] = useState<ReferenceDoc | null>(null);
   const [loading, setLoading] = useState(false);
   const [notFound, setNotFound] = useState(false);
@@ -34,7 +37,14 @@ export function ReferencePreviewModal({ docId, onClose }: ReferencePreviewModalP
           setData(null);
           setNotFound(true);
         } else {
-          setData(snap.data() as ReferenceDoc);
+          const docData = snap.data() as ReferenceDoc;
+          setData(docData);
+          if (user) {
+            void postClientAnalyticsEvent(user, "document_viewed", {
+              doc_id: docId,
+              file_name: docData.fileName ?? docData.title ?? "",
+            });
+          }
         }
       } catch (err) {
         console.error("Failed to load reference preview", err);

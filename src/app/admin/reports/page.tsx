@@ -129,6 +129,15 @@ export default function AdminReportsPage() {
                 <li>
                   <code className="text-xs">response_copied</code> — user copy câu trả lời
                 </li>
+                <li>
+                  <code className="text-xs">parse_failed</code> — ingest thất bại (/api/ingest)
+                </li>
+                <li>
+                  <code className="text-xs">attachment_uploaded</code> — ảnh đính kèm vào chat (/api/chat/attachments)
+                </li>
+                <li>
+                  <code className="text-xs">document_viewed</code> — user mở xem tài liệu tham khảo
+                </li>
               </ul>
             </div>
             <p>
@@ -271,6 +280,11 @@ export default function AdminReportsPage() {
                   <p className="text-xs text-muted mt-1">avg latency {summary.avgParseLatency} ms</p>
                 </div>
                 <div className="clay-card p-4">
+                  <p className="text-xs text-muted">Parse errors</p>
+                  <p className="text-2xl font-light">{summary.parseFailedCount}</p>
+                  <p className="text-xs text-muted mt-1">ai_extraction + docx_parse failures</p>
+                </div>
+                <div className="clay-card p-4">
                   <p className="text-xs text-muted">Coverage rules</p>
                   <p className="text-2xl font-light">{summary.totalRulesExtracted}</p>
                   <p className="text-xs text-muted mt-1">
@@ -305,6 +319,11 @@ export default function AdminReportsPage() {
                 <div className="clay-card p-4">
                   <p className="text-xs text-muted">Avg response latency</p>
                   <p className="text-2xl font-light">{summary.avgResponseLatency} ms</p>
+                </div>
+                <div className="clay-card p-4">
+                  <p className="text-xs text-muted">Attachment uploads</p>
+                  <p className="text-2xl font-light">{summary.attachmentCount}</p>
+                  <p className="text-xs text-muted mt-1">ảnh đính kèm vào chat</p>
                 </div>
               </div>
             </section>
@@ -349,6 +368,25 @@ export default function AdminReportsPage() {
                       <span className="text-xs text-muted">Chưa đủ dữ liệu</span>
                     ) : (
                       summary.topReferencedSources.map(([fileName, count]) => (
+                        <span
+                          key={fileName}
+                          className="text-xs px-2 py-0.5 rounded-[4px] bg-white/5 border border-border"
+                        >
+                          {fileName} ({count})
+                        </span>
+                      ))
+                    )}
+                  </div>
+                </div>
+                <div className="clay-card p-4">
+                  <p className="text-xs text-muted">
+                    Document views ({summary.documentViewedCount} total)
+                  </p>
+                  <div className="mt-2 flex flex-wrap gap-1">
+                    {summary.topViewedDocs.length === 0 ? (
+                      <span className="text-xs text-muted">Chưa có lượt xem tài liệu</span>
+                    ) : (
+                      summary.topViewedDocs.map(([fileName, count]) => (
                         <span
                           key={fileName}
                           className="text-xs px-2 py-0.5 rounded-[4px] bg-white/5 border border-border"

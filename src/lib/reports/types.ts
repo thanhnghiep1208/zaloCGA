@@ -51,6 +51,7 @@ export type EventSummary = {
   uploadedByType: { pdf: number; word: number; other: number };
   avgUploadSizeKB: number;
   parseSuccessRate: number;
+  parseFailedCount: number;
   avgParseLatency: number;
   totalRulesExtracted: number;
   avgRulesPerParsedFile: number;
@@ -71,4 +72,7 @@ export type EventSummary = {
   parseToQuery: number;
   queryToAccepted: number;
   topReferencedSources: [string, number][];
+  attachmentCount: number;
+  documentViewedCount: number;
+  topViewedDocs: [string, number][];
 };

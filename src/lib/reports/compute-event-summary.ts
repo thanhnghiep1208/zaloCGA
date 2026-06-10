@@ -13,10 +13,13 @@ export function computeEventSummary(events: AnalyticsEvent[], loading: boolean):
   const userFirstSeenDay = new Map<string, string>();
   const userSeenByDay = new Map<string, Set<string>>();
   const referencedSourceCount: Record<string, number> = {};
+  const viewedDocCount: Record<string, number> = {};
 
   let totalUploadSize = 0;
   let uploadCount = 0;
   let parseSuccessCount = 0;
+  let parseFailedCount = 0;
+  let attachmentCount = 0;
   let parseLatencyTotal = 0;
   let parseLatencyCount = 0;
   let totalRulesExtracted = 0;
@@ -46,6 +49,19 @@ export function computeEventSummary(events: AnalyticsEvent[], loading: boolean):
       if (fileType.includes("pdf")) uploadedByType.pdf += 1;
       else if (fileType.includes("word") || fileType.includes("docx")) uploadedByType.word += 1;
       else uploadedByType.other += 1;
+    }
+
+    if (e.eventName === "parse_failed") {
+      parseFailedCount += 1;
+    }
+
+    if (e.eventName === "attachment_uploaded") {
+      attachmentCount += 1;
+    }
+
+    if (e.eventName === "document_viewed") {
+      const fileName = String(payload.file_name || payload.doc_id || "").trim();
+      if (fileName) viewedDocCount[fileName] = (viewedDocCount[fileName] || 0) + 1;
     }
 
     if (e.eventName === "parse_success") {
@@ -124,13 +140,23 @@ export function computeEventSummary(events: AnalyticsEvent[], loading: boolean):
   const topReferencedSources = Object.entries(referencedSourceCount)
     .sort((a, b) => b[1] - a[1])
     .slice(0, 8);
+  const topViewedDocs = Object.entries(viewedDocCount)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 8);
+  const parseAttempts = parseSuccessCount + parseFailedCount;
+  const trueParseSuccessRate = parseAttempts > 0
+    ? Math.round((parseSuccessCount / parseAttempts) * 100)
+    : uploadCount
+    ? Math.round((parseSuccessCount / uploadCount) * 100)
+    : 0;
 
   return {
     loading,
     uploadCount,
     uploadedByType,
     avgUploadSizeKB: uploadCount ? Math.round(totalUploadSize / uploadCount / 1024) : 0,
-    parseSuccessRate: uploadCount ? Math.round((parseSuccessCount / uploadCount) * 100) : 0,
+    parseSuccessRate: trueParseSuccessRate,
+    parseFailedCount,
     avgParseLatency: parseLatencyCount ? Math.round(parseLatencyTotal / parseLatencyCount) : 0,
     totalRulesExtracted,
     avgRulesPerParsedFile: parseSuccessCount
@@ -163,5 +189,8 @@ export function computeEventSummary(events: AnalyticsEvent[], loading: boolean):
       ? Math.round((thumbsUp / (byName.query_sent || 1)) * 100)
       : 0,
     topReferencedSources,
+    attachmentCount,
+    documentViewedCount: Object.values(viewedDocCount).reduce((s, c) => s + c, 0),
+    topViewedDocs,
   };
 }

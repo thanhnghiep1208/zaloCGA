@@ -159,6 +159,11 @@ export async function POST(req: Request) {
       } catch (aiError: unknown) {
         const msg = aiError instanceof Error ? aiError.message : String(aiError);
         console.error("[Ingest] PDF extraction failed:", aiError);
+        void logAnalyticsEvent("parse_failed", {
+          user_id: uid,
+          error_type: "ai_extraction",
+          latency_ms: Date.now() - parseStart,
+        });
         throw new Error(`AI Extraction Engine failed: ${msg}`);
       }
     } else if (isDocx) {
@@ -180,6 +185,11 @@ export async function POST(req: Request) {
       } catch (docxErr: unknown) {
         const msg = docxErr instanceof Error ? docxErr.message : String(docxErr);
         console.error("[Ingest] DOCX extraction failed:", docxErr);
+        void logAnalyticsEvent("parse_failed", {
+          user_id: uid,
+          error_type: "docx_parse",
+          latency_ms: Date.now() - parseStart,
+        });
         throw new Error(`DOCX parse failed: ${msg}`);
       }
     } else if (mime.includes("text") || mime.includes("csv")) {
