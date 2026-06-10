@@ -1,10 +1,12 @@
 import { NextResponse } from "next/server";
 import { FieldValue } from "firebase-admin/firestore";
-import { ApiAuthError, requireContributorOrAdmin, requireUidFromRequest } from "@/lib/api-request-auth";
+import { requireContributorOrAdmin, requireUidFromRequest } from "@/lib/api-request-auth";
 import { adminDb, adminStorage, adminStorageBucketName } from "@/lib/firebase-admin";
 import { extractStorageImagesFromHtml, stripHtmlToPlainText } from "@/lib/documents/inlineSanitize";
 import { buildInlineIndexPayload } from "@/lib/documents/indexing";
-import { toFriendlyErrorMessage } from "@/lib/user-error";
+import { cleanInlineTags } from "@/lib/documents/inlineTags";
+import { nextJsonFriendlyApiError } from "@/lib/server-json-response";
+import { writeDocumentChunks, deleteDocumentChunks } from "@/lib/documents/embeddings";
 
 type InlineUpdateBody = {
   title?: string;
@@ -12,14 +14,6 @@ type InlineUpdateBody = {
   tags?: string[];
   contentHtml?: string;
 };
-
-function cleanTags(tags: unknown): string[] {
-  if (!Array.isArray(tags)) return [];
-  return tags
-    .map((t) => (typeof t === "string" ? t.trim() : ""))
-    .filter(Boolean)
-    .slice(0, 20);
-}
 
 export async function PUT(
   req: Request,
@@ -48,7 +42,7 @@ export async function PUT(
     const title = String(body.title || "").trim();
     const contentHtml = String(body.contentHtml || "").trim();
     const category = String(body.category || "").trim();
-    const tags = cleanTags(body.tags);
+    const tags = cleanInlineTags(body.tags);
 
     if (!title) {
       return NextResponse.json({ error: "Title is required" }, { status: 400 });
@@ -77,26 +71,16 @@ export async function PUT(
       updatedBy: uid,
     });
 
+    void writeDocumentChunks(id, title, contentPlain).catch((e) =>
+      console.error("[inline-update] Embedding failed:", e)
+    );
+
     return NextResponse.json({ success: true, id });
   } catch (error: unknown) {
-    if (error instanceof ApiAuthError) {
-      return NextResponse.json(
-        { success: false, error: error.message, userMessage: toFriendlyErrorMessage(error.message) },
-        { status: error.status }
-      );
-    }
-    const err = error as { message?: string; stack?: string };
-    console.error("Update inline doc error:", error);
-    const details = err.message || "Failed to update inline document";
-    return NextResponse.json(
-      {
-        success: false,
-        error: details,
-        userMessage: toFriendlyErrorMessage(details),
-        ...(process.env.NODE_ENV === "development" ? { stack: err.stack } : {}),
-      },
-      { status: 500 }
-    );
+    return nextJsonFriendlyApiError(error, {
+      logLabel: "Update inline doc error:",
+      fallbackDetail: "Failed to update inline document",
+    });
   }
 }
 
@@ -142,27 +126,16 @@ export async function DELETE(
     }
 
     await ref.delete();
+    void deleteDocumentChunks(id).catch((e) =>
+      console.error("[inline-delete] Chunk cleanup failed:", e)
+    );
 
     return NextResponse.json({ success: true, id, deletedBy: uid });
   } catch (error: unknown) {
-    if (error instanceof ApiAuthError) {
-      return NextResponse.json(
-        { success: false, error: error.message, userMessage: toFriendlyErrorMessage(error.message) },
-        { status: error.status }
-      );
-    }
-    const err = error as { message?: string; stack?: string };
-    console.error("Delete inline doc error:", error);
-    const details = err.message || "Failed to delete inline document";
-    return NextResponse.json(
-      {
-        success: false,
-        error: details,
-        userMessage: toFriendlyErrorMessage(details),
-        ...(process.env.NODE_ENV === "development" ? { stack: err.stack } : {}),
-      },
-      { status: 500 }
-    );
+    return nextJsonFriendlyApiError(error, {
+      logLabel: "Delete inline doc error:",
+      fallbackDetail: "Failed to delete inline document",
+    });
   }
 }
 

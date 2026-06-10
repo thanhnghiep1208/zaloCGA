@@ -34,7 +34,7 @@ import type {
 } from "@/types/chat";
 import { SESSION_IDLE_MS } from "@/types/chat";
 
-function debouncedStoredMessages(msgs: ChatMessage[]): StoredMessage[] {
+function toStoredMessages(msgs: ChatMessage[]): StoredMessage[] {
   return msgs
     .filter((m) => !m.isStreaming && m.content)
     .map((m) => ({
@@ -43,19 +43,6 @@ function debouncedStoredMessages(msgs: ChatMessage[]): StoredMessage[] {
       content: m.content,
       sources: m.sources,
       ...(m.attachments && m.attachments.length > 0 ? { attachments: m.attachments } : {}),
-      timestamp: Date.now(),
-    }));
-}
-
-function finalStoredMessages(msgs: ChatMessage[]): StoredMessage[] {
-  return msgs
-    .filter((m) => !m.isStreaming && m.content)
-    .map((m) => ({
-      id: m.id,
-      role: m.role,
-      content: m.content,
-      sources: m.sources,
-      attachments: m.attachments,
       timestamp: Date.now(),
     }));
 }
@@ -75,7 +62,6 @@ export function useChatPage() {
 
   const attachmentInputRef = useRef<HTMLInputElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
-  const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const selectedImagesRef = useRef<LocalChatImage[]>([]);
   const dragDepthRef = useRef(0);
   const sessionIdRef = useRef<string | null>(null);
@@ -139,18 +125,7 @@ export function useChatPage() {
     };
   }, [endSessionAnalytics]);
 
-  const saveSession = useCallback(
-    (msgs: ChatMessage[]) => {
-      if (!sessionId || msgs.length === 0) return;
-      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
-      saveTimeoutRef.current = setTimeout(() => {
-        updateChatSession(sessionId, debouncedStoredMessages(msgs)).catch(console.error);
-      }, 1000);
-    },
-    [sessionId]
-  );
-
-  const buildConversationContext = (): ConversationTurn[] => {
+const buildConversationContext = (): ConversationTurn[] => {
     return messages
       .filter((m) => !m.isStreaming && !!m.content.trim())
       .slice(-8)
@@ -232,10 +207,6 @@ export function useChatPage() {
       sessionQueryCountRef.current = 0;
       sessionEndedSentRef.current = false;
       clearPendingImages();
-      if (saveTimeoutRef.current) {
-        clearTimeout(saveTimeoutRef.current);
-        saveTimeoutRef.current = null;
-      }
       router.replace("/chat");
     })();
   }, [searchParams, router, clearPendingImages, endSessionAnalytics]);
@@ -391,26 +362,24 @@ export function useChatPage() {
 
       const { accumulatedText, finalSources } = streamState;
 
+      // Capture final messages via a local variable so the Firestore save
+      // happens outside the state updater (React calls updaters synchronously,
+      // so savedMessages is populated before the if-block below runs).
+      let savedMessages: ChatMessage[] = [];
       setMessages((prev) => {
-        const finalMessages = prev.map((msg) =>
+        savedMessages = prev.map((msg) =>
           msg.id === assistantId
-            ? {
-                ...msg,
-                content: accumulatedText,
-                sources: finalSources,
-                isStreaming: false,
-              }
+            ? { ...msg, content: accumulatedText, sources: finalSources, isStreaming: false }
             : msg
         );
-        if (currentSessionId) {
-          updateChatSession(currentSessionId, finalStoredMessages(finalMessages)).catch(
-            console.error
-          );
-        } else {
-          saveSession(finalMessages);
-        }
-        return finalMessages;
+        return savedMessages;
       });
+
+      if (currentSessionId && savedMessages.length > 0) {
+        updateChatSession(currentSessionId, toStoredMessages(savedMessages)).catch(
+          console.error
+        );
+      }
       clearPendingImages();
       resetSessionIdleTimer();
     } catch (e) {

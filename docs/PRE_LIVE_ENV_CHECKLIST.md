@@ -19,9 +19,10 @@ Dat trong **Firebase Console -> App Hosting -> Backend -> Environment variables*
 
 > Kiem tra local: `npm run validate:env` (doc `.env.example`). Runtime server goi `src/instrumentation.ts` de validate cap domain.
 
-## 1b) Gemini (tuy chon)
+## 1b) Gemini & chat (tuy chon)
 
 - `GEMINI_CHAT_MODELS` — danh sach model chat, phan cach bang dau phay. Mac dinh: `gemini-3.5-flash,gemini-3-flash-preview,gemini-2.5-flash`
+- `CHAT_RATE_LIMIT_PER_MINUTE` — so request toi da moi user moi phut. Mac dinh: `20`
 
 ## 2) Khuyen nghi cho production
 
@@ -48,7 +49,8 @@ npm run build
 
 - `RETRIEVAL_MAX_SNIPPETS` (goi y: `8`-`10` neu can tong hop nhieu nguon)
 - `RETRIEVAL_MAX_CHARS_PER_SNIPPET` (goi y: `2500`-`4000`)
-- `RETRIEVAL_FIRESTORE_FETCH_LIMIT` (goi y: `80`-`150`)
+- `RETRIEVAL_VECTOR_CANDIDATES` (goi y: `20`-`30` — so chunk lay tu vector search truoc khi dedup)
+- `RETRIEVAL_FIRESTORE_FETCH_LIMIT` (goi y: `80`-`150` — chi dung cho lexical fallback)
 - `CHAT_CONVERSATION_MAX_CHARS_PER_TURN` (goi y: `1500`-`3000`)
 - `CHAT_QUERY_MAX_CHARS` (goi y: `6000`-`12000`)
 
@@ -75,9 +77,11 @@ Neu chi doi env ma khong rollout lai, frontend co the van dung gia tri cu.
 - Mo `/login`: khong co nut Google; co mo ta *Zalo Content Guidelines* va footer lien he cap tai khoan.
 - Dang nhap bang **username + password** (khong phai email hien thi; khong co dang ky tu phuc vu).
 - (Tuy chon) Cung user dang nhap tren 2 trinh duyet -> ca hai vao `/chat` duoc (da phiên la mac dinh; xem `docs/FIREBASE_DEPLOY.md` muc 3.2).
-- Mo `/chat`, gui 1 cau hoi -> co stream response.
+- Mo `/chat`, gui 1 cau hoi -> co stream response (NDJSON — Content-Type `application/x-ndjson`).
 - Kiem tra `/api/chat` khong loi `Unauthorized` neu token hop le.
-- Upload tai lieu bang tai khoan contributor/admin (neu dung ingest).
+- Gui >20 message/phut voi 1 user -> phai nhan `429 Rate limit exceeded`.
+- Upload tai lieu bang tai khoan contributor/admin; log App Hosting co `[Ingest] Wrote N chunks`.
+- Kiem tra Firestore Console: collection `document_chunks` co documents voi field `embedding`.
 - Mo trang admin bang user thuong -> bi chan dung (403/redirect).
 - Kiem tra log App Hosting khong co loi env thieu.
 

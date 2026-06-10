@@ -24,6 +24,7 @@ Tài liệu này là bản tổng hợp end-to-end cho dự án: kiến trúc t�
 - **Auth / DB / Storage:** Firebase Auth, Firestore, Firebase Storage
 - **Server admin access:** Firebase Admin SDK
 - **LLM:** Google GenAI (`gemini-3.5-flash`, fallback `gemini-3-flash-preview` / `gemini-2.5-flash`)
+- **Embedding:** `text-embedding-004` (768 chiều) — dùng cho vector search
 - **DOCX parsing:** `mammoth`
 - **Deploy runtime:** Firebase App Hosting (Cloud Run managed)
 
@@ -40,10 +41,12 @@ Tài liệu này là bản tổng hợp end-to-end cho dự án: kiến trúc t�
   - `POST /api/chat`: xác thực + retrieval + stream câu trả lời
   - `POST /api/ingest`: xác thực + quyền contributor/admin + parse nội dung file
 - **Firestore:**
-  - `documents`: kho tri thức đã index
+  - `documents`: kho tri thức đã index (metadata + full text)
+  - `document_chunks`: đoạn văn bản nhỏ với vector embedding (dùng cho vector search)
   - `chatSessions`: lịch sử chat theo user
   - `users`: profile + role (`user`, `contributor`, `admin`)
   - `analyticsEvents`: telemetry nội bộ (server ghi, admin đọc dashboard)
+  - `rate_limits`: counter rate-limit per-user per phút (TTL tự dọn qua Firestore policy)
 - **Storage:**
   - Bucket chứa file upload tại `documents/`*
 
@@ -119,12 +122,14 @@ File: `src/app/api/chat/route.ts`
 Chức năng:
 
 1. Verify Firebase ID token (`requireUidFromRequest`).
-2. Nhận `query` từ body.
-3. Retrieval tài liệu qua `RetrievalService.getContext`.
-4. Generate stream câu trả lời từ Gemini.
-5. Stream về client theo định dạng:
-  - chunk đầu chứa danh sách source (`type: "sources"`)
-  - phần text stream liên tục phía sau.
+2. **Rate limit**: kiểm tra Firestore `rate_limits/{uid}_{windowKey}` — mặc định 20 req/phút (env `CHAT_RATE_LIMIT_PER_MINUTE`); trả `429` nếu vượt.
+3. Nhận `query`, `conversation` (history), `attachments`, `sessionId` từ body.
+4. Retrieval tài liệu qua `RetrievalService.getContext` (vector search → lexical fallback, xem 5.5).
+5. Generate stream câu trả lời từ Gemini; conversation history được truyền đúng chuẩn multi-turn `contents[]` thay vì nhúng vào system prompt.
+6. Stream về client theo **định dạng NDJSON** — mỗi dòng là một JSON object:
+   - Dòng 1: `{"t":"s","d":[...ChatSource[]]}` — danh sách nguồn tài liệu (gửi trước khi có text)
+   - Dòng 2..N: `{"t":"x","d":"text delta"}` — từng đoạn text từ Gemini
+   - `Content-Type: application/x-ndjson`
 
 ## 5.2 API ingest (`POST /api/ingest`)
 
@@ -136,10 +141,15 @@ Chức năng:
 2. Check role `admin|contributor`.
 3. Validate `fileUrl` chỉ cho phép URL Firebase Storage bucket hiện tại (chống SSRF).
 4. Tải binary file và parse:
-  - PDF: dùng Gemini (`gemini-3.5-flash` — xem `src/lib/gemini-models.ts`).
-  - DOCX: dùng `mammoth`.
-  - TXT/CSV: decode text.
-5. Trả về `textContent` để client ghi vào Firestore `documents`.
+   - **PDF < 4 MB**: gửi inline base64 tới `gemini-3.5-flash`.
+   - **PDF ≥ 4 MB**: upload lên **Gemini File API** → poll đến `state === ACTIVE` (timeout 90s) → dùng `fileData` URI → tự động xóa file sau khi extract xong. Nếu File API lỗi, fallback về inline.
+   - **DOCX**: dùng `mammoth`.
+   - **TXT/CSV**: decode text.
+5. **Chunking + Embedding**: nếu request chứa `docId`, tự động:
+   - Chunk text thành đoạn ~1800 ký tự với overlap 200 ký tự.
+   - Gọi Gemini `text-embedding-004` (768 chiều) để embed từng chunk (5 concurrent).
+   - Ghi vào collection `document_chunks` qua Firestore batch write.
+6. Trả về `{ textContent, chunkCount }` để client ghi `textContent + status: "indexed"` vào `documents`.
 
 ## 5.3 API quản lý user (admin)
 
@@ -167,10 +177,14 @@ Các event khác (`parse_success`, `query_sent`, `response_delivered`) được 
     - Tra cứu guideline
     - Soạn microcopy UX
   - Luôn yêu cầu `SOURCES_USED` ở cuối câu trả lời.
+  - Conversation history được truyền vào `contents[]` chuẩn multi-turn (không nhúng vào system prompt).
   - Chat model: mặc định `gemini-3.5-flash`, fallback `gemini-3-flash-preview` → `gemini-2.5-flash` (override bằng `GEMINI_CHAT_MODELS`, comma-separated).
 - `src/lib/gemini-models.ts` — hằng số model Gemini dùng chung (chat + ingest PDF).
-- `src/lib/retrieval/FirebaseRetrievalProvider.ts`
-  - Dùng Admin SDK đọc `documents` có `status == "indexed"`.
+- `src/lib/retrieval/FirebaseRetrievalProvider.ts` — **hai chế độ retrieval**:
+  1. **Vector search (ưu tiên):** embed query bằng `text-embedding-004` → `findNearest()` trên collection `document_chunks` (COSINE, lấy top `RETRIEVAL_VECTOR_CANDIDATES` = 20) → dedup theo `docId` → trả ≤ `RETRIEVAL_MAX_SNIPPETS` (mặc định 6). Yêu cầu Firestore vector index đã deploy (xem mục 10).
+  2. **Lexical fallback:** nếu vector search thất bại hoặc trả về 0 kết quả (tài liệu chưa được embed), fetch ≤ `RETRIEVAL_FIRESTORE_FETCH_LIMIT` (mặc định 120) docs từ collection `documents`, rank bằng keyword overlap (`countTermHits`), lấy top `RETRIEVAL_MAX_SNIPPETS`.
+- `src/lib/documents/chunking.ts` — chia text thành `TextChunk[]` (~1800 ký tự/chunk, overlap 200 ký tự, tôn trọng ranh giới đoạn văn).
+- `src/lib/documents/embeddings.ts` — wrapper `text-embedding-004`: `embedTexts()` (batch), `embedQuery()` (RETRIEVAL_QUERY task type), `writeDocumentChunks()`, `deleteDocumentChunks()`.
 
 ## 5.6 Env validation (server)
 
@@ -210,8 +224,22 @@ Dữ liệu tri thức đã upload/index:
 - `fileName`, `fileUrl`, `storagePath`, `mimeType`, `sizeBytes`
 - `status`: `processing | indexed | failed | inactive | ...`
 - `description`, `tags`
-- `textContent` (nội dung đã extract để retrieval)
+- `textContent` (nội dung đã extract — dùng cho lexical fallback và hiển thị)
 - `uploadedBy`, `uploadedEmail`, `uploadedAt`, `updatedAt`
+
+## 6.2b Collection `document_chunks`
+
+Chunks nhỏ của tài liệu — backbone của vector search:
+
+- `docId` (ref tới `documents/{id}`)
+- `fileName` (copy từ document cha để tra cứu nhanh)
+- `chunkIndex` (vị trí trong document)
+- `text` (nội dung đoạn, ~1800 ký tự)
+- `embedding` (Firestore `VectorValue`, 768 chiều — `text-embedding-004`)
+- `status`: `"indexed"`
+- `createdAt`
+
+Chunks tự được tạo/cập nhật/xóa khi document được ingest, inline doc được tạo/sửa/xóa. Xem `src/lib/documents/embeddings.ts`.
 
 ## 6.3 Collection `chatSessions`
 
@@ -227,6 +255,16 @@ Lịch sử chat theo user:
 Telemetry nội bộ cho dashboard **Analytics Reports** (`/admin/reports`). Schema: `eventName`, `payload`, `createdAt` (server timestamp). Chỉ Admin SDK được `create` (`firestore.rules`: client `write: false`).
 
 Bảng đầy đủ loại event, luồng ghi, giới hạn mẫu 500/300, filter thời gian và metric UI: **[ANALYTICS_REPORTS.md](./ANALYTICS_REPORTS.md)**.
+
+## 6.5 Collection `rate_limits`
+
+Counter rate-limit per-user per phút:
+
+- Document ID: `{uid}_{windowKey}` (windowKey = `Math.floor(Date.now() / 60000)`)
+- `count` (số request trong window hiện tại)
+- `expireAt` (Timestamp — end of next window)
+
+**Quan trọng:** cần bật **Firestore TTL policy** trên field `expireAt` để tự dọn docs cũ (xem mục 10.2).
 
 ---
 
@@ -360,9 +398,17 @@ Bắt buộc (App Hosting -> Backend -> Environment variables):
 
 Mặc định trong code nếu không set: `accounts.internal` (email Auth dạng `admin@accounts.internal`). Server **từ chối khởi động** nếu hai biến domain được set nhưng khác nhau.
 
-Tùy chọn (Gemini):
+Tùy chọn (Gemini & chat):
 
 - `GEMINI_CHAT_MODELS` — danh sách model chat, phân tách bằng dấu phẩy. Mặc định: `gemini-3.5-flash`, `gemini-3-flash-preview`, `gemini-2.5-flash` (thử lần lượt khi model trước lỗi).
+- `CHAT_RATE_LIMIT_PER_MINUTE` — số request tối đa mỗi user mỗi phút. Mặc định: `20`.
+
+Tùy chọn (retrieval):
+
+- `RETRIEVAL_VECTOR_CANDIDATES` — số chunk candidates lấy từ `findNearest()` trước khi dedup theo docId. Mặc định: `20`.
+- `RETRIEVAL_MAX_SNIPPETS` — số snippet tối đa truyền vào context Gemini. Mặc định: `6`.
+- `RETRIEVAL_MAX_CHARS_PER_SNIPPET` — ký tự tối đa mỗi snippet. Mặc định: `2600`.
+- `RETRIEVAL_FIRESTORE_FETCH_LIMIT` — giới hạn doc khi dùng lexical fallback. Mặc định: `120`.
 
 Khuyến nghị:
 
@@ -400,13 +446,27 @@ Deploy app:
 npx -y firebase-tools@latest deploy --only apphosting
 ```
 
-Deploy rules:
+Deploy Firestore rules + **indexes** (bao gồm vector index `document_chunks.embedding`):
 
 ```bash
-npx -y firebase-tools@latest deploy --only firestore:rules,storage
+npx -y firebase-tools@latest deploy --only firestore:rules,firestore:indexes,storage
 ```
 
+> **Lần đầu deploy vector index:** index ở trạng thái `CREATING` vài phút. Trong thời gian đó, vector search sẽ lỗi và tự động fallback về lexical search — không ảnh hưởng hoạt động.
+
 Nếu backend App Hosting đã nối GitHub branch live (`main`), push code lên branch đó sẽ tự rollout.
+
+## 10.2b Cấu hình Firestore TTL policy (một lần)
+
+Sau deploy lần đầu, bật TTL để tự dọn `rate_limits` docs cũ:
+
+1. Firebase Console → **Firestore** → **Indexes** → tab **TTL Policies**
+2. **Add TTL policy**: Collection `rate_limits`, Field `expireAt`
+3. Save. (TTL xóa docs trong vài giờ sau khi `expireAt` qua — không phải ngay lập tức.)
+
+## 10.2c Re-index tài liệu hiện có (một lần sau khi deploy vector search)
+
+Tài liệu upload trước khi có vector search **chưa có chunks** — sẽ chỉ được tìm bằng lexical fallback. Để re-index toàn bộ, upload lại từng tài liệu trong `/admin/library` hoặc chạy migration script riêng.
 
 ## 10.3 Checklist release ngắn
 
@@ -417,7 +477,8 @@ Nếu backend App Hosting đã nối GitHub branch live (`main`), push code lên
 5. Smoke test local các flow chính
 6. Commit + push
 7. Theo dõi App Hosting rollout đến `Succeeded`
-8. Smoke test production + log monitor
+8. `firebase deploy --only firestore:indexes` nếu thay đổi `firestore.indexes.json`
+9. Smoke test production + log monitor
 
 ## 10.4 Cron xóa ảnh chat hết TTL (Storage)
 
@@ -442,6 +503,10 @@ Nếu không đặt `CHAT_ATTACHMENTS_CRON_SECRET`, route cron trả `503` (chư
 - **Server configuration error** ở API: thiếu hoặc sai `FIREBASE_SERVICE_ACCOUNT_KEY` / project id env.
 - **Startup crash env domain:** `INTERNAL_AUTH_EMAIL_DOMAIN` và `NEXT_PUBLIC_INTERNAL_AUTH_EMAIL_DOMAIN` khác nhau — đặt cùng một giá trị (ví dụ `accounts.internal`).
 - **Chat/ingest Gemini lỗi model:** kiểm tra `GEMINI_API_KEY` và quyền model `gemini-3.5-flash`; fallback tự thử model trong `GEMINI_CHAT_MODELS`.
+- **Vector search lỗi `index not ready`:** index `document_chunks.embedding` chưa deploy hoặc đang tạo → retrieval tự fallback lexical, deploy index bằng `firebase deploy --only firestore:indexes`.
+- **Chat trả `429 Rate limit exceeded`:** user gửi quá `CHAT_RATE_LIMIT_PER_MINUTE` (mặc định 20) req/phút. Tăng giới hạn qua env nếu cần.
+- **Tài liệu cũ không xuất hiện qua vector search:** chưa được re-index sau khi deploy embedding — upload lại hoặc chạy migration. Tài liệu vẫn được tìm qua lexical fallback.
+- **PDF lớn bị timeout khi ingest:** File API đang poll `state === ACTIVE`; timeout 90s. Kiểm tra kích thước PDF và log App Hosting.
 - **storage/unauthorized** khi upload: kiểm tra role user doc và deploy `storage.rules` mới nhất.
 - **`googletagmanager.com` ERR_BLOCKED_BY_CLIENT:** ad blocker chặn Google Analytics; không ảnh hưởng đăng nhập/chat nếu không dùng GA.
 - **Hydration mismatch có `bis_skin_checked`:** thường do browser extension chèn DOM, không phải lỗi app.

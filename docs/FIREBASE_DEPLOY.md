@@ -27,8 +27,9 @@ Set these in **Firebase App Hosting > Backend > Environment variables**:
 - `NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID`
 - `NEXT_PUBLIC_FIREBASE_APP_ID`
 - `FIREBASE_SERVICE_ACCOUNT_KEY` (full JSON string of service account)
-- `GEMINI_API_KEY` (cho `/api/chat` và `/api/ingest`; model mặc định `gemini-3.5-flash`, xem `src/lib/gemini-models.ts`)
+- `GEMINI_API_KEY` (cho `/api/chat`, `/api/ingest`, và embedding `text-embedding-004`; model mặc định `gemini-3.5-flash`, xem `src/lib/gemini-models.ts`)
 - Tùy chọn: `GEMINI_CHAT_MODELS` (danh sách model chat fallback, phân cách dấu phẩy)
+- Tùy chọn: `CHAT_RATE_LIMIT_PER_MINUTE` (mặc định `20` req/phút/user)
 - Tùy chọn: `NEXT_PUBLIC_SITE_URL` (canonical URL cho metadata/OG), `NEXT_PUBLIC_GA_ID`
 - `NEXT_PUBLIC_INTERNAL_AUTH_EMAIL_DOMAIN` và `INTERNAL_AUTH_EMAIL_DOMAIN` (cùng giá trị, ví dụ `accounts.internal`)
 
@@ -76,11 +77,21 @@ Chi tiet pre-live audit env (bat buoc + khuyen nghi + token tuning):
 
 Chi tiết kiến trúc: [PROJECT_OVERVIEW.md](./PROJECT_OVERVIEW.md) mục 8.5.
 
-## 4) Deploy security rules
+## 4) Deploy security rules + indexes
 
 ```bash
-firebase deploy --only firestore:rules,storage
+firebase deploy --only firestore:rules,firestore:indexes,storage
 ```
+
+> `firestore:indexes` deploy cả vector index cho collection `document_chunks` (field `embedding`, 768 chiều). Index ở trạng thái `CREATING` vài phút — trong thời gian đó retrieval tự fallback về lexical search.
+
+## 4b) Bật Firestore TTL policy (một lần)
+
+Sau deploy lần đầu, bật TTL để tự dọn documents cũ trong `rate_limits`:
+
+1. **Firebase Console → Firestore → Indexes → TTL Policies → Add**
+2. Collection: `rate_limits` | Field: `expireAt`
+3. Save.
 
 ## 5) Deploy app
 
@@ -99,7 +110,8 @@ firebase deploy --only apphosting
 - Open `/chat` then exit: no empty `chatSessions` doc created
 - Send first message: `chatSessions` doc is created
 - Continue chatting: same session document updates
-- Upload document with contributor/admin account: success
+- Upload document with contributor/admin account: success; log App Hosting có `[Ingest] Wrote N chunks for doc ...`
 - Open admin pages with regular user account: blocked
+- Gửi chat nhiều hơn 20 lần/phút → nhận `429 Rate limit exceeded`
 - Admin → **Analytics Reports** (`/admin/reports`): xem [ANALYTICS_REPORTS.md](./ANALYTICS_REPORTS.md) (filter thời gian, refresh 6h, smoke test).
 

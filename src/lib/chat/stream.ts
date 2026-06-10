@@ -1,13 +1,8 @@
 import type { ChatSource } from "@/types/chat";
-import { CHAT_STREAM_CHUNK_SPLIT } from "@/lib/chat/constants";
-
-export type ChatStreamSourcesPayload = {
-  type: "sources";
-  data: ChatSource[];
-};
 
 export type ChatStreamParseState = {
-  buffer: string;
+  /** Bytes received but not yet parsed (incomplete last line). */
+  lineBuffer: string;
   hasParsedSources: boolean;
   accumulatedText: string;
   finalSources: ChatSource[];
@@ -15,7 +10,7 @@ export type ChatStreamParseState = {
 
 export function createChatStreamParseState(): ChatStreamParseState {
   return {
-    buffer: "",
+    lineBuffer: "",
     hasParsedSources: false,
     accumulatedText: "",
     finalSources: [],
@@ -23,35 +18,42 @@ export function createChatStreamParseState(): ChatStreamParseState {
 }
 
 /**
- * Feed one decoded chunk into the stream parser. Returns sources when the split marker is first seen.
+ * Feed one decoded chunk into the NDJSON stream parser.
+ *
+ * Each server line is a JSON object:
+ *   {"t":"s","d":[...ChatSource[]]}  — sources (always first line)
+ *   {"t":"x","d":"text delta"}       — text chunk
+ *
+ * Returns the sources array the first time it is parsed; null otherwise.
  */
 export function feedChatStreamChunk(
   state: ChatStreamParseState,
   chunk: string
 ): ChatSource[] | null {
-  state.buffer += chunk;
+  state.lineBuffer += chunk;
+  let sourcesFound: ChatSource[] | null = null;
 
-  if (state.hasParsedSources) {
-    state.accumulatedText += chunk;
-    return null;
-  }
+  while (true) {
+    const nlIdx = state.lineBuffer.indexOf("\n");
+    if (nlIdx === -1) break;
 
-  const splitIndex = state.buffer.indexOf(CHAT_STREAM_CHUNK_SPLIT);
-  if (splitIndex === -1) return null;
+    const line = state.lineBuffer.slice(0, nlIdx).trim();
+    state.lineBuffer = state.lineBuffer.slice(nlIdx + 1);
+    if (!line) continue;
 
-  const sourcesPart = state.buffer.slice(0, splitIndex);
-  const textPart = state.buffer.slice(splitIndex + CHAT_STREAM_CHUNK_SPLIT.length);
-  state.hasParsedSources = true;
-  state.accumulatedText += textPart;
-
-  try {
-    const sourcesJson = JSON.parse(sourcesPart) as ChatStreamSourcesPayload;
-    if (sourcesJson.type === "sources" && Array.isArray(sourcesJson.data)) {
-      state.finalSources = sourcesJson.data;
-      return sourcesJson.data;
+    try {
+      const msg = JSON.parse(line) as { t: string; d: unknown };
+      if (msg.t === "s" && Array.isArray(msg.d)) {
+        state.finalSources = msg.d as ChatSource[];
+        state.hasParsedSources = true;
+        sourcesFound = state.finalSources;
+      } else if (msg.t === "x" && typeof msg.d === "string") {
+        state.accumulatedText += msg.d;
+      }
+    } catch {
+      /* ignore malformed lines */
     }
-  } catch {
-    /* ignore malformed sources prefix */
   }
-  return null;
+
+  return sourcesFound;
 }

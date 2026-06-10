@@ -1,10 +1,12 @@
 import { NextResponse } from "next/server";
 import { FieldValue } from "firebase-admin/firestore";
-import { ApiAuthError, requireContributorOrAdmin, requireUidFromRequest } from "@/lib/api-request-auth";
+import { requireContributorOrAdmin, requireUidFromRequest } from "@/lib/api-request-auth";
 import { adminDb } from "@/lib/firebase-admin";
 import { extractStorageImagesFromHtml, stripHtmlToPlainText } from "@/lib/documents/inlineSanitize";
 import { buildInlineIndexPayload } from "@/lib/documents/indexing";
-import { toFriendlyErrorMessage } from "@/lib/user-error";
+import { cleanInlineTags } from "@/lib/documents/inlineTags";
+import { nextJsonFriendlyApiError } from "@/lib/server-json-response";
+import { writeDocumentChunks } from "@/lib/documents/embeddings";
 
 type InlineCreateBody = {
   title?: string;
@@ -13,14 +15,6 @@ type InlineCreateBody = {
   contentHtml?: string;
   uploadedEmail?: string;
 };
-
-function cleanTags(tags: unknown): string[] {
-  if (!Array.isArray(tags)) return [];
-  return tags
-    .map((t) => (typeof t === "string" ? t.trim() : ""))
-    .filter(Boolean)
-    .slice(0, 20);
-}
 
 export async function POST(req: Request) {
   try {
@@ -35,7 +29,7 @@ export async function POST(req: Request) {
     const title = String(body.title || "").trim();
     const contentHtml = String(body.contentHtml || "").trim();
     const category = String(body.category || "").trim();
-    const tags = cleanTags(body.tags);
+    const tags = cleanInlineTags(body.tags);
     const uploadedEmail = typeof body.uploadedEmail === "string" ? body.uploadedEmail : null;
 
     if (!title) {
@@ -67,26 +61,17 @@ export async function POST(req: Request) {
     };
 
     const ref = await adminDb.collection("documents").add(payload);
+
+    void writeDocumentChunks(ref.id, title, contentPlain).catch((e) =>
+      console.error("[inline-create] Embedding failed:", e)
+    );
+
     return NextResponse.json({ success: true, id: ref.id });
   } catch (error: unknown) {
-    if (error instanceof ApiAuthError) {
-      return NextResponse.json(
-        { success: false, error: error.message, userMessage: toFriendlyErrorMessage(error.message) },
-        { status: error.status }
-      );
-    }
-    const err = error as { message?: string; stack?: string };
-    console.error("Create inline doc error:", error);
-    const details = err.message || "Failed to create inline document";
-    return NextResponse.json(
-      {
-        success: false,
-        error: details,
-        userMessage: toFriendlyErrorMessage(details),
-        ...(process.env.NODE_ENV === "development" ? { stack: err.stack } : {}),
-      },
-      { status: 500 }
-    );
+    return nextJsonFriendlyApiError(error, {
+      logLabel: "Create inline doc error:",
+      fallbackDetail: "Failed to create inline document",
+    });
   }
 }
 

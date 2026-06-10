@@ -11,6 +11,7 @@ import { trackEvent } from "@/lib/gtag";
 import { InlineDocumentEditor } from "@/components/InlineDocumentEditor";
 import { buildUploadedFileBasePayload } from "@/lib/documents/indexing";
 import { useEffect } from "react";
+import { firebaseBearerAuthHeader } from "@/lib/client-bearer-auth";
 import { toFriendlyErrorMessage } from "@/lib/user-error";
 
 
@@ -92,12 +93,12 @@ export default function AdminUploadPage() {
         const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
         const tags = tagsInput.split(",").map(t => t.trim()).filter(Boolean);
 
-        const idToken = await user.getIdToken();
+        const authHeader = await firebaseBearerAuthHeader(user);
         await fetch("/api/events", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            Authorization: `Bearer ${idToken}`,
+            ...authHeader,
           },
           body: JSON.stringify({
             eventName: "file_uploaded",
@@ -131,12 +132,13 @@ export default function AdminUploadPage() {
              method: "POST",
              headers: {
                "Content-Type": "application/json",
-               Authorization: `Bearer ${idToken}`,
+               ...authHeader,
              },
              body: JSON.stringify({
                fileUrl: downloadURL,
                mimeType: file.type,
                fileName: file.name,
+               docId: newDocRef.id,
              }),
           });
 
@@ -164,7 +166,7 @@ export default function AdminUploadPage() {
       setUploading(false);
       router.push("/admin/library");
 
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.error("Batch upload error", e);
       setUploading(false);
       alert(toFriendlyErrorMessage(e));
@@ -215,7 +217,7 @@ export default function AdminUploadPage() {
     contentPlain: string;
   }) => {
     if (!user) return;
-    const token = await user.getIdToken();
+    const authHeader = await firebaseBearerAuthHeader(user);
     const endpoint = editInlineId
       ? `/api/documents/inline/${encodeURIComponent(editInlineId)}`
       : "/api/documents/inline";
@@ -223,7 +225,7 @@ export default function AdminUploadPage() {
       method: editInlineId ? "PUT" : "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
+        ...authHeader,
       },
       body: JSON.stringify({
         title: payload.title,

@@ -3,19 +3,20 @@ import { DEFAULT_GEMINI_CHAT_MODELS } from "@/lib/gemini-models";
 import { RetrievalProvider, RetrievedSnippet } from "./retrieval/interfaces";
 import { FirebaseRetrievalProvider } from "./retrieval/FirebaseRetrievalProvider";
 
-// Ensure process is safely typed or falls back
-const ai = new GoogleGenAI({ 
-  apiKey: process.env.GEMINI_API_KEY || "dummy",
-  httpOptions: { apiVersion: "v1beta" }
-});
+let _chatAi: GoogleGenAI | null = null;
+function getChatAi(): GoogleGenAI {
+  if (!_chatAi) {
+    const key = process.env.GEMINI_API_KEY?.trim();
+    if (!key) throw new Error("GEMINI_API_KEY is missing on server runtime.");
+    _chatAi = new GoogleGenAI({ apiKey: key, httpOptions: { apiVersion: "v1beta" } });
+  }
+  return _chatAi;
+}
 
 function envList(name: string, fallback: string[]): string[] {
   const raw = process.env[name];
   if (!raw) return fallback;
-  return raw
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean);
+  return raw.split(",").map((s) => s.trim()).filter(Boolean);
 }
 
 const CHAT_MODELS = envList("GEMINI_CHAT_MODELS", DEFAULT_GEMINI_CHAT_MODELS);
@@ -23,19 +24,23 @@ const CHAT_MODELS = envList("GEMINI_CHAT_MODELS", DEFAULT_GEMINI_CHAT_MODELS);
 function extractErrorMessage(error: unknown): string {
   if (error instanceof Error) return error.message;
   if (typeof error === "string") return error;
-  try {
-    return JSON.stringify(error);
-  } catch {
-    return "Unknown Gemini error";
-  }
+  try { return JSON.stringify(error); } catch { return "Unknown Gemini error"; }
 }
 
-// Abstraction layer swapped to LIVE FIREBASE MODE!
 const currentProvider: RetrievalProvider = new FirebaseRetrievalProvider();
+
+type ContentPart =
+  | { text: string }
+  | { fileData: { fileUri: string; mimeType: string } };
+
+type ContentTurn = {
+  role: "user" | "model";
+  parts: ContentPart[];
+};
 
 export class RetrievalService {
   static async getContext(query: string): Promise<RetrievedSnippet[]> {
-     return await currentProvider.search(query);
+    return currentProvider.search(query);
   }
 
   static async generateChatResponse(
@@ -44,25 +49,15 @@ export class RetrievalService {
     conversationHistory: { role: "user" | "assistant"; content: string }[] = [],
     attachments: { downloadURL: string; mimeType: string; name: string }[] = []
   ) {
-    // 1. Prepare retrieved context
-    let contextText = "";
-    if (contextSnippets.length > 0) {
-      contextText = contextSnippets
-        .map((doc) => {
-          const refLine = doc.reference ? `Reference link: ${doc.reference}\n` : "";
-          return `File: ${doc.fileName}\n${refLine}Content:\n${doc.excerpt}`;
-        })
-        .join("\n\n");
-    } else {
-      contextText = "No relevant internal documents found for this query.";
-    }
-
-    const conversationContextText =
-      conversationHistory.length > 0
-        ? conversationHistory
-            .map((turn, idx) => `${idx + 1}. ${turn.role.toUpperCase()}: ${turn.content}`)
-            .join("\n")
-        : "Không có lịch sử trước đó.";
+    const contextText =
+      contextSnippets.length > 0
+        ? contextSnippets
+            .map((doc) => {
+              const refLine = doc.reference ? `Reference link: ${doc.reference}\n` : "";
+              return `File: ${doc.fileName}\n${refLine}Content:\n${doc.excerpt}`;
+            })
+            .join("\n\n")
+        : "No relevant internal documents found for this query.";
 
     const systemPrompt = `BẠN LÀ TRỢ LÝ NỘI BỘ ZALO — vừa là chuyên gia quy cách nội dung, vừa hỗ trợ soạn microcopy UX. Bạn KHÔNG hỏi người dùng chọn "chế độ"; hãy TỰ SUY LUẬN từ tin nhắn của họ và chọn ĐÚNG MỘT kiểu trả lời bên dưới.
 
@@ -113,42 +108,46 @@ Tuân thủ tone, xưng hô, độ dài và thuật ngữ trong guideline khi c�
 ### TÀI LIỆU NỘI BỘ (cơ sở duy nhất cho quy tắc)
 ${contextText || "KHÔNG TÌM THẤY TÀI LIỆU LIÊN QUAN — với Kiểu B vẫn hoàn thành khung đầy đủ và ghi rõ không có nguồn nội bộ để bám."}
 
-### LỊCH SỬ HỘI THOẠI GẦN NHẤT (để hiểu follow-up)
-${conversationContextText}
-
 ---
 KẾT THÚC MỌI CÂU TRẢ LỜI PHẢI LUÔN CÓ (dòng cuối):
 [SOURCES_USED: tên_file1.pdf, tên_file2.pdf]`;
 
-    // 3. Initiate Stream
     try {
-      if (!process.env.GEMINI_API_KEY || !process.env.GEMINI_API_KEY.trim()) {
-        throw new Error("GEMINI_API_KEY is missing on server runtime.");
+      const ai = getChatAi();
+
+      // Build multi-turn contents array: history turns + current user message
+      const contents: ContentTurn[] = [];
+
+      for (const turn of conversationHistory) {
+        contents.push({
+          role: turn.role === "assistant" ? "model" : "user",
+          parts: [{ text: turn.content }],
+        });
       }
-      console.log(`[ChatService] Sending ${contextText.length} chars of context to Gemini.`);
+
+      // Current user message (text + image attachments)
+      const userParts: ContentPart[] = [{ text: query }];
+      for (const attachment of attachments) {
+        userParts.push({
+          fileData: { fileUri: attachment.downloadURL, mimeType: attachment.mimeType },
+        });
+      }
+      contents.push({ role: "user", parts: userParts });
+
+      console.log(
+        `[ChatService] ${contextText.length} chars context, ${contents.length} turn(s) in contents[]`
+      );
+
       let lastErr: unknown = null;
       for (const model of CHAT_MODELS) {
         try {
-          const userParts: Array<
-            | { text: string }
-            | { fileData: { fileUri: string; mimeType: string } }
-          > = [{ text: query }];
-          for (const attachment of attachments) {
-            userParts.push({
-              fileData: {
-                fileUri: attachment.downloadURL,
-                mimeType: attachment.mimeType,
-              },
-            });
-          }
-
           const responseStream = await ai.models.generateContentStream({
             model,
-            contents: [{ role: "user", parts: userParts }],
+            contents,
             config: {
               systemInstruction: { parts: [{ text: systemPrompt }] },
-              temperature: 0.1
-            }
+              temperature: 0.1,
+            },
           });
           return responseStream;
         } catch (err) {

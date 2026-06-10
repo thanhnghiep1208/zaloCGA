@@ -11,6 +11,7 @@ import {
   chatServerErrorResponse,
   nextJsonChatAuthError,
 } from "@/lib/server-json-response";
+import { checkChatRateLimit } from "@/lib/rate-limit";
 
 function envInt(name: string, fallback: number): number {
   const v = process.env[name];
@@ -101,6 +102,7 @@ function extractReferencedSources(
 export async function POST(req: Request) {
   try {
     const uid = await requireUidFromRequest(req);
+    await checkChatRateLimit(uid);
 
     const body = await req.json();
     const { query, conversation, attachments, sessionId } = body as {
@@ -173,7 +175,7 @@ export async function POST(req: Request) {
         : boundedQuery;
 
     const queryType = inferQueryType(query);
-    await logAnalyticsEvent("query_sent", {
+    void logAnalyticsEvent("query_sent", {
       user_id: uid,
       query_text: query,
       type: queryType,
@@ -203,19 +205,22 @@ export async function POST(req: Request) {
       }))
     );
 
-    // Stream transformation to safely pack sources into the first bytes
+    // NDJSON stream: each line is a complete JSON object.
+    // Line 1: {"t":"s","d":[...sources]}  — sent before any text
+    // Line N: {"t":"x","d":"text delta"}  — one per Gemini chunk
     const encoder = new TextEncoder();
+    const ndjsonLine = (obj: unknown) => encoder.encode(JSON.stringify(obj) + "\n");
+
     const readable = new ReadableStream({
       async start(controller) {
         try {
           let fullResponse = "";
-          const sourcesChunk = JSON.stringify({ type: "sources", data: contextSnippets }) + "\n\n===CHUNK_SPLIT===\n\n";
-          controller.enqueue(encoder.encode(sourcesChunk));
+          controller.enqueue(ndjsonLine({ t: "s", d: contextSnippets }));
 
           for await (const chunk of stream) {
             if (chunk.text) {
               fullResponse += chunk.text;
-              controller.enqueue(encoder.encode(chunk.text));
+              controller.enqueue(ndjsonLine({ t: "x", d: chunk.text }));
             }
           }
 
@@ -224,27 +229,24 @@ export async function POST(req: Request) {
             fullResponse,
             contextSnippets.map((s) => s.fileName)
           );
-          await logAnalyticsEvent("response_delivered", {
+          void logAnalyticsEvent("response_delivered", {
             user_id: uid,
             response_type: queryType,
             relevance_score: estimateRelevanceScore(query, fullResponse),
             latency_ms: latencyMs,
             referenced_sources: referencedSources,
           });
-        } catch(e) {
+        } catch (e) {
           console.error("Streaming error", e);
           controller.error(e);
         } finally {
           controller.close();
         }
-      }
+      },
     });
 
     return new Response(readable, {
-      headers: {
-        'Content-Type': 'text/plain; charset=utf-8',
-        'Transfer-Encoding': 'chunked',
-      },
+      headers: { "Content-Type": "application/x-ndjson; charset=utf-8" },
     });
   } catch (error: unknown) {
     if (error instanceof ApiAuthError) {
