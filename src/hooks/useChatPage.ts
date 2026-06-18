@@ -63,6 +63,7 @@ export function useChatPage() {
   const attachmentInputRef = useRef<HTMLInputElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const selectedImagesRef = useRef<LocalChatImage[]>([]);
+  const messagesRef = useRef<ChatMessage[]>([]);
   const dragDepthRef = useRef(0);
   const sessionIdRef = useRef<string | null>(null);
   const sessionStartedAtRef = useRef<number | null>(null);
@@ -82,6 +83,10 @@ export function useChatPage() {
   useEffect(() => {
     selectedImagesRef.current = selectedImages;
   }, [selectedImages]);
+
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
 
   useEffect(() => {
     sessionIdRef.current = sessionId;
@@ -362,24 +367,21 @@ const buildConversationContext = (): ConversationTurn[] => {
 
       const { accumulatedText, finalSources } = streamState;
 
-      // Capture final messages via a local variable so the Firestore save
-      // happens outside the state updater (React calls updaters synchronously,
-      // so savedMessages is populated before the if-block below runs).
-      let savedMessages: ChatMessage[] = [];
-      setMessages((prev) => {
-        savedMessages = prev.map((msg) =>
-          msg.id === assistantId
-            ? { ...msg, content: accumulatedText, sources: finalSources, isStreaming: false }
-            : msg
-        );
-        return savedMessages;
-      });
+      // messagesRef.current is always up-to-date (synced via useEffect after every render).
+      // By the time the streaming loop finishes (with its await calls), React has committed
+      // all prior setMessages updates and the effect has run — so the ref is current.
+      const finalMessages = messagesRef.current.map((msg) =>
+        msg.id === assistantId
+          ? { ...msg, content: accumulatedText, sources: finalSources, isStreaming: false }
+          : msg
+      );
+      setMessages(finalMessages);
 
-      if (currentSessionId && savedMessages.length > 0) {
-        updateChatSession(currentSessionId, toStoredMessages(savedMessages)).catch((e) => {
+      if (currentSessionId && finalMessages.length > 0) {
+        updateChatSession(currentSessionId, toStoredMessages(finalMessages)).catch((e) => {
           console.error("[ChatHistory] Failed to save session messages:", e, {
             sessionId: currentSessionId,
-            messageCount: savedMessages.length,
+            messageCount: finalMessages.length,
           });
         });
       }
