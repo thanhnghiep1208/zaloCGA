@@ -41,7 +41,7 @@ function toStoredMessages(msgs: ChatMessage[]): StoredMessage[] {
       id: m.id,
       role: m.role,
       content: m.content,
-      sources: m.sources,
+      ...(m.sources !== undefined ? { sources: m.sources } : {}),
       ...(m.attachments && m.attachments.length > 0 ? { attachments: m.attachments } : {}),
       timestamp: Date.now(),
     }));
@@ -376,9 +376,12 @@ const buildConversationContext = (): ConversationTurn[] => {
       });
 
       if (currentSessionId && savedMessages.length > 0) {
-        updateChatSession(currentSessionId, toStoredMessages(savedMessages)).catch(
-          console.error
-        );
+        updateChatSession(currentSessionId, toStoredMessages(savedMessages)).catch((e) => {
+          console.error("[ChatHistory] Failed to save session messages:", e, {
+            sessionId: currentSessionId,
+            messageCount: savedMessages.length,
+          });
+        });
       }
       clearPendingImages();
       resetSessionIdleTimer();

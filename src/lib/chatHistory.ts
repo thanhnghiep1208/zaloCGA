@@ -54,7 +54,16 @@ export async function createChatSession(
     role: m.role,
     content: m.content,
     timestamp: m.timestamp,
-    ...(m.sources && m.sources.length > 0 ? { sources: m.sources } : {}),
+    ...(m.sources && m.sources.length > 0
+      ? {
+          sources: m.sources.map((s) => ({
+            fileName: s.fileName,
+            ...(s.docId !== undefined ? { docId: s.docId } : {}),
+            ...(s.excerpt !== undefined ? { excerpt: s.excerpt } : {}),
+            ...(s.reference !== undefined ? { reference: s.reference } : {}),
+          })),
+        }
+      : {}),
     ...(m.attachments && m.attachments.length > 0 ? { attachments: m.attachments } : {}),
   }));
 
@@ -84,7 +93,16 @@ export async function updateChatSession(
     role: m.role,
     content: m.content,
     timestamp: m.timestamp,
-    ...(m.sources && m.sources.length > 0 ? { sources: m.sources } : {}),
+    ...(m.sources && m.sources.length > 0
+      ? {
+          sources: m.sources.map((s) => ({
+            fileName: s.fileName,
+            ...(s.docId !== undefined ? { docId: s.docId } : {}),
+            ...(s.excerpt !== undefined ? { excerpt: s.excerpt } : {}),
+            ...(s.reference !== undefined ? { reference: s.reference } : {}),
+          })),
+        }
+      : {}),
     ...(m.attachments && m.attachments.length > 0 ? { attachments: m.attachments } : {}),
   }));
 
