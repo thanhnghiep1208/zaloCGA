@@ -79,18 +79,23 @@ export async function registerAuthSession(userId: string): Promise<string> {
   if (!sessionId) return "";
 
   const ua = typeof navigator !== "undefined" ? navigator.userAgent : "";
-  await setDoc(
-    doc(db, "authSessions", sessionId),
-    {
+  const ref = doc(db, "authSessions", sessionId);
+  const existing = await getDoc(ref);
+
+  if (existing.exists()) {
+    // Document already exists (same browser tab after refresh) — only update lastSeenAt
+    // to stay within Firestore update rules.
+    await updateDoc(ref, { lastSeenAt: serverTimestamp() });
+  } else {
+    await setDoc(ref, {
       userId,
       userAgent: ua.slice(0, 500),
       deviceLabel: parseDeviceLabel(ua),
       createdAt: serverTimestamp(),
       lastSeenAt: serverTimestamp(),
       revoked: false,
-    },
-    { merge: true }
-  );
+    });
+  }
   return sessionId;
 }
 
