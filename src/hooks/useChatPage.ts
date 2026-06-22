@@ -1,22 +1,10 @@
 "use client";
 
-import {
-  ChangeEvent,
-  DragEvent,
-  useState,
-  useRef,
-  useEffect,
-  useCallback,
-} from "react";
+import { DragEvent, useState, useRef, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { User } from "firebase/auth";
 import { useAuth } from "@/context/AuthContext";
-import {
-  ChatAttachmentMeta,
-  createChatSession,
-  updateChatSession,
-  StoredMessage,
-} from "@/lib/chatHistory";
+import { updateChatSession, StoredMessage } from "@/lib/chatHistory";
 import { firebaseBearerAuthHeader } from "@/lib/client-bearer-auth";
 import { postClientAnalyticsEvent } from "@/lib/client-analytics-event";
 import { toFriendlyErrorMessage } from "@/lib/user-error";
@@ -26,13 +14,9 @@ import {
   createChatStreamParseState,
   feedChatStreamChunk,
 } from "@/lib/chat/stream";
-import type {
-  ChatMessage,
-  ChatSource,
-  ConversationTurn,
-  LocalChatImage,
-} from "@/types/chat";
-import { SESSION_IDLE_MS } from "@/types/chat";
+import type { ChatMessage, ConversationTurn } from "@/types/chat";
+import { useChatSession } from "@/hooks/useChatSession";
+import { useChatAttachments } from "@/hooks/useChatAttachments";
 
 function toStoredMessages(msgs: ChatMessage[]): StoredMessage[] {
   return msgs
@@ -55,21 +39,13 @@ export function useChatPage() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [sessionId, setSessionId] = useState<string | null>(null);
   const [previewDocId, setPreviewDocId] = useState<string | null>(null);
-  const [selectedImages, setSelectedImages] = useState<LocalChatImage[]>([]);
-  const [isDropTarget, setIsDropTarget] = useState(false);
 
-  const attachmentInputRef = useRef<HTMLInputElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
-  const selectedImagesRef = useRef<LocalChatImage[]>([]);
   const messagesRef = useRef<ChatMessage[]>([]);
-  const dragDepthRef = useRef(0);
-  const sessionIdRef = useRef<string | null>(null);
-  const sessionStartedAtRef = useRef<number | null>(null);
-  const sessionQueryCountRef = useRef(0);
-  const sessionEndedSentRef = useRef(false);
-  const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const session = useChatSession(user);
+  const attachments = useChatAttachments();
 
   const hasVisibleMessages = messages.some(
     (m) => m.role === "user" || (m.role === "assistant" && !!m.content.trim())
@@ -81,148 +57,37 @@ export function useChatPage() {
   }, [messages, isLoading]);
 
   useEffect(() => {
-    selectedImagesRef.current = selectedImages;
-  }, [selectedImages]);
-
-  useEffect(() => {
     messagesRef.current = messages;
   }, [messages]);
 
+  // Handle ?new=1 — reset chat state and redirect
   useEffect(() => {
-    sessionIdRef.current = sessionId;
-  }, [sessionId]);
+    if (searchParams.get("new") !== "1") return;
+    void (async () => {
+      await session.endSessionAnalytics();
+      setMessages([]);
+      setInput("");
+      setIsLoading(false);
+      session.resetSession();
+      attachments.clearPendingImages();
+      router.replace("/chat");
+    })();
+  }, [searchParams, router, session, attachments]);
 
-  const endSessionAnalytics = useCallback(async () => {
-    if (!user) return;
-    const sid = sessionIdRef.current;
-    if (!sid || sessionEndedSentRef.current || sessionStartedAtRef.current == null) return;
-    sessionEndedSentRef.current = true;
-    if (idleTimerRef.current) {
-      clearTimeout(idleTimerRef.current);
-      idleTimerRef.current = null;
-    }
-    const duration_ms = Date.now() - sessionStartedAtRef.current;
-    await postClientAnalyticsEvent(user, "session_ended", {
-      session_id: sid,
-      duration_ms,
-      query_count: sessionQueryCountRef.current,
-    });
-  }, [user]);
-
-  const resetSessionIdleTimer = useCallback(() => {
-    if (!sessionIdRef.current || sessionEndedSentRef.current) return;
-    if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
-    idleTimerRef.current = setTimeout(() => {
-      void endSessionAnalytics();
-    }, SESSION_IDLE_MS);
-  }, [endSessionAnalytics]);
-
-  useEffect(() => {
-    return () => {
-      selectedImagesRef.current.forEach((img) => URL.revokeObjectURL(img.previewUrl));
-    };
-  }, []);
-
-  useEffect(() => {
-    return () => {
-      if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
-      void endSessionAnalytics();
-    };
-  }, [endSessionAnalytics]);
-
-const buildConversationContext = (): ConversationTurn[] => {
+  const buildConversationContext = (): ConversationTurn[] => {
     return messages
       .filter((m) => !m.isStreaming && !!m.content.trim())
       .slice(-8)
       .map((m) => ({ role: m.role, content: m.content }));
   };
 
-  const clearPendingImages = useCallback(() => {
-    setSelectedImages((prev) => {
-      prev.forEach((img) => URL.revokeObjectURL(img.previewUrl));
-      return [];
-    });
-  }, []);
-
-  const appendImageFiles = useCallback((fileList: FileList | File[]) => {
-    const incoming = Array.from(fileList).filter((f) => f.type.startsWith("image/"));
-    if (incoming.length === 0) return;
-    setSelectedImages((prev) => {
-      const next = [...prev];
-      for (const file of incoming) {
-        if (next.length >= 4) break;
-        next.push({
-          id: newClientMessageId(),
-          file,
-          previewUrl: URL.createObjectURL(file),
-        });
-      }
-      return next;
-    });
-  }, []);
-
-  const removePendingImage = useCallback((id: string) => {
-    setSelectedImages((prev) => {
-      const target = prev.find((p) => p.id === id);
-      if (target) URL.revokeObjectURL(target.previewUrl);
-      return prev.filter((p) => p.id !== id);
-    });
-  }, []);
-
-  const handleComposerDragEnter = (e: DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    if (!e.dataTransfer.types.includes("Files")) return;
-    dragDepthRef.current += 1;
-    setIsDropTarget(true);
-  };
-
-  const handleComposerDragOver = (e: DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = "copy";
-  };
-
-  const handleComposerDragLeave = (e: DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    dragDepthRef.current -= 1;
-    if (dragDepthRef.current <= 0) {
-      dragDepthRef.current = 0;
-      setIsDropTarget(false);
-    }
-  };
-
-  const handleComposerDrop = (e: DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    dragDepthRef.current = 0;
-    setIsDropTarget(false);
-    if (isLoading) return;
-    const { files } = e.dataTransfer;
-    if (files?.length) appendImageFiles(files);
-  };
-
-  useEffect(() => {
-    if (searchParams.get("new") !== "1") return;
-    void (async () => {
-      await endSessionAnalytics();
-      setMessages([]);
-      setInput("");
-      setIsLoading(false);
-      setSessionId(null);
-      sessionIdRef.current = null;
-      sessionStartedAtRef.current = null;
-      sessionQueryCountRef.current = 0;
-      sessionEndedSentRef.current = false;
-      clearPendingImages();
-      router.replace("/chat");
-    })();
-  }, [searchParams, router, clearPendingImages, endSessionAnalytics]);
-
   const handleSend = async () => {
-    if ((!input.trim() && selectedImages.length === 0) || isLoading || !user) return;
+    if ((!input.trim() && attachments.selectedImages.length === 0) || isLoading || !user) return;
 
     const userQuery = input.trim();
     const pendingThumbs =
-      selectedImages.length > 0
-        ? selectedImages.map((i) => ({ id: i.id, name: i.file.name }))
+      attachments.selectedImages.length > 0
+        ? attachments.selectedImages.map((i) => ({ id: i.id, name: i.file.name }))
         : undefined;
     const userMsg: ChatMessage = {
       id: newClientMessageId(),
@@ -243,7 +108,7 @@ const buildConversationContext = (): ConversationTurn[] => {
     setInput("");
     setIsLoading(true);
 
-    let currentSessionId = sessionId;
+    let currentSessionId = session.sessionId;
     if (!currentSessionId) {
       try {
         const firstStoredMessage: StoredMessage = {
@@ -252,15 +117,7 @@ const buildConversationContext = (): ConversationTurn[] => {
           content: userMsg.content,
           timestamp: Date.now(),
         };
-        currentSessionId = await createChatSession(user.uid, [firstStoredMessage]);
-        setSessionId(currentSessionId);
-        sessionIdRef.current = currentSessionId;
-        sessionStartedAtRef.current = Date.now();
-        sessionQueryCountRef.current = 0;
-        sessionEndedSentRef.current = false;
-        void postClientAnalyticsEvent(user, "session_started", {
-          session_id: currentSessionId,
-        });
+        currentSessionId = await session.startSession(user, firstStoredMessage);
       } catch (e) {
         console.error("Failed to create chat session", e);
         setIsLoading(false);
@@ -272,14 +129,14 @@ const buildConversationContext = (): ConversationTurn[] => {
       return;
     }
 
-    sessionQueryCountRef.current += 1;
-    resetSessionIdleTimer();
+    session.sessionQueryCountRef.current += 1;
+    session.resetSessionIdleTimer();
 
     setMessages((prev) => [...prev, userMsg, initialAssistantMsg]);
 
     try {
       const authHeader = await firebaseBearerAuthHeader(user);
-      const filesForUpload = selectedImages.map((i) => i.file);
+      const filesForUpload = attachments.selectedImages.map((i) => i.file);
       const uploadedAttachments = await uploadChatAttachments(
         filesForUpload,
         currentSessionId,
@@ -385,8 +242,8 @@ const buildConversationContext = (): ConversationTurn[] => {
           });
         });
       }
-      clearPendingImages();
-      resetSessionIdleTimer();
+      attachments.clearPendingImages();
+      session.resetSessionIdleTimer();
     } catch (e) {
       console.error(e);
       const friendly = toFriendlyErrorMessage(e);
@@ -405,30 +262,17 @@ const buildConversationContext = (): ConversationTurn[] => {
     }
   };
 
-  const onPickAttachments = () => {
-    attachmentInputRef.current?.click();
-  };
-
-  const onAttachmentFilesSelected = (e: ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || []).filter((f) =>
-      f.type.startsWith("image/")
-    );
-    e.target.value = "";
-    if (files.length === 0) return;
-    appendImageFiles(files);
-  };
-
   const copyToClipboard = async (text: string, messageId: string) => {
     try {
       await navigator.clipboard.writeText(text);
-      const sid = sessionIdRef.current;
+      const sid = session.sessionIdRef.current;
       if (user && sid) {
         void postClientAnalyticsEvent(user, "response_copied", {
           session_id: sid,
           message_id: messageId,
         });
       }
-      resetSessionIdleTimer();
+      session.resetSessionIdleTimer();
     } catch (e) {
       console.error("Failed to copy response", e);
     }
@@ -439,15 +283,18 @@ const buildConversationContext = (): ConversationTurn[] => {
     setMessages((prev) =>
       prev.map((msg) => (msg.id === messageId ? { ...msg, feedback: value } : msg))
     );
-
-    const sid = sessionIdRef.current;
+    const sid = session.sessionIdRef.current;
     void postClientAnalyticsEvent(user, "user_feedback", {
       feedback: value === "up" ? "thumbs_up" : "thumbs_down",
       session_id: sid ?? undefined,
       message_id: messageId,
     });
-    resetSessionIdleTimer();
+    session.resetSessionIdleTimer();
   };
+
+  // Bind isLoading into the drop handler so the signature matches the component's DragEvent prop
+  const handleComposerDrop = (e: DragEvent<HTMLDivElement>) =>
+    attachments.handleComposerDrop(e, isLoading);
 
   return {
     user: user as User | null,
@@ -455,24 +302,24 @@ const buildConversationContext = (): ConversationTurn[] => {
     input,
     setInput,
     isLoading,
-    sessionId,
+    sessionId: session.sessionId,
     previewDocId,
     setPreviewDocId,
-    selectedImages,
-    isDropTarget,
+    selectedImages: attachments.selectedImages,
+    isDropTarget: attachments.isDropTarget,
     hasVisibleMessages,
     showConversationLayout,
-    attachmentInputRef,
+    attachmentInputRef: attachments.attachmentInputRef,
     bottomRef,
     handleSend,
-    handleComposerDragEnter,
-    handleComposerDragOver,
-    handleComposerDragLeave,
+    handleComposerDragEnter: attachments.handleComposerDragEnter,
+    handleComposerDragOver: attachments.handleComposerDragOver,
+    handleComposerDragLeave: attachments.handleComposerDragLeave,
     handleComposerDrop,
-    onPickAttachments,
-    onAttachmentFilesSelected,
+    onPickAttachments: attachments.onPickAttachments,
+    onAttachmentFilesSelected: attachments.onAttachmentFilesSelected,
     copyToClipboard,
     handleFeedback,
-    removePendingImage,
+    removePendingImage: attachments.removePendingImage,
   };
 }

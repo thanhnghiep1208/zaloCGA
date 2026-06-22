@@ -1,34 +1,74 @@
 import { describe, expect, it } from "vitest";
 import { createChatStreamParseState, feedChatStreamChunk } from "@/lib/chat/stream";
 
+function sourcesLine(sources: unknown[]): string {
+  return JSON.stringify({ t: "s", d: sources }) + "\n";
+}
+
+function textLine(text: string): string {
+  return JSON.stringify({ t: "x", d: text }) + "\n";
+}
+
 describe("feedChatStreamChunk", () => {
-  it("parses sources prefix then accumulates text", () => {
+  it("parses a sources line and returns the sources array", () => {
     const state = createChatStreamParseState();
-    const sourcesJson = JSON.stringify({
-      type: "sources",
-      data: [{ fileName: "guide.pdf", excerpt: "x" }],
-    });
-    const split = "===CHUNK_SPLIT===\n\n";
+    const line = sourcesLine([{ fileName: "guide.pdf", excerpt: "x" }]);
 
-    const first = feedChatStreamChunk(state, sourcesJson.slice(0, 20));
-    expect(first).toBeNull();
-    expect(state.hasParsedSources).toBe(false);
+    const result = feedChatStreamChunk(state, line);
 
-    const second = feedChatStreamChunk(state, sourcesJson.slice(20) + split + "Hello");
-    expect(second).toHaveLength(1);
-    expect(second![0].fileName).toBe("guide.pdf");
-    expect(state.accumulatedText).toBe("Hello");
-
-    feedChatStreamChunk(state, " world");
-    expect(state.accumulatedText).toBe("Hello world");
+    expect(result).toHaveLength(1);
+    expect(result![0].fileName).toBe("guide.pdf");
+    expect(state.hasParsedSources).toBe(true);
     expect(state.finalSources).toHaveLength(1);
   });
 
-  it("accumulates text only after sources are parsed", () => {
+  it("returns null for text-only chunks (sources not yet seen)", () => {
     const state = createChatStreamParseState();
-    feedChatStreamChunk(state, '{"type":"sources","data":[]}===CHUNK_SPLIT===\n\n');
-    feedChatStreamChunk(state, "Part one. ");
-    feedChatStreamChunk(state, "Part two.");
+    feedChatStreamChunk(state, sourcesLine([]));
+    const result = feedChatStreamChunk(state, textLine("Hello"));
+    expect(result).toBeNull();
+  });
+
+  it("accumulates text deltas after sources are parsed", () => {
+    const state = createChatStreamParseState();
+    feedChatStreamChunk(state, sourcesLine([]));
+    feedChatStreamChunk(state, textLine("Part one. "));
+    feedChatStreamChunk(state, textLine("Part two."));
     expect(state.accumulatedText).toBe("Part one. Part two.");
+  });
+
+  it("handles sources and first text delta arriving in the same chunk", () => {
+    const state = createChatStreamParseState();
+    const combined = sourcesLine([{ fileName: "doc.pdf" }]) + textLine("Hello");
+
+    const result = feedChatStreamChunk(state, combined);
+
+    expect(result).toHaveLength(1);
+    expect(state.accumulatedText).toBe("Hello");
+  });
+
+  it("buffers partial lines and completes them when newline arrives", () => {
+    const state = createChatStreamParseState();
+    const full = sourcesLine([]);
+    // split mid-JSON
+    feedChatStreamChunk(state, full.slice(0, 10));
+    expect(state.hasParsedSources).toBe(false);
+    feedChatStreamChunk(state, full.slice(10));
+    expect(state.hasParsedSources).toBe(true);
+  });
+
+  it("ignores malformed (non-JSON) lines", () => {
+    const state = createChatStreamParseState();
+    feedChatStreamChunk(state, "not-json\n");
+    expect(state.hasParsedSources).toBe(false);
+    expect(state.accumulatedText).toBe("");
+  });
+
+  it("returns sources only on first sources line, null on subsequent chunks", () => {
+    const state = createChatStreamParseState();
+    const first = feedChatStreamChunk(state, sourcesLine([{ fileName: "a.pdf" }]));
+    expect(first).not.toBeNull();
+    const second = feedChatStreamChunk(state, textLine("more text"));
+    expect(second).toBeNull();
   });
 });
