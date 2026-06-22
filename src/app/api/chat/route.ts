@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { RetrievalService } from "@/lib/RetrievalService";
 import { ApiAuthError, requireUidFromRequest } from "@/lib/api-request-auth";
 import { assertFirebaseStorageDownloadUrl } from "@/lib/api-request-auth";
@@ -12,6 +13,29 @@ import {
   nextJsonChatAuthError,
 } from "@/lib/server-json-response";
 import { checkChatRateLimit } from "@/lib/rate-limit";
+
+const ChatAttachmentSchema = z.object({
+  name: z.string(),
+  mimeType: z.string(),
+  sizeBytes: z.number(),
+  storagePath: z.string(),
+  downloadURL: z.string().url(),
+  expiresAt: z.number(),
+});
+
+const ChatRequestSchema = z.object({
+  query: z.string().min(1).optional(),
+  sessionId: z.string().optional(),
+  conversation: z
+    .array(
+      z.object({
+        role: z.enum(["user", "assistant"]),
+        content: z.string(),
+      })
+    )
+    .optional(),
+  attachments: z.array(ChatAttachmentSchema).optional(),
+});
 
 function envInt(name: string, fallback: number): number {
   const v = process.env[name];
@@ -33,15 +57,6 @@ const MAX_CONVERSATION_CHARS_PER_TURN = envInt(
 /** Cap on the latest user message length sent to the model. */
 const MAX_QUERY_CHARS = envInt("CHAT_QUERY_MAX_CHARS", 12000);
 const MAX_ATTACHMENTS_PER_TURN = envInt("CHAT_MAX_ATTACHMENTS_PER_TURN", 4);
-
-type ChatAttachment = {
-  name: string;
-  mimeType: string;
-  sizeBytes: number;
-  storagePath: string;
-  downloadURL: string;
-  expiresAt: number;
-};
 
 function parseStorageObjectPathFromDownloadUrl(downloadURL: string): string | null {
   try {
@@ -104,28 +119,26 @@ export async function POST(req: Request) {
     const uid = await requireUidFromRequest(req);
     await checkChatRateLimit(uid);
 
-    const body = await req.json();
-    const { query, conversation, attachments, sessionId } = body as {
-      query?: string;
-      conversation?: { role: "user" | "assistant"; content: string }[];
-      attachments?: ChatAttachment[];
-      sessionId?: string;
-    };
+    let rawBody: unknown;
+    try {
+      rawBody = await req.json();
+    } catch {
+      return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+    }
+
+    const parsed = ChatRequestSchema.safeParse(rawBody);
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: "Invalid request", details: parsed.error.flatten().fieldErrors },
+        { status: 400 }
+      );
+    }
+
+    const { query, conversation, attachments, sessionId } = parsed.data;
     const safeSessionId =
       typeof sessionId === "string" && sessionId.trim() ? sessionId.trim() : "draft";
 
-    const safeAttachments = Array.isArray(attachments)
-      ? attachments
-          .filter(
-            (a) =>
-              a &&
-              typeof a.downloadURL === "string" &&
-              typeof a.mimeType === "string" &&
-              typeof a.name === "string" &&
-              typeof a.expiresAt === "number"
-          )
-          .slice(0, MAX_ATTACHMENTS_PER_TURN)
-      : [];
+    const safeAttachments = (attachments ?? []).slice(0, MAX_ATTACHMENTS_PER_TURN);
 
     for (const attachment of safeAttachments) {
       assertFirebaseStorageDownloadUrl(attachment.downloadURL);
@@ -147,17 +160,9 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Query is required" }, { status: 400 });
     }
 
-    const safeConversation = Array.isArray(conversation)
-      ? conversation
-          .filter(
-            (t) =>
-              t &&
-              (t.role === "user" || t.role === "assistant") &&
-              typeof t.content === "string" &&
-              t.content.trim().length > 0
-          )
-          .slice(-8)
-      : [];
+    const safeConversation = (conversation ?? [])
+      .filter((t) => t.content.trim().length > 0)
+      .slice(-8);
 
     const boundedQuery = truncateText(query.trim(), MAX_QUERY_CHARS);
     const boundedConversation = safeConversation.map((t) => ({

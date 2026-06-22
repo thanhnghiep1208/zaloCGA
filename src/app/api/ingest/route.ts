@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { GoogleGenAI } from "@google/genai";
 import mammoth from "mammoth";
 import {
@@ -10,6 +11,13 @@ import {
 import { logAnalyticsEvent } from "@/lib/analytics-events";
 import { GEMINI_FLASH_MODEL } from "@/lib/gemini-models";
 import { writeDocumentChunks } from "@/lib/documents/embeddings";
+
+const IngestRequestSchema = z.object({
+  fileUrl: z.string().url("fileUrl must be a valid URL"),
+  mimeType: z.string().default(""),
+  fileName: z.string().default(""),
+  docId: z.string().default(""),
+});
 
 let _ingestAi: GoogleGenAI | null = null;
 function getIngestAi(): GoogleGenAI {
@@ -119,11 +127,22 @@ export async function POST(req: Request) {
     const uid = await requireUidFromRequest(req);
     await requireContributorOrAdmin(uid);
 
-    const { fileUrl, mimeType = "", fileName = "", docId = "" } = await req.json();
-
-    if (!fileUrl) {
-      return NextResponse.json({ error: "Missing file URL" }, { status: 400 });
+    let rawBody: unknown;
+    try {
+      rawBody = await req.json();
+    } catch {
+      return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
     }
+
+    const parsed = IngestRequestSchema.safeParse(rawBody);
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: "Invalid request", details: parsed.error.flatten().fieldErrors },
+        { status: 400 }
+      );
+    }
+
+    const { fileUrl, mimeType, fileName, docId } = parsed.data;
 
     assertFirebaseStorageDownloadUrl(fileUrl);
 

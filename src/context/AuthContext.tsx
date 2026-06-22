@@ -12,6 +12,16 @@ import {
 } from "@/lib/auth-sessions";
 import { doc, getDoc } from "firebase/firestore";
 
+const SESSION_COOKIE = "__session";
+
+function setSessionCookie() {
+  document.cookie = `${SESSION_COOKIE}=1; path=/; SameSite=Strict; max-age=86400`;
+}
+
+function clearSessionCookie() {
+  document.cookie = `${SESSION_COOKIE}=; path=/; SameSite=Strict; max-age=0`;
+}
+
 export type UserRole = "admin" | "contributor" | "user";
 
 interface AuthContextType {
@@ -41,6 +51,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (!firebaseUser) {
+        clearSessionCookie();
         setUser(null);
         setRole(null);
         setLoading(false);
@@ -52,6 +63,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         const docSnap = await getDoc(docRef);
 
         if (!docSnap.exists()) {
+          clearSessionCookie();
           await signOut(auth);
           setUser(null);
           setRole(null);
@@ -62,6 +74,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         const data = docSnap.data();
         const r = parseRole(data.role);
         if (!r) {
+          clearSessionCookie();
           await signOut(auth);
           setUser(null);
           setRole(null);
@@ -69,6 +82,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           return;
         }
 
+        setSessionCookie();
         setUser(firebaseUser);
         setRole(r);
       } catch (error) {
@@ -76,6 +90,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         if (code !== "permission-denied") {
           console.error("Error fetching user role", error);
         }
+        clearSessionCookie();
         await signOut(auth);
         setUser(null);
         setRole(null);
@@ -93,8 +108,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     const sessionId = getOrCreateAuthSessionId();
     if (!sessionId) return;
 
-    let heartbeat: ReturnType<typeof setInterval> | undefined;
-
     void registerAuthSession(user.uid).catch((err) => {
       console.error("Failed to register auth session", err);
     });
@@ -104,7 +117,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       void signOut(auth);
     });
 
-    heartbeat = setInterval(() => {
+    const heartbeat = setInterval(() => {
       void touchAuthSession(sessionId).catch(() => {});
     }, 60_000);
 

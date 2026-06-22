@@ -85,5 +85,11 @@ service cloud.firestore {
       allow read: if isContributorOrAdmin();
       allow write: if false;
     }
+
+    // Document chunks hold embeddings and text — server-only (Admin SDK).
+    // No client SDK access allowed (read or write).
+    match /document_chunks/{chunkId} {
+      allow read, write: if false;
+    }
   }
 }
