@@ -1,18 +1,22 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { storage, db } from "@/lib/firebase";
 import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
 import { collection, addDoc, serverTimestamp, updateDoc, doc, getDoc } from "firebase/firestore";
 import { useAuth } from "@/context/AuthContext";
 import { useRouter, useSearchParams } from "next/navigation";
+import dynamic from "next/dynamic";
 import { trackEvent } from "@/lib/gtag";
-import { InlineDocumentEditor } from "@/components/InlineDocumentEditor";
 import { buildUploadedFileBasePayload } from "@/lib/documents/indexing";
-import { useEffect } from "react";
 import { firebaseBearerAuthHeader } from "@/lib/client-bearer-auth";
 import { toFriendlyErrorMessage } from "@/lib/user-error";
+
+const InlineDocumentEditor = dynamic(
+  () => import("@/components/InlineDocumentEditor").then((m) => ({ default: m.InlineDocumentEditor })),
+  { ssr: false, loading: () => <div className="clay-card mt-8 p-6 max-w-4xl mx-auto w-full text-sm text-muted">Dang tai editor...</div> }
+);
 
 
 export default function AdminUploadPage() {

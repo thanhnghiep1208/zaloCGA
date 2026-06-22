@@ -16,6 +16,16 @@ const MAX_SNIPPETS = envInt("RETRIEVAL_MAX_SNIPPETS", 6);
 const MAX_CHARS_PER_SNIPPET = envInt("RETRIEVAL_MAX_CHARS_PER_SNIPPET", 2600);
 // Fetch more vector candidates than MAX_SNIPPETS to allow dedup by docId
 const VECTOR_CANDIDATES = envInt("RETRIEVAL_VECTOR_CANDIDATES", 20);
+// COSINE distance threshold: 0 = identical, 1 = orthogonal, 2 = opposite.
+// Only chunks with cosine_distance <= threshold are returned.
+// Default 0.55 keeps clearly relevant results and discards unrelated chunks.
+function envFloat(name: string, fallback: number): number {
+  const v = process.env[name];
+  if (!v) return fallback;
+  const n = parseFloat(v);
+  return Number.isFinite(n) ? n : fallback;
+}
+const VECTOR_DISTANCE_THRESHOLD = envFloat("RETRIEVAL_VECTOR_DISTANCE_THRESHOLD", 0.55);
 
 export class FirebaseRetrievalProvider implements RetrievalProvider {
   async search(queryText: string): Promise<RetrievedSnippet[]> {
@@ -52,6 +62,8 @@ export class FirebaseRetrievalProvider implements RetrievalProvider {
         queryVector: FieldValue.vector(queryEmbedding),
         limit: VECTOR_CANDIDATES,
         distanceMeasure: "COSINE",
+        distanceResultField: "_dist",
+        distanceThreshold: VECTOR_DISTANCE_THRESHOLD,
       })
       .get();
 
@@ -64,15 +76,22 @@ export class FirebaseRetrievalProvider implements RetrievalProvider {
         docId?: string;
         fileName?: string;
         text?: string;
+        _dist?: number;
       };
       const docId = typeof data.docId === "string" ? data.docId : doc.id;
       const fileName = typeof data.fileName === "string" ? data.fileName : docId;
       const text = typeof data.text === "string" ? data.text : "";
+      const dist = typeof data._dist === "number" ? data._dist : 1;
       // findNearest returns docs ordered by distance — first occurrence = best match
       if (!seen.has(docId)) {
-        seen.set(docId, { text, fileName, distance: 0 });
+        seen.set(docId, { text, fileName, distance: dist });
       }
     });
+
+    console.log(
+      `[Retrieval] Vector candidates: ${snapshot.size}, unique docs: ${seen.size}`,
+      [...seen.values()].map((v) => `${v.fileName}(d=${v.distance.toFixed(3)})`).join(", ")
+    );
 
     const snippets: RetrievedSnippet[] = [];
     for (const [docId, { text, fileName }] of seen) {
