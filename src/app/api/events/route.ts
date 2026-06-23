@@ -13,9 +13,11 @@ const ALLOWED_EVENTS: ClientLoggedEventName[] = CLIENT_ANALYTICS_EVENTS;
 // VULN-006: per-event allowlists with .strict() to reject unknown keys.
 const EventPayloadSchemas: Record<ClientLoggedEventName, z.ZodTypeAny> = {
   user_feedback: z.object({
+    feedback: z.enum(["thumbs_up", "thumbs_down"]).optional(),
     rating: z.number().int().min(1).max(5).optional(),
     comment: z.string().max(500).optional(),
     session_id: z.string().max(128).optional(),
+    message_id: z.string().max(128).optional(),
   }).strict(),
   session_started: z.object({
     session_id: z.string().max(128).optional(),
@@ -23,13 +25,15 @@ const EventPayloadSchemas: Record<ClientLoggedEventName, z.ZodTypeAny> = {
   session_ended: z.object({
     session_id: z.string().max(128).optional(),
     duration_ms: z.number().nonnegative().optional(),
+    query_count: z.number().nonnegative().optional(),
   }).strict(),
   response_copied: z.object({
     session_id: z.string().max(128).optional(),
+    message_id: z.string().max(128).optional(),
   }).strict(),
   document_viewed: z.object({
-    document_id: z.string().max(128).optional(),
-    session_id: z.string().max(128).optional(),
+    doc_id: z.string().max(128).optional(),
+    file_name: z.string().max(256).optional(),
   }).strict(),
   file_uploaded: z.object({
     file_type: z.string().max(64).optional(),
