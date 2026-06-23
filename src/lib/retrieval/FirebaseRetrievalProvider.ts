@@ -28,30 +28,42 @@ function envFloat(name: string, fallback: number): number {
 const VECTOR_DISTANCE_THRESHOLD = envFloat("RETRIEVAL_VECTOR_DISTANCE_THRESHOLD", 0.55);
 
 export class FirebaseRetrievalProvider implements RetrievalProvider {
-  async search(queryText: string): Promise<RetrievedSnippet[]> {
+  async search(queryText: string, _limit?: number, precomputedEmbedding?: number[]): Promise<RetrievedSnippet[]> {
     if (!adminDb) {
       throw new Error("Firebase Admin SDK not initialized.");
     }
 
-    // Try vector search first; fall back to lexical if it fails or finds nothing
-    try {
-      const vectorResults = await this.vectorSearch(queryText);
-      if (vectorResults.length > 0) {
-        console.log(`[Retrieval] Vector search: ${vectorResults.length} snippet(s) from document_chunks`);
-        return vectorResults;
-      }
-      console.log("[Retrieval] Vector search returned 0 results — falling back to lexical");
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      console.warn(`[Retrieval] Vector search failed (${msg}) — falling back to lexical`);
-    }
+    const [vectorResults, lexicalResults] = await Promise.all([
+      this.vectorSearch(queryText, precomputedEmbedding).catch((e) => {
+        console.warn(`[Retrieval] Vector search failed: ${e instanceof Error ? e.message : e}`);
+        return [] as RetrievedSnippet[];
+      }),
+      this.lexicalSearch(queryText).catch((e) => {
+        console.warn(`[Retrieval] Lexical search failed: ${e instanceof Error ? e.message : e}`);
+        return [] as RetrievedSnippet[];
+      }),
+    ]);
 
-    return this.lexicalSearch(queryText);
+    return this.mergeResults(vectorResults, lexicalResults);
   }
 
-  private async vectorSearch(queryText: string): Promise<RetrievedSnippet[]> {
+  private mergeResults(vector: RetrievedSnippet[], lexical: RetrievedSnippet[]): RetrievedSnippet[] {
+    const seen = new Set(vector.map((s) => s.docId));
+    const extras = lexical.filter((s) => !seen.has(s.docId));
+    const merged = [...vector, ...extras].slice(0, MAX_SNIPPETS);
+    if (merged.length === 0) {
+      console.warn("[Retrieval] Both vector and lexical search returned 0 results");
+    } else {
+      console.log(`[Retrieval] Merged: ${vector.length} vector + ${extras.length} lexical-only = ${merged.length} total`);
+    }
+    return merged;
+  }
+
+  private async vectorSearch(queryText: string, precomputedEmbedding?: number[]): Promise<RetrievedSnippet[]> {
     if (!adminDb) throw new Error("Firebase Admin SDK not initialized.");
-    const queryEmbedding = await embedQuery(queryText);
+    const queryEmbedding = precomputedEmbedding && precomputedEmbedding.length > 0
+      ? precomputedEmbedding
+      : await embedQuery(queryText);
     if (queryEmbedding.length === 0) return [];
 
     const snapshot = await adminDb

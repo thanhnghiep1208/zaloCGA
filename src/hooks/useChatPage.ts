@@ -1,6 +1,6 @@
 "use client";
 
-import { DragEvent, useState, useRef, useEffect } from "react";
+import { DragEvent, useState, useRef, useEffect, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { User } from "firebase/auth";
 import { useAuth } from "@/context/AuthContext";
@@ -43,6 +43,9 @@ export function useChatPage() {
 
   const bottomRef = useRef<HTMLDivElement>(null);
   const messagesRef = useRef<ChatMessage[]>([]);
+  const embeddingRef = useRef<number[] | null>(null);
+  const embedDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const embedAbortRef = useRef<AbortController | null>(null);
 
   const session = useChatSession(user);
   const attachments = useChatAttachments();
@@ -60,6 +63,13 @@ export function useChatPage() {
     messagesRef.current = messages;
   }, [messages]);
 
+  useEffect(() => {
+    return () => {
+      if (embedDebounceRef.current) clearTimeout(embedDebounceRef.current);
+      embedAbortRef.current?.abort();
+    };
+  }, []);
+
   // Handle ?new=1 — reset chat state and redirect
   useEffect(() => {
     if (searchParams.get("new") !== "1") return;
@@ -73,6 +83,46 @@ export function useChatPage() {
       router.replace("/chat");
     })();
   }, [searchParams, router, session, attachments]);
+
+  const handleInputChange = useCallback(
+    (value: string) => {
+      setInput(value);
+      embeddingRef.current = null;
+      embedAbortRef.current?.abort();
+      if (embedDebounceRef.current) clearTimeout(embedDebounceRef.current);
+
+      const trimmed = value.trim();
+      if (!user || trimmed.length < 10) return;
+
+      embedDebounceRef.current = setTimeout(async () => {
+        const controller = new AbortController();
+        embedAbortRef.current = controller;
+        try {
+          const authHeader = await firebaseBearerAuthHeader(user);
+          const res = await fetch("/api/embed", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", ...authHeader },
+            body: JSON.stringify({ query: trimmed }),
+            signal: controller.signal,
+          });
+          if (res.ok) {
+            const data: unknown = await res.json();
+            if (
+              data &&
+              typeof data === "object" &&
+              "embedding" in data &&
+              Array.isArray((data as { embedding: unknown }).embedding)
+            ) {
+              embeddingRef.current = (data as { embedding: number[] }).embedding;
+            }
+          }
+        } catch {
+          /* silently fail — server will compute embedding on Send */
+        }
+      }, 500);
+    },
+    [user]
+  );
 
   const buildConversationContext = (): ConversationTurn[] => {
     return messages
@@ -106,6 +156,10 @@ export function useChatPage() {
     };
 
     setInput("");
+    embedAbortRef.current?.abort();
+    if (embedDebounceRef.current) clearTimeout(embedDebounceRef.current);
+    const precomputedEmbedding = embeddingRef.current;
+    embeddingRef.current = null;
     setIsLoading(true);
 
     let currentSessionId = session.sessionId;
@@ -162,6 +216,7 @@ export function useChatPage() {
           conversation: buildConversationContext(),
           sessionId: currentSessionId,
           attachments: uploadedAttachments,
+          ...(precomputedEmbedding ? { embedding: precomputedEmbedding } : {}),
         }),
       });
 
@@ -183,18 +238,6 @@ export function useChatPage() {
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       const streamState = createChatStreamParseState();
-      let renderedLength = 0;
-
-      const renderNextChunk = (step = 10) => {
-        const { accumulatedText } = streamState;
-        if (renderedLength >= accumulatedText.length) return false;
-        renderedLength = Math.min(renderedLength + step, accumulatedText.length);
-        const nextText = accumulatedText.slice(0, renderedLength);
-        setMessages((prev) =>
-          prev.map((msg) => (msg.id === assistantId ? { ...msg, content: nextText } : msg))
-        );
-        return true;
-      };
 
       while (true) {
         const { value, done } = await reader.read();
@@ -210,16 +253,12 @@ export function useChatPage() {
           );
         }
 
-        if (streamState.hasParsedSources) {
-          const moved = renderNextChunk(4);
-          if (moved) {
-            await new Promise((resolve) => setTimeout(resolve, 24));
-          }
+        if (streamState.hasParsedSources && streamState.accumulatedText.length > 0) {
+          const currentText = streamState.accumulatedText;
+          setMessages((prev) =>
+            prev.map((msg) => (msg.id === assistantId ? { ...msg, content: currentText } : msg))
+          );
         }
-      }
-
-      while (renderNextChunk(8)) {
-        await new Promise((resolve) => setTimeout(resolve, 16));
       }
 
       const { accumulatedText, finalSources } = streamState;
@@ -300,7 +339,7 @@ export function useChatPage() {
     user: user as User | null,
     messages,
     input,
-    setInput,
+    setInput: handleInputChange,
     isLoading,
     sessionId: session.sessionId,
     previewDocId,

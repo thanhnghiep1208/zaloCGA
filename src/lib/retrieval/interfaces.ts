@@ -6,8 +6,5 @@ export interface RetrievedSnippet {
 }
 
 export interface RetrievalProvider {
-  /**
-   * Search uploaded documents based on the query, returning snippets.
-   */
-  search(query: string, limit?: number): Promise<RetrievedSnippet[]>;
+  search(query: string, limit?: number, precomputedEmbedding?: number[]): Promise<RetrievedSnippet[]>;
 }

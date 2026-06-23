@@ -35,6 +35,7 @@ const ChatRequestSchema = z.object({
     )
     .optional(),
   attachments: z.array(ChatAttachmentSchema).optional(),
+  embedding: z.array(z.number()).optional(),
 });
 
 function envInt(name: string, fallback: number): number {
@@ -134,7 +135,7 @@ export async function POST(req: Request) {
       );
     }
 
-    const { query, conversation, attachments, sessionId } = parsed.data;
+    const { query, conversation, attachments, sessionId, embedding } = parsed.data;
     const safeSessionId =
       typeof sessionId === "string" && sessionId.trim() ? sessionId.trim() : "draft";
 
@@ -188,8 +189,7 @@ export async function POST(req: Request) {
 
     const responseStart = Date.now();
 
-    // Hit the abstracted Provider
-    const contextSnippets = await RetrievalService.getContext(retrievalQuery);
+    const contextSnippets = await RetrievalService.getContext(retrievalQuery, embedding);
 
     console.log(
       `[ChatRoute] Query: "${query}". Found ${contextSnippets.length} relevant snippets.`

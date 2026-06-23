@@ -39,8 +39,8 @@ type ContentTurn = {
 };
 
 export class RetrievalService {
-  static async getContext(query: string): Promise<RetrievedSnippet[]> {
-    return currentProvider.search(query);
+  static async getContext(query: string, precomputedEmbedding?: number[]): Promise<RetrievedSnippet[]> {
+    return currentProvider.search(query, undefined, precomputedEmbedding);
   }
 
   static async generateChatResponse(

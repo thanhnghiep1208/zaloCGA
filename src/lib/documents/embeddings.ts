@@ -48,8 +48,19 @@ export async function embedTexts(
   return results;
 }
 
+const _queryEmbedCache = new Map<string, number[]>();
+const EMBED_CACHE_MAX = 200;
+
 export async function embedQuery(text: string): Promise<number[]> {
-  return embedSingle(text, "RETRIEVAL_QUERY");
+  const key = text.trim().toLowerCase().slice(0, 500);
+  const cached = _queryEmbedCache.get(key);
+  if (cached) return cached;
+  const vec = await embedSingle(text, "RETRIEVAL_QUERY");
+  if (_queryEmbedCache.size >= EMBED_CACHE_MAX) {
+    _queryEmbedCache.delete(_queryEmbedCache.keys().next().value!);
+  }
+  _queryEmbedCache.set(key, vec);
+  return vec;
 }
 
 export type ChunkWriteResult = { chunkCount: number };
