@@ -56,6 +56,14 @@ export async function POST(req: Request) {
       { status: 503 }
     );
   }
+  // VULN-008: enforce minimum entropy — short secrets are brute-forceable.
+  if (secret.length < 32) {
+    console.error("[cleanup-cron] CHAT_ATTACHMENTS_CRON_SECRET must be at least 32 characters");
+    return NextResponse.json(
+      { error: "CHAT_ATTACHMENTS_CRON_SECRET is too short (min 32 chars)" },
+      { status: 503 }
+    );
+  }
 
   if (!requireCronAuth(req, secret)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

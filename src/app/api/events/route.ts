@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { ApiAuthError, requireUidFromRequest } from "@/lib/api-request-auth";
+import { checkRateLimit } from "@/lib/rate-limit";
 import {
   CLIENT_ANALYTICS_EVENTS,
   logAnalyticsEvent,
@@ -8,9 +10,39 @@ import {
 
 const ALLOWED_EVENTS: ClientLoggedEventName[] = CLIENT_ANALYTICS_EVENTS;
 
+// VULN-006: per-event allowlists with .strict() to reject unknown keys.
+const EventPayloadSchemas: Record<ClientLoggedEventName, z.ZodTypeAny> = {
+  user_feedback: z.object({
+    rating: z.number().int().min(1).max(5).optional(),
+    comment: z.string().max(500).optional(),
+    session_id: z.string().max(128).optional(),
+  }).strict(),
+  session_started: z.object({
+    session_id: z.string().max(128).optional(),
+  }).strict(),
+  session_ended: z.object({
+    session_id: z.string().max(128).optional(),
+    duration_ms: z.number().nonnegative().optional(),
+  }).strict(),
+  response_copied: z.object({
+    session_id: z.string().max(128).optional(),
+  }).strict(),
+  document_viewed: z.object({
+    document_id: z.string().max(128).optional(),
+    session_id: z.string().max(128).optional(),
+  }).strict(),
+  file_uploaded: z.object({
+    file_type: z.string().max(64).optional(),
+    size: z.number().nonnegative().optional(),
+    session_id: z.string().max(128).optional(),
+  }).strict(),
+};
+
 export async function POST(req: Request) {
   try {
     const uid = await requireUidFromRequest(req);
+    await checkRateLimit(uid, "events", 60);
+
     const body = await req.json();
     const { eventName, payload } = body as {
       eventName?: ClientLoggedEventName;
@@ -21,8 +53,18 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Event not allowed" }, { status: 400 });
     }
 
+    const schema = EventPayloadSchemas[eventName];
+    const rawPayload = payload && typeof payload === "object" ? payload : {};
+    const parsed = schema.safeParse(rawPayload);
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: "Invalid payload", details: parsed.error.flatten().fieldErrors },
+        { status: 400 }
+      );
+    }
+
     await logAnalyticsEvent(eventName, {
-      ...(payload || {}),
+      ...(parsed.data as Record<string, unknown>),
       user_id: uid,
     });
 

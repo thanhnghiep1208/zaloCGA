@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 import { requireContributorOrAdmin, requireUidFromRequest } from "@/lib/api-request-auth";
+import { checkRateLimit } from "@/lib/rate-limit";
 import { adminStorage, adminStorageBucketName } from "@/lib/firebase-admin";
 import { nextJsonFriendlyApiError } from "@/lib/server-json-response";
 
@@ -30,6 +31,7 @@ export async function POST(req: Request) {
   try {
     const uid = await requireUidFromRequest(req);
     await requireContributorOrAdmin(uid);
+    await checkRateLimit(uid, "upload-image", 30);
 
     if (!adminStorage) {
       return NextResponse.json({ error: "Storage service unavailable" }, { status: 500 });

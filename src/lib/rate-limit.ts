@@ -9,25 +9,27 @@ function envInt(name: string, fallback: number): number {
   return Number.isFinite(n) && n > 0 ? n : fallback;
 }
 
-const RATE_LIMIT_PER_MINUTE = envInt("CHAT_RATE_LIMIT_PER_MINUTE", 20);
-
 /**
  * Firestore-based sliding-window rate limiter.
- * Each user gets a counter document per 1-minute window.
+ * Each user gets a counter document per 1-minute window per route key.
  *
  * Configure a Firestore TTL policy on the `expireAt` field of the
  * `rate_limits` collection so old docs are cleaned up automatically.
  */
-export async function checkChatRateLimit(uid: string): Promise<void> {
+export async function checkRateLimit(
+  uid: string,
+  routeKey: string,
+  limitPerMinute: number
+): Promise<void> {
   if (!adminDb) return; // if Admin SDK not available, allow through
 
   const windowKey = Math.floor(Date.now() / 60_000);
-  const ref = adminDb.collection("rate_limits").doc(`${uid}_${windowKey}`);
+  const ref = adminDb.collection("rate_limits").doc(`${uid}_${routeKey}_${windowKey}`);
 
   const allowed = await adminDb.runTransaction(async (tx) => {
     const snap = await tx.get(ref);
     const count: number = snap.exists ? (snap.data()?.count as number ?? 0) : 0;
-    if (count >= RATE_LIMIT_PER_MINUTE) return false;
+    if (count >= limitPerMinute) return false;
     // expireAt = end of next window so TTL deletes the doc after it's no longer relevant
     const expireAt = Timestamp.fromMillis((windowKey + 2) * 60_000);
     tx.set(ref, { count: FieldValue.increment(1), expireAt }, { merge: true });
@@ -36,8 +38,13 @@ export async function checkChatRateLimit(uid: string): Promise<void> {
 
   if (!allowed) {
     throw new ApiAuthError(
-      `Rate limit exceeded: max ${RATE_LIMIT_PER_MINUTE} requests per minute.`,
+      `Rate limit exceeded: max ${limitPerMinute} requests per minute.`,
       429
     );
   }
+}
+
+/** Thin wrapper for the chat endpoint — preserves backward compatibility. */
+export async function checkChatRateLimit(uid: string): Promise<void> {
+  return checkRateLimit(uid, "chat", envInt("CHAT_RATE_LIMIT_PER_MINUTE", 20));
 }

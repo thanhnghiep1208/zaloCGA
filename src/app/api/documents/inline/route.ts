@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { FieldValue } from "firebase-admin/firestore";
 import { requireContributorOrAdmin, requireUidFromRequest } from "@/lib/api-request-auth";
+import { checkRateLimit } from "@/lib/rate-limit";
+import { sanitizeContent } from "@/lib/documents/sanitizeHtml";
 import { adminDb } from "@/lib/firebase-admin";
 import { extractStorageImagesFromHtml, stripHtmlToPlainText } from "@/lib/documents/inlineSanitize";
 import { buildInlineIndexPayload } from "@/lib/documents/indexing";
@@ -20,6 +22,7 @@ export async function POST(req: Request) {
   try {
     const uid = await requireUidFromRequest(req);
     await requireContributorOrAdmin(uid);
+    await checkRateLimit(uid, "inline-doc", 20);
 
     if (!adminDb) {
       return NextResponse.json({ error: "Server configuration error" }, { status: 500 });
@@ -39,18 +42,20 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "contentHtml is required" }, { status: 400 });
     }
 
-    const contentPlain = stripHtmlToPlainText(contentHtml);
+    // VULN-002: sanitize before storing to prevent XSS when content is later served.
+    const safeHtml = sanitizeContent(contentHtml);
+    const contentPlain = stripHtmlToPlainText(safeHtml);
     if (!contentPlain) {
       return NextResponse.json({ error: "Content is empty after sanitize" }, { status: 400 });
     }
 
-    const images = extractStorageImagesFromHtml(contentHtml);
+    const images = extractStorageImagesFromHtml(safeHtml);
     const payload = {
       ...buildInlineIndexPayload({
         title,
         category,
         tags,
-        contentHtml,
+        contentHtml: safeHtml,
         contentPlain,
         images,
       }),

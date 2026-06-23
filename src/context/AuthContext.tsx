@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useContext, useEffect, useState } from "react";
-import { onAuthStateChanged, signOut, User } from "firebase/auth";
+import { onIdTokenChanged, signOut, User } from "firebase/auth";
 import { auth, db } from "@/lib/firebase";
 import {
   clearAuthSessionId,
@@ -14,8 +14,14 @@ import { doc, getDoc } from "firebase/firestore";
 
 const SESSION_COOKIE = "__session";
 
-function setSessionCookie() {
-  document.cookie = `${SESSION_COOKIE}=1; path=/; SameSite=Strict; max-age=86400`;
+async function setSessionCookie(user: User) {
+  try {
+    const token = await user.getIdToken();
+    // max-age=3600 matches Firebase ID token lifetime; onIdTokenChanged re-fires on refresh.
+    document.cookie = `${SESSION_COOKIE}=${token}; path=/; SameSite=Strict; max-age=3600`;
+  } catch {
+    clearSessionCookie();
+  }
 }
 
 function clearSessionCookie() {
@@ -49,7 +55,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+    const unsubscribe = onIdTokenChanged(auth, async (firebaseUser) => {
       if (!firebaseUser) {
         clearSessionCookie();
         setUser(null);
@@ -82,7 +88,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           return;
         }
 
-        setSessionCookie();
+        await setSessionCookie(firebaseUser);
         setUser(firebaseUser);
         setRole(r);
       } catch (error) {

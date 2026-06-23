@@ -8,6 +8,7 @@ import {
   requireContributorOrAdmin,
   requireUidFromRequest,
 } from "@/lib/api-request-auth";
+import { checkRateLimit } from "@/lib/rate-limit";
 import { logAnalyticsEvent } from "@/lib/analytics-events";
 import { GEMINI_FLASH_MODEL } from "@/lib/gemini-models";
 import { writeDocumentChunks } from "@/lib/documents/embeddings";
@@ -126,6 +127,7 @@ export async function POST(req: Request) {
   try {
     const uid = await requireUidFromRequest(req);
     await requireContributorOrAdmin(uid);
+    await checkRateLimit(uid, "ingest", 10);
 
     let rawBody: unknown;
     try {
@@ -256,13 +258,10 @@ export async function POST(req: Request) {
       );
     }
     const err = error as { message?: string; stack?: string };
-    console.error("[Ingest] Server error:", error);
+    // VULN-007: log stack server-side only — never expose to client.
+    console.error("[Ingest] Server error:", err.stack ?? error);
     return new Response(
-      JSON.stringify({
-        success: false,
-        error: err.message || "Parse failure",
-        ...(process.env.NODE_ENV === "development" ? { stack: err.stack } : {}),
-      }),
+      JSON.stringify({ success: false, error: err.message || "Parse failure" }),
       { status: 500, headers: { "Content-Type": "application/json" } }
     );
   }

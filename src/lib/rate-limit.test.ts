@@ -86,8 +86,8 @@ describe("checkChatRateLimit", () => {
     const after = Math.floor(Date.now() / 60_000);
     const calls = mockDoc.mock.calls as string[][];
     const key = calls[0][0];
-    expect(key).toMatch(/^user42_\d+$/);
-    const window = parseInt(key.split("_")[1], 10);
+    expect(key).toMatch(/^user42_chat_\d+$/);
+    const window = parseInt(key.split("_")[2], 10);
     expect(window).toBeGreaterThanOrEqual(before);
     expect(window).toBeLessThanOrEqual(after);
   });

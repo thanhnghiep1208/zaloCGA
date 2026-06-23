@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { adminDb } from "@/lib/firebase-admin";
+import { adminAuth, adminDb } from "@/lib/firebase-admin";
+import { ApiAuthError, assertFirebaseStorageDownloadUrl } from "@/lib/api-request-auth";
+import { sanitizeContent } from "@/lib/documents/sanitizeHtml";
 import mammoth from "mammoth";
 
 export const runtime = "nodejs";
@@ -17,6 +19,21 @@ export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  // VULN-001: verify Firebase ID token stored in __session cookie.
+  // The middleware only checks cookie presence; real auth must happen here.
+  const sessionToken = req.cookies.get("__session")?.value;
+  if (!sessionToken) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  if (!adminAuth) {
+    return NextResponse.json({ error: "Server configuration error" }, { status: 500 });
+  }
+  try {
+    await adminAuth.verifyIdToken(sessionToken);
+  } catch {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const { id } = await params;
   if (!adminDb) {
     return NextResponse.json({ error: "Admin DB unavailable" }, { status: 500 });
@@ -41,9 +58,10 @@ export async function GET(
   const displayName = data?.fileName || data?.title || "reference";
   const forceDownload = req.nextUrl.searchParams.get("download") === "1";
 
-  // Inline docs do not have source file URL; render/store directly from contentHtml.
+  // Inline docs: sanitize contentHtml before serving to prevent XSS (VULN-002).
   if (data?.type === "inline_doc") {
-    const htmlBody = data.contentHtml?.trim();
+    const rawHtml = data.contentHtml?.trim();
+    const safeHtml = rawHtml ? sanitizeContent(rawHtml) : null;
     const plain = data.contentPlain?.trim() || "No content.";
     const html = `<!doctype html>
 <html lang="vi">
@@ -60,12 +78,14 @@ export async function GET(
       blockquote { border-left: 3px solid #dcd7d3; padding-left: 12px; margin-left: 0; color: #595857; }
     </style>
   </head>
-  <body>${htmlBody || `<pre>${plain}</pre>`}</body>
+  <body>${safeHtml || `<pre>${plain}</pre>`}</body>
 </html>`;
 
     const headers = new Headers({
       "content-type": "text/html; charset=utf-8",
       "cache-control": "private, max-age=300",
+      // VULN-002 defence-in-depth: prevent scripts even if sanitizer is bypassed.
+      "content-security-policy": "default-src 'self'; script-src 'none'; object-src 'none';",
     });
     if (forceDownload) {
       headers.set("content-disposition", buildContentDisposition(`${displayName}.html`, "attachment"));
@@ -76,6 +96,16 @@ export async function GET(
   const fileUrl = data?.fileUrl;
   if (!fileUrl) {
     return NextResponse.json({ error: "Missing source URL" }, { status: 400 });
+  }
+
+  // VULN-003: validate URL before proxying — prevents SSRF to internal GCP metadata endpoints.
+  try {
+    assertFirebaseStorageDownloadUrl(fileUrl);
+  } catch (err) {
+    if (err instanceof ApiAuthError) {
+      return NextResponse.json({ error: err.message }, { status: err.status });
+    }
+    return NextResponse.json({ error: "Invalid file URL" }, { status: 400 });
   }
 
   const upstream = await fetch(fileUrl);
@@ -129,6 +159,7 @@ export async function GET(
       headers: {
         "content-type": "text/html; charset=utf-8",
         "cache-control": "private, max-age=300",
+        "content-security-policy": "default-src 'self'; script-src 'none'; object-src 'none';",
       },
     });
   }
