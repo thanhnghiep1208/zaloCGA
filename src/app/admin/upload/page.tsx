@@ -298,7 +298,7 @@ export default function AdminUploadPage() {
              </div>
              <span className="text-sm font-medium text-foreground">Select multiple files here</span>
              <span className="text-xs text-muted mt-2">or drag and drop them anytime</span>
-             <input type="file" className="hidden" onChange={handleFileChange} accept=".pdf,.txt,.docx,.csv" multiple />
+             <input id="upload-file-input" name="upload-file" type="file" className="hidden" onChange={handleFileChange} accept=".pdf,.txt,.docx,.csv" multiple />
           </label>
         ) : (
           <div className="clay-card mt-8 p-8 flex flex-col max-w-3xl mx-auto w-full space-y-8">
@@ -331,7 +331,9 @@ export default function AdminUploadPage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <label className="text-xs font-semibold uppercase text-muted">Description (for all files)</label>
-                <input 
+                <input
+                   id="upload-description"
+                   name="description"
                    disabled={uploading}
                    value={description}
                    onChange={e => setDescription(e.target.value)}
@@ -341,7 +343,9 @@ export default function AdminUploadPage() {
               </div>
               <div className="space-y-2">
                 <label className="text-xs font-semibold uppercase text-muted">Tags (comma separated)</label>
-                <input 
+                <input
+                   id="upload-tags"
+                   name="tags"
                    disabled={uploading}
                    value={tagsInput}
                    onChange={e => setTagsInput(e.target.value)}

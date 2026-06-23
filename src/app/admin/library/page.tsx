@@ -170,15 +170,19 @@ export default function AdminLibraryPage() {
         </div>
 
         <div className="clay-card flex flex-col sm:flex-row gap-3 pt-2 p-3">
-           <input 
+           <input
+             id="library-search"
+             name="search"
              type="text"
              placeholder="Search by filename or tag..."
              value={search}
              onChange={e => setSearch(e.target.value)}
              className="flex-1 px-4 py-2 border border-border rounded-[8px] bg-surface focus:outline-none focus:ring-2 focus:ring-accent/35 text-sm"
            />
-           <select 
-             value={filterType} 
+           <select
+             id="library-filter-type"
+             name="filterType"
+             value={filterType}
              onChange={e => setFilterType(e.target.value)}
             className="px-4 py-2 border border-border rounded-[8px] bg-surface focus:outline-none text-sm text-foreground"
            >
@@ -190,8 +194,10 @@ export default function AdminLibraryPage() {
              <option value="inline">Inline Doc</option>
              <option value="uploaded">Uploaded File</option>
            </select>
-           <select 
-             value={filterStatus} 
+           <select
+             id="library-filter-status"
+             name="filterStatus"
+             value={filterStatus}
              onChange={e => setFilterStatus(e.target.value)}
             className="px-4 py-2 border border-border rounded-[8px] bg-surface focus:outline-none text-sm text-foreground"
            >

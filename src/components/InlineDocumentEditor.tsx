@@ -195,6 +195,8 @@ export function InlineDocumentEditor({
         <div className="space-y-2">
           <label className="text-xs font-semibold uppercase text-muted">Title</label>
           <input
+            id="doc-title"
+            name="title"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             placeholder="VD: Guideline thong diep Empty State"
@@ -204,6 +206,8 @@ export function InlineDocumentEditor({
         <div className="space-y-2">
           <label className="text-xs font-semibold uppercase text-muted">Category</label>
           <input
+            id="doc-category"
+            name="category"
             value={category}
             onChange={(e) => setCategory(e.target.value)}
             placeholder="VD: onboarding, auth, payment"
@@ -215,6 +219,8 @@ export function InlineDocumentEditor({
       <div className="space-y-2">
         <label className="text-xs font-semibold uppercase text-muted">Tags (comma separated)</label>
         <input
+          id="doc-tags"
+          name="tags"
           value={tagsInput}
           onChange={(e) => setTagsInput(e.target.value)}
           placeholder="microcopy, guideline, warning"
@@ -262,6 +268,8 @@ export function InlineDocumentEditor({
       </div>
       <input
         ref={imageInputRef}
+        id="doc-image-input"
+        name="doc-image"
         type="file"
         accept="image/png,image/jpeg,image/webp,image/gif"
         className="hidden"

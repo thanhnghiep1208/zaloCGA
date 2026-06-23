@@ -86,6 +86,8 @@ export function ChatComposer({
       >
         <input
           ref={attachmentInputRef}
+          id="chat-attachment-input"
+          name="chat-attachment"
           type="file"
           accept="image/*"
           multiple
@@ -146,6 +148,8 @@ export function ChatComposer({
         <div className="relative flex items-end">
           <textarea
             ref={textareaRef}
+            id="chat-message"
+            name="message"
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => {

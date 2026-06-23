@@ -385,6 +385,8 @@ export default function AdminUsersPage() {
                       <td className="p-4 text-muted text-xs">{u.email ?? "—"}</td>
                       <td className="p-4">
                         <select
+                          id={`user-role-${u.profileUid}`}
+                          name={`role-${u.profileUid}`}
                           value={u.role || "user"}
                           onChange={(e) => handleRoleChange(u.profileUid, e.target.value)}
                           disabled={u.uid === currentUser?.uid}
