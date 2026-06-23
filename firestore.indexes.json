@@ -31,7 +31,7 @@
         { "fieldPath": "status", "order": "ASCENDING" },
         {
           "fieldPath": "embedding",
-          "vectorConfig": { "dimension": 3072, "flat": {} }
+          "vectorConfig": { "dimension": 1536, "flat": {} }
         }
       ]
     }

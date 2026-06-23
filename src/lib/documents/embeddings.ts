@@ -4,7 +4,7 @@ import { FieldValue } from "firebase-admin/firestore";
 import { chunkText } from "./chunking";
 
 const EMBEDDING_MODEL = "gemini-embedding-2";
-const EMBEDDING_DIM = 3072;
+const EMBEDDING_DIM = 1536;
 // Parallel calls per batch — stay within Gemini rate limits
 const EMBED_BATCH_CONCURRENCY = 5;
 
