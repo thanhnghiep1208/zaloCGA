@@ -186,13 +186,26 @@ Các event khác (`parse_success`, `query_sent`, `response_delivered`) được 
 - `src/lib/documents/chunking.ts` — chia text thành `TextChunk[]` (~1800 ký tự/chunk, overlap 200 ký tự, tôn trọng ranh giới đoạn văn).
 - `src/lib/documents/embeddings.ts` — wrapper `text-embedding-004`: `embedTexts()` (batch), `embedQuery()` (RETRIEVAL_QUERY task type), `writeDocumentChunks()`, `deleteDocumentChunks()`.
 
-## 5.6 Env validation (server)
+## 5.6 File viewer (`GET /references/file/[id]`)
+
+File: `src/app/references/file/[id]/route.ts`
+
+Phục vụ tài liệu trong thư viện ra trình duyệt, có xác thực token Firebase (`__session` cookie).
+
+- **inline_doc:** sanitize `contentHtml` bằng `sanitizeContent()` rồi bọc vào HTML template, trả `text/html`.
+- **DOCX:** tải file từ Storage, dùng `mammoth` convert sang HTML, trả `text/html`.
+- **PDF / TXT / CSV / file khác:** proxy thẳng từ Storage, trả đúng `content-type` gốc.
+- `?download=1`: trả về file binary với `content-disposition: attachment`.
+- SSRF protection: `assertFirebaseStorageDownloadUrl()` validate URL trước khi fetch.
+- CSP: các response HTML có header CSP riêng — xem mục 7.4.
+
+## 5.7 Env validation (server)
 
 - `src/lib/env/internal-auth-domain.ts` — parse và so khớp `NEXT_PUBLIC_INTERNAL_AUTH_EMAIL_DOMAIN` với `INTERNAL_AUTH_EMAIL_DOMAIN`.
 - `src/instrumentation.ts` — khi Node runtime khởi động, gọi `validateServerEnv()`; **fail startup** nếu hai biến domain được set nhưng khác nhau.
 - Local / CI: `npm run validate:env` (đọc `.env` / `.env.local`). Mẫu biến: `.env.example`.
 
-## 5.7 Firebase Admin init
+## 5.8 Firebase Admin init
 
 - `src/lib/firebase-admin.ts`
   - Ưu tiên `FIREBASE_SERVICE_ACCOUNT_KEY` (JSON string).
@@ -296,6 +309,23 @@ Counter rate-limit per-user per phút:
   - Verify Bearer ID token.
   - Check role contributor/admin cho ingest.
   - Validate host/bucket của Storage URL.
+
+## 7.4 Content Security Policy (file viewer)
+
+Route `GET /references/file/[id]` serve HTML trực tiếp ra browser (inline_doc và DOCX được convert sang HTML). Mỗi response kèm header CSP:
+
+```
+default-src 'self';
+style-src 'unsafe-inline';
+script-src 'none';
+object-src 'none';
+img-src 'self' https: data:;
+```
+
+- `script-src 'none'` — chặn hoàn toàn script execution, bảo vệ nếu sanitizer bị bypass (VULN-002).
+- `style-src 'unsafe-inline'` — cho phép `<style>` block trong HTML template (server-controlled, không phải user input).
+- `img-src 'self' https: data:` — cho phép ảnh HTTPS (trong nội dung inline_doc đã sanitize) và data: URI (ảnh DOCX được mammoth chuyển sang base64).
+- Sanitizer (`src/lib/documents/sanitizeHtml.ts`) đã enforce HTTPS-only cho `<img src>` ở lớp content trước khi HTML được lưu.
 
 ---
 
@@ -508,6 +538,7 @@ Nếu không đặt `CHAT_ATTACHMENTS_CRON_SECRET`, route cron trả `503` (chư
 - **Tài liệu cũ không xuất hiện qua vector search:** chưa được re-index sau khi deploy embedding — upload lại hoặc chạy migration. Tài liệu vẫn được tìm qua lexical fallback.
 - **PDF lớn bị timeout khi ingest:** File API đang poll `state === ACTIVE`; timeout 90s. Kiểm tra kích thước PDF và log App Hosting.
 - **storage/unauthorized** khi upload: kiểm tra role user doc và deploy `storage.rules` mới nhất.
+- **File viewer báo lỗi CSP (inline style / img blocked):** route `/references/file/[id]` có CSP header riêng — nếu thêm `<style>` inline mới hoặc nguồn ảnh mới vào template, cập nhật directive `style-src` / `img-src` trong `src/app/references/file/[id]/route.ts` (xem mục 7.4).
 - **`googletagmanager.com` ERR_BLOCKED_BY_CLIENT:** ad blocker chặn Google Analytics; không ảnh hưởng đăng nhập/chat nếu không dùng GA.
 - **Hydration mismatch có `bis_skin_checked`:** thường do browser extension chèn DOM, không phải lỗi app.
 - **Đăng xuất máy A nhưng máy B vẫn vào được:** đúng thiết kế — không có đăng xuất toàn cục trừ khi admin `disabled` hoặc reset mật khẩu (xem mục 8.5).
