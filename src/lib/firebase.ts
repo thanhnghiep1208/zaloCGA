@@ -1,6 +1,6 @@
 import { initializeApp, getApps, getApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
-import { getFirestore } from "firebase/firestore";
+import { initializeFirestore, getFirestore, persistentLocalCache, persistentMultipleTabManager } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 
 const firebaseApiKey = process.env.NEXT_PUBLIC_FIREBASE_API_KEY;
@@ -34,9 +34,18 @@ const firebaseConfig = {
   appId: firebaseAppId!,
 };
 
-const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
+const isNewApp = !getApps().length;
+const app = isNewApp ? initializeApp(firebaseConfig) : getApp();
 const auth = getAuth(app);
-const db = getFirestore(app);
+// initializeFirestore must only be called once per app instance.
+// Use experimentalAutoDetectLongPolling so Firestore falls back to long-polling
+// automatically when QUIC/WebChannel is blocked (e.g. on corporate networks).
+const db = isNewApp
+  ? initializeFirestore(app, {
+      experimentalAutoDetectLongPolling: true,
+      localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
+    })
+  : getFirestore(app);
 const storage = getStorage(app);
 
 export { app, auth, db, storage };
