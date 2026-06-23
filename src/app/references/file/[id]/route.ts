@@ -85,7 +85,7 @@ export async function GET(
       "content-type": "text/html; charset=utf-8",
       "cache-control": "private, max-age=300",
       // VULN-002 defence-in-depth: prevent scripts even if sanitizer is bypassed.
-      "content-security-policy": "default-src 'self'; script-src 'none'; object-src 'none';",
+      "content-security-policy": "default-src 'self'; style-src 'unsafe-inline'; script-src 'none'; object-src 'none'; img-src 'self' https: data:;",
     });
     if (forceDownload) {
       headers.set("content-disposition", buildContentDisposition(`${displayName}.html`, "attachment"));
@@ -159,7 +159,7 @@ export async function GET(
       headers: {
         "content-type": "text/html; charset=utf-8",
         "cache-control": "private, max-age=300",
-        "content-security-policy": "default-src 'self'; script-src 'none'; object-src 'none';",
+        "content-security-policy": "default-src 'self'; style-src 'unsafe-inline'; script-src 'none'; object-src 'none'; img-src 'self' https: data:;",
       },
     });
   }
