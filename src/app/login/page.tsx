@@ -1,16 +1,17 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { signInWithEmailAndPassword, signOut } from "firebase/auth";
 import { auth, db } from "@/lib/firebase";
 import { doc, getDoc } from "firebase/firestore";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { trackEvent } from "@/lib/gtag";
 import {
   isValidUsername,
   normalizeUsername,
   usernameToAuthEmail,
 } from "@/lib/auth-username";
+import { useAuth } from "@/context/AuthContext";
 
 function toFriendlyLoginError(err: unknown): string {
   const code = (err as { code?: string })?.code;
@@ -33,6 +34,15 @@ export default function LoginPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const { user, loading: authLoading } = useAuth();
+
+  useEffect(() => {
+    if (!authLoading && user) {
+      const next = searchParams.get("next") || "/chat";
+      router.replace(next);
+    }
+  }, [user, authLoading, router, searchParams]);
 
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -61,7 +71,6 @@ export default function LoginPage() {
       }
 
       trackEvent("login", { method: "password" });
-      router.push("/chat");
     } catch (err: unknown) {
       setError(toFriendlyLoginError(err));
     } finally {
