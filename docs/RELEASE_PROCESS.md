@@ -46,6 +46,8 @@ Firebase Console -> App Hosting -> Backend -> Environment variables
 
 After changing env vars, trigger a new rollout (push commit or manual deploy).
 
+**Secrets (`GEMINI_API_KEY`, `FIREBASE_SERVICE_ACCOUNT_KEY`):** a literal value set directly in the Console **always overrides** the `secret:` reference declared in `apphosting.yaml`, even after rotating a new version in Secret Manager. When rotating a secret, remove any literal Console override first, then `apphosting:secrets:set` + a fresh rollout (secrets resolve at build time). See `docs/PROJECT_OVERVIEW.md` §9.1 for the full incident writeup and procedure.
+
 Typical vars:
 
 - `NEXT_PUBLIC_FIREBASE_API_KEY`
@@ -80,4 +82,3 @@ If a release is unstable:
 2. Select the previous stable rollout
 3. Roll back / re-release that version
 4. Create a fix branch and ship a new rollout after validation
-

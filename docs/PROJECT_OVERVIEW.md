@@ -428,12 +428,26 @@ Bắt buộc (App Hosting -> Backend -> Environment variables):
 - `NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET`
 - `NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID`
 - `NEXT_PUBLIC_FIREBASE_APP_ID`
-- `FIREBASE_SERVICE_ACCOUNT_KEY`
-- `GEMINI_API_KEY`
+- `FIREBASE_SERVICE_ACCOUNT_KEY` — secret, khai báo qua `apphosting.yaml` (`secret: FIREBASE_SERVICE_ACCOUNT_KEY`)
+- `GEMINI_API_KEY` — secret, khai báo qua `apphosting.yaml` (`secret: GEMINI_API_KEY`)
 - `NEXT_PUBLIC_INTERNAL_AUTH_EMAIL_DOMAIN` (client: map username → email Auth)
 - `INTERNAL_AUTH_EMAIL_DOMAIN` (server/API admin; **cùng giá trị** với biến `NEXT_PUBLIC_*`)
 
 Mặc định trong code nếu không set: `accounts.internal` (email Auth dạng `admin@accounts.internal`). Server **từ chối khởi động** nếu hai biến domain được set nhưng khác nhau.
+
+### 9.1 ⚠️ Console override đè `apphosting.yaml` — bẫy khi rotate secret
+
+Firebase App Hosting merge cấu hình từ 2 nguồn: `apphosting.yaml` (khai báo `secret: ...`) và Firebase Console (Environment variables trên backend) — nếu một biến được set **giá trị literal trực tiếp trong Console**, giá trị đó **luôn thắng**, bất kể `apphosting.yaml` khai báo `secret:` đúng thế nào.
+
+Sự cố thực tế đã gặp (2026-07-14): `GEMINI_API_KEY` và `FIREBASE_SERVICE_ACCOUNT_KEY` bị lộ, đã rotate nhiều version mới trong Secret Manager + deploy lại nhiều lần, nhưng `/api/chat`, `/api/embed`, `/api/admin/reports` vẫn 500 (`API_KEY_INVALID` / `16 UNAUTHENTICATED`) — vì Console đang có **giá trị cứng** (key **cũ, đã xoá**) đè lên khai báo `secret:` trong YAML. Chỉ giải quyết được sau khi **xoá hẳn 2 biến này khỏi Console** rồi build lại.
+
+**Quy trình rotate secret đúng cách:**
+
+1. Kiểm tra Console (App Hosting → Backend → Environment variables) — nếu biến có **giá trị literal**, xoá nó đi (để fallback về `secret:` trong YAML), không sửa giá trị tay.
+2. `firebase apphosting:secrets:set <NAME> --data-file <path>` (hoặc nhập tay) → tạo version mới trong Secret Manager.
+3. `firebase apphosting:rollouts:create <backendId> --git-branch main --force` — **bắt buộc build mới**, vì secret được resolve **tại thời điểm build**, không tự áp dụng cho revision cũ.
+4. Xác nhận runtime dùng đúng secret: `gcloud run services describe <service> --format=json` rồi kiểm tra `env[].valueFrom.secretKeyRef.key` (số version) — **không** in giá trị `env[].value` ra terminal/log (đó là plaintext secret).
+5. Test thật bằng 1 request có auth (không chỉ check HTTP status của request không-auth, vì lỗi Firestore/Gemini chỉ xảy ra sau bước xác thực).
 
 Tùy chọn (Gemini & chat):
 
@@ -540,6 +554,8 @@ Nếu không đặt `CHAT_ATTACHMENTS_CRON_SECRET`, route cron trả `503` (chư
 - **Server configuration error** ở API: thiếu hoặc sai `FIREBASE_SERVICE_ACCOUNT_KEY` / project id env.
 - **Startup crash env domain:** `INTERNAL_AUTH_EMAIL_DOMAIN` và `NEXT_PUBLIC_INTERNAL_AUTH_EMAIL_DOMAIN` khác nhau — đặt cùng một giá trị (ví dụ `accounts.internal`).
 - **Chat/ingest Gemini lỗi model:** kiểm tra `GEMINI_API_KEY` và quyền model `gemini-3.5-flash`; fallback tự thử model trong `GEMINI_CHAT_MODELS`.
+- **Gemini trả `API_KEY_INVALID` dù key vừa tạo còn hạn:** Google đang migrate key Gemini từ Standard (`AIza...`) sang Auth key gắn service account (`AQ.Ab...`); Standard key **unrestricted** đã bị từ chối từ 19/06/2026, và **toàn bộ** Standard key ngừng hoạt động từ 09/2026. Key tạo mới qua AI Studio giờ luôn là Auth key. Cần `@google/genai` ≥ 2.x (project hiện dùng `^2.11.0`) để tương thích Auth key — bản 1.x sẽ báo `API_KEY_INVALID`.
+- **Rotate `GEMINI_API_KEY`/`FIREBASE_SERVICE_ACCOUNT_KEY` xong vẫn lỗi `500`/`16 UNAUTHENTICATED`:** rất có thể do **Console override** đè lên `secret:` trong `apphosting.yaml` — xem mục 9.1 để biết cách kiểm tra và fix đúng quy trình.
 - **Vector search lỗi `index not ready`:** index `document_chunks.embedding` chưa deploy hoặc đang tạo → retrieval tự fallback lexical, deploy index bằng `firebase deploy --only firestore:indexes`.
 - **Chat trả `429 Rate limit exceeded`:** user gửi quá `CHAT_RATE_LIMIT_PER_MINUTE` (mặc định 20) req/phút. Tăng giới hạn qua env nếu cần.
 - **Tài liệu cũ không xuất hiện qua vector search:** chưa được re-index sau khi deploy embedding — upload lại hoặc chạy migration. Tài liệu vẫn được tìm qua lexical fallback.
