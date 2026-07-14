@@ -34,6 +34,31 @@ test.describe("Login page", () => {
     // Button becomes disabled immediately while the async login is in flight
     await expect(btn).toBeDisabled();
   });
+
+  test.describe("Firestore blocked after sign-in (e.g. ad blocker / net::ERR_BLOCKED_BY_CLIENT)", () => {
+    test.skip(
+      !process.env.E2E_USER_USERNAME,
+      "Set E2E_USER_USERNAME and E2E_USER_PASSWORD to run this test"
+    );
+
+    test("shows an error instead of hanging forever", async ({ page }) => {
+      // Never call route.continue()/fulfill()/abort() — the request just hangs,
+      // reproducing what an ad blocker / privacy extension does when it silently
+      // drops a request instead of sending a fast rejection.
+      await page.route("**/firestore.googleapis.com/**", () => {});
+
+      await page.goto("/login");
+      await page.getByLabel("Tên đăng nhập").fill(process.env.E2E_USER_USERNAME!);
+      await page.getByLabel("Mật khẩu").fill(process.env.E2E_USER_PASSWORD!);
+      await page.getByRole("button", { name: /đăng nhập/i }).click();
+
+      // AuthContext's role-fetch timeout (10s) should fire and surface an
+      // error instead of leaving the user stuck with no feedback.
+      const errorMsg = page.locator("text=/không thể tải thông tin tài khoản/i");
+      await expect(errorMsg).toBeVisible({ timeout: 20_000 });
+      await expect(page).toHaveURL(/\/login/);
+    });
+  });
 });
 
 test.describe("Chat page (authenticated)", () => {

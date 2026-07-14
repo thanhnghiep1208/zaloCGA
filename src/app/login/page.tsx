@@ -1,9 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { signInWithEmailAndPassword, signOut } from "firebase/auth";
-import { auth, db } from "@/lib/firebase";
-import { doc, getDoc } from "firebase/firestore";
+import { signInWithEmailAndPassword } from "firebase/auth";
+import { auth } from "@/lib/firebase";
 import { useRouter, useSearchParams } from "next/navigation";
 import { trackEvent } from "@/lib/gtag";
 import {
@@ -35,7 +34,7 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { user, loading: authLoading } = useAuth();
+  const { user, loading: authLoading, authError } = useAuth();
 
   useEffect(() => {
     if (!authLoading && user) {
@@ -60,16 +59,9 @@ export default function LoginPage() {
 
     try {
       const email = usernameToAuthEmail(normalized);
-      const cred = await signInWithEmailAndPassword(auth, email, password);
-
-      const docRef = doc(db, "users", cred.user.uid);
-      const docSnap = await getDoc(docRef);
-      if (!docSnap.exists()) {
-        await signOut(auth);
-        setError("Tài khoản chưa được cấp quyền. Vui lòng liên hệ admin.");
-        return;
-      }
-
+      await signInWithEmailAndPassword(auth, email, password);
+      // Authorization (users/{uid} doc + role) is decided solely by AuthContext;
+      // its `authError`/`user` state drives the error banner and redirect below.
       trackEvent("login", { method: "password" });
     } catch (err: unknown) {
       setError(toFriendlyLoginError(err));
@@ -109,9 +101,9 @@ export default function LoginPage() {
           </p>
         </div>
 
-        {error && (
+        {(error || authError) && (
           <div className="bg-red-50 text-red-600 text-[13px] p-3 rounded-lg border border-red-100 text-center font-medium dark:bg-red-950/40 dark:text-red-300 dark:border-red-900/50">
-            {error}
+            {error || authError}
           </div>
         )}
 
@@ -152,6 +144,7 @@ export default function LoginPage() {
           <button
             type="submit"
             disabled={loading}
+            aria-label="Đăng nhập"
             className="clay-hover-playful w-full bg-charcoal text-cream border border-border py-3.5 rounded-xl font-semibold transition-opacity disabled:opacity-50 flex items-center justify-center gap-3 shadow-[var(--shadow-xs)]"
           >
             {loading ? (

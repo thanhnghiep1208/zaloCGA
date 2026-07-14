@@ -11,6 +11,7 @@ import {
   touchAuthSession,
 } from "@/lib/auth-sessions";
 import { doc, getDoc } from "firebase/firestore";
+import { withTimeout } from "@/lib/with-timeout";
 
 const SESSION_COOKIE = "__session";
 
@@ -34,13 +35,21 @@ interface AuthContextType {
   user: User | null;
   role: UserRole | null;
   loading: boolean;
+  authError: string | null;
 }
 
 const AuthContext = createContext<AuthContextType>({
   user: null,
   role: null,
   loading: true,
+  authError: null,
 });
+
+const ROLE_FETCH_ERROR_MESSAGE =
+  "Không thể tải thông tin tài khoản. Có thể trình duyệt đang chặn kết nối tới Firebase (tiện ích chặn quảng cáo/bảo mật) hoặc mạng đang chậm — vui lòng kiểm tra rồi thử lại.";
+const ACCOUNT_NOT_PROVISIONED_MESSAGE =
+  "Tài khoản chưa được cấp quyền. Vui lòng liên hệ admin.";
+const ROLE_FETCH_TIMEOUT_MS = 10_000;
 
 function parseRole(value: unknown): UserRole | null {
   if (value === "admin" || value === "contributor" || value === "user") {
@@ -53,6 +62,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [role, setRole] = useState<UserRole | null>(null);
   const [loading, setLoading] = useState(true);
+  const [authError, setAuthError] = useState<string | null>(null);
 
   useEffect(() => {
     const unsubscribe = onIdTokenChanged(auth, async (firebaseUser) => {
@@ -64,11 +74,14 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         return;
       }
 
+      setAuthError(null);
+
       try {
         const docRef = doc(db, "users", firebaseUser.uid);
-        const docSnap = await getDoc(docRef);
+        const docSnap = await withTimeout(getDoc(docRef), ROLE_FETCH_TIMEOUT_MS);
 
         if (!docSnap.exists()) {
+          setAuthError(ACCOUNT_NOT_PROVISIONED_MESSAGE);
           clearSessionCookie();
           await signOut(auth);
           setUser(null);
@@ -80,6 +93,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         const data = docSnap.data();
         const r = parseRole(data.role);
         if (!r) {
+          setAuthError(ACCOUNT_NOT_PROVISIONED_MESSAGE);
           clearSessionCookie();
           await signOut(auth);
           setUser(null);
@@ -95,6 +109,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         const code = (error as { code?: string })?.code;
         if (code !== "permission-denied") {
           console.error("Error fetching user role", error);
+          setAuthError(ROLE_FETCH_ERROR_MESSAGE);
         }
         clearSessionCookie();
         await signOut(auth);
@@ -134,7 +149,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   }, [user]);
 
   return (
-    <AuthContext.Provider value={{ user, role, loading }}>
+    <AuthContext.Provider value={{ user, role, loading, authError }}>
       {children}
     </AuthContext.Provider>
   );
