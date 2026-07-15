@@ -32,9 +32,19 @@ export default function LoginClient() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  // Stays disabled (via SSR-matching initial render) until React has hydrated
+  // and attached the form's onSubmit handler. Without this, a click that
+  // lands before hydration finishes falls through to the browser's native
+  // form submit — which leaks the plaintext password into the URL as GET
+  // query params instead of calling signInWithEmailAndPassword.
+  const [hydrated, setHydrated] = useState(false);
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user, loading: authLoading, authError } = useAuth();
+
+  useEffect(() => {
+    setHydrated(true);
+  }, []);
 
   useEffect(() => {
     if (!authLoading && user) {
@@ -107,7 +117,7 @@ export default function LoginClient() {
           </div>
         )}
 
-        <form onSubmit={handleSignIn} className="pt-2 space-y-4">
+        <form onSubmit={handleSignIn} method="post" className="pt-2 space-y-4">
           <div className="space-y-1.5">
             <label htmlFor="username" className="text-sm font-medium text-foreground">
               Tên đăng nhập
@@ -143,7 +153,7 @@ export default function LoginClient() {
           </div>
           <button
             type="submit"
-            disabled={loading}
+            disabled={loading || !hydrated}
             aria-label="Đăng nhập"
             className="clay-hover-playful w-full bg-charcoal text-cream border border-border py-3.5 rounded-xl font-semibold transition-opacity disabled:opacity-50 flex items-center justify-center gap-3 shadow-[var(--shadow-xs)]"
           >
