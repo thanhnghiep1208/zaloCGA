@@ -50,12 +50,30 @@ const ROLE_FETCH_ERROR_MESSAGE =
 const ACCOUNT_NOT_PROVISIONED_MESSAGE =
   "Tài khoản chưa được cấp quyền. Vui lòng liên hệ admin.";
 const ROLE_FETCH_TIMEOUT_MS = 10_000;
+const ROLE_FETCH_ATTEMPTS = 2;
 
 function parseRole(value: unknown): UserRole | null {
   if (value === "admin" || value === "contributor" || value === "user") {
     return value;
   }
   return null;
+}
+
+// Firestore reads right after sign-in can be slow to connect (long-polling
+// detection, cold IndexedDB cache) and time out even though the account is
+// fine. Retry transient failures before giving up and signing the user out —
+// otherwise a single slow network blip forces a manual page refresh to log in.
+async function fetchRoleDoc(docRef: ReturnType<typeof doc>) {
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= ROLE_FETCH_ATTEMPTS; attempt++) {
+    try {
+      return await withTimeout(getDoc(docRef), ROLE_FETCH_TIMEOUT_MS);
+    } catch (error) {
+      if ((error as { code?: string })?.code === "permission-denied") throw error;
+      lastError = error;
+    }
+  }
+  throw lastError;
 }
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
@@ -78,7 +96,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
       try {
         const docRef = doc(db, "users", firebaseUser.uid);
-        const docSnap = await withTimeout(getDoc(docRef), ROLE_FETCH_TIMEOUT_MS);
+        const docSnap = await fetchRoleDoc(docRef);
 
         if (!docSnap.exists()) {
           setAuthError(ACCOUNT_NOT_PROVISIONED_MESSAGE);

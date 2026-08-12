@@ -53,6 +53,14 @@ export default function LoginClient() {
     }
   }, [user, authLoading, router, searchParams]);
 
+  // AuthContext keeps resolving (Firestore role lookup) after Firebase Auth
+  // itself has already succeeded. Drop the button out of loading only once
+  // that resolution fails — otherwise it looks idle for the several seconds
+  // between "signed in" and "redirected", as if the page were frozen.
+  useEffect(() => {
+    if (authError) setLoading(false);
+  }, [authError]);
+
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -71,11 +79,11 @@ export default function LoginClient() {
       const email = usernameToAuthEmail(normalized);
       await signInWithEmailAndPassword(auth, email, password);
       // Authorization (users/{uid} doc + role) is decided solely by AuthContext;
-      // its `authError`/`user` state drives the error banner and redirect below.
+      // its `authError`/`user` state drives the error banner and redirect below,
+      // so `loading` intentionally stays true here until one of those fires.
       trackEvent("login", { method: "password" });
     } catch (err: unknown) {
       setError(toFriendlyLoginError(err));
-    } finally {
       setLoading(false);
     }
   };
