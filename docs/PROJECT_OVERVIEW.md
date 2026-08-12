@@ -105,6 +105,7 @@ Tóm tắt kỹ thuật:
   - Lắng nghe `onIdTokenChanged`.
   - Đọc role từ `users/{uid}` trong Firestore; **không** có profile hợp lệ hoặc role không parse được → `signOut` + set `authError` (không fallback role `user`).
   - `getDoc(users/{uid})` được bọc bởi `withTimeout()` (`src/lib/with-timeout.ts`, timeout 10s): nếu request Firestore bị treo (vd. trình chặn quảng cáo/bảo mật chặn `firestore.googleapis.com` gây `net::ERR_BLOCKED_BY_CLIENT`), context sẽ tự timeout, sign-out, và set `authError` thay vì để UI treo vô thời hạn không phản hồi.
+  - `fetchRoleDoc()` retry lần đọc này tối đa 2 lần (mỗi lần timeout 10s) trước khi sign-out — một lần Firestore chậm/treo thoáng qua (mạng công ty, cold-start long-polling detection) không còn buộc user phải tự F5 lại trang để đăng nhập lại; chỉ lỗi `permission-denied` là fail ngay không retry (đó là lỗi quyền thật, không phải mạng chậm).
   - Context expose `authError: string | null` — trang login đọc giá trị này để hiển thị banner lỗi.
 - `ProtectedRoute` dùng để chặn truy cập sai role ở client UI.
 - `src/lib/auth-username.ts`: chuẩn hóa username, map `{username}@{INTERNAL_AUTH_EMAIL_DOMAIN}`.
@@ -367,12 +368,13 @@ img-src 'self' https: data:;
 1. User nhập **username** + password (không phải email hiển thị).
 2. Client map username → `{username}@{INTERNAL_AUTH_EMAIL_DOMAIN}` rồi `signInWithEmailAndPassword` (`src/app/login/page.tsx`).
 3. **Việc quyết định "được phép vào app hay không" nằm hoàn toàn ở `AuthContext`** (không có check trùng lặp ở trang login):
-   - `onIdTokenChanged` fire → đọc `users/{uid}` (có timeout 10s, xem mục 4.3).
-   - Không có document, hoặc role không hợp lệ, hoặc request timeout/lỗi mạng → `signOut` + set `authError` (message khác nhau tùy nguyên nhân: *chưa được cấp quyền* vs *không thể tải thông tin tài khoản, có thể do mạng/trình chặn quảng cáo*).
+   - `onIdTokenChanged` fire → đọc `users/{uid}` (retry tối đa 2 lần, mỗi lần timeout 10s, xem mục 4.3).
+   - Không có document, hoặc role không hợp lệ, hoặc hết cả 2 lần retry vẫn timeout/lỗi mạng → `signOut` + set `authError` (message khác nhau tùy nguyên nhân: *chưa được cấp quyền* vs *không thể tải thông tin tài khoản, có thể do mạng/trình chặn quảng cáo*).
    - Có document + role hợp lệ → set cookie `__session`, set `user`/`role`.
 4. Trang `/login` có một `useEffect` theo dõi `user` (không phải gọi trực tiếp trong submit handler — tránh redirect loop với middleware, xem lịch sử fix ở commit `61d58f5`): khi `user` xuất hiện, `router.replace(next)` với `next` lấy từ query `?next=` (do middleware set khi redirect user chưa đăng nhập) hoặc mặc định `/chat`.
-5. Banner lỗi trên trang login hiển thị `error` (lỗi validate/sign-in cục bộ) **hoặc** `authError` (từ AuthContext).
-6. Trang `/login` hiển thị hướng dẫn liên hệ admin để xin cấp tài khoản (email + Zalo).
+5. Nút "Đăng nhập" giữ trạng thái loading suốt khoảng thời gian giữa lúc Firebase Auth xác thực xong và lúc `AuthContext` resolve xong (redirect hoặc `authError`) — chỉ tắt loading khi có `authError`. Tránh cảm giác trang "đứng im" trong lúc chờ Firestore role-fetch (có thể vài giây, xem mục 4.3).
+6. Banner lỗi trên trang login hiển thị `error` (lỗi validate/sign-in cục bộ) **hoặc** `authError` (từ AuthContext).
+7. Trang `/login` hiển thị hướng dẫn liên hệ admin để xin cấp tài khoản (email + Zalo).
 
 **Test coverage:** `e2e/chat-flow.spec.ts` có test riêng mô phỏng Firestore bị chặn sau khi đăng nhập thành công (route interception, không resolve request) để xác nhận banner lỗi xuất hiện thay vì treo vô hạn; `src/lib/with-timeout.test.ts` cover unit test cho helper timeout.
 
@@ -564,6 +566,7 @@ Nếu không đặt `CHAT_ATTACHMENTS_CRON_SECRET`, route cron trả `503` (chư
 - **File viewer báo lỗi CSP (inline style / img blocked):** route `/references/file/[id]` có CSP header riêng — nếu thêm `<style>` inline mới hoặc nguồn ảnh mới vào template, cập nhật directive `style-src` / `img-src` trong `src/app/references/file/[id]/route.ts` (xem mục 7.4).
 - **`googletagmanager.com` ERR_BLOCKED_BY_CLIENT:** ad blocker chặn Google Analytics; không ảnh hưởng đăng nhập/chat.
 - **`firestore.googleapis.com` ERR_BLOCKED_BY_CLIENT lúc đăng nhập (nút Login không phản ứng):** trình chặn quảng cáo/bảo mật của trình duyệt chặn kết nối Firestore đúng lúc `AuthContext` đang lấy role của user. Từ bản fix hiện tại, sau 10s sẽ tự hiện banner lỗi *"Không thể tải thông tin tài khoản..."* thay vì treo im lặng (xem mục 4.3, 8.4). Hướng dẫn user tắt extension hoặc kiểm tra tab Network để xác nhận đúng request bị chặn.
+- **Đăng nhập xong vẫn đứng ở trang login, phải F5 nhiều lần mới vào được:** Firestore role-fetch sau khi Auth thành công bị chậm/treo thoáng qua (mạng công ty cần long-polling detection, cold-start Firestore client) — trước bản fix, 1 lần timeout (10s) là `signOut` ngay, buộc user tự F5 lại để `AuthContext` thử lại từ đầu. Đã fix: `fetchRoleDoc()` tự retry 2 lần trước khi bỏ cuộc (mục 4.3), và nút login giữ loading suốt quá trình đó nên không còn cảm giác "đứng im" (mục 8.4). Nếu vẫn gặp thường xuyên sau fix, nhiều khả năng là mạng/Firestore chậm thật (>20s round-trip) — kiểm tra tab Network lúc login xem request tới `firestore.googleapis.com` có bị treo/chậm bất thường không.
 - **Hydration mismatch có `bis_skin_checked`:** thường do browser extension chèn DOM, không phải lỗi app.
 - **Đăng xuất máy A nhưng máy B vẫn vào được:** đúng thiết kế — không có đăng xuất toàn cục trừ khi admin `disabled` hoặc reset mật khẩu (xem mục 8.5).
 
