@@ -11,16 +11,7 @@ import {
   usernameToAuthEmail,
 } from "@/lib/auth-username";
 import { useAuth } from "@/context/AuthContext";
-
-// `next` is attacker-controllable (anyone can craft /login?next=...): only
-// accept an internal, single-slash path so this can never send a signed-in
-// user off-site (open redirect).
-function sanitizeNextPath(value: string | null): string {
-  if (!value || !value.startsWith("/") || value.startsWith("//") || value.includes("://")) {
-    return "/chat";
-  }
-  return value;
-}
+import { sanitizeNextPath } from "@/lib/next-path";
 
 function toFriendlyLoginError(err: unknown): string {
   const code = (err as { code?: string })?.code;

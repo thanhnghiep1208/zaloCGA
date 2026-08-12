@@ -12,6 +12,7 @@ import {
 } from "@/lib/auth-sessions";
 import { doc, getDoc } from "firebase/firestore";
 import { withTimeout } from "@/lib/with-timeout";
+import { retryAsync } from "@/lib/retry-async";
 
 const SESSION_COOKIE = "__session";
 
@@ -64,16 +65,9 @@ function parseRole(value: unknown): UserRole | null {
 // fine. Retry transient failures before giving up and signing the user out —
 // otherwise a single slow network blip forces a manual page refresh to log in.
 async function fetchRoleDoc(docRef: ReturnType<typeof doc>) {
-  let lastError: unknown;
-  for (let attempt = 1; attempt <= ROLE_FETCH_ATTEMPTS; attempt++) {
-    try {
-      return await withTimeout(getDoc(docRef), ROLE_FETCH_TIMEOUT_MS);
-    } catch (error) {
-      if ((error as { code?: string })?.code === "permission-denied") throw error;
-      lastError = error;
-    }
-  }
-  throw lastError;
+  return retryAsync(() => withTimeout(getDoc(docRef), ROLE_FETCH_TIMEOUT_MS), ROLE_FETCH_ATTEMPTS, {
+    isFatal: (error) => (error as { code?: string })?.code === "permission-denied",
+  });
 }
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {

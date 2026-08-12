@@ -74,6 +74,17 @@ export function isAuthSessionActive(lastSeenSeconds: number | undefined): boolea
   return Date.now() - lastSeenSeconds * 1000 < AUTH_SESSION_ACTIVE_MS;
 }
 
+// Stored session id belongs to a different account (e.g. switching users in
+// the same browser tab without logging out first). Firestore rules only let
+// the owner update a session doc, so reusing it would always fail with
+// permission-denied — start a fresh session instead.
+export function sessionBelongsToOtherUser(
+  existingUserId: string | undefined,
+  userId: string
+): boolean {
+  return existingUserId !== undefined && existingUserId !== userId;
+}
+
 export async function registerAuthSession(userId: string): Promise<string> {
   let sessionId = getOrCreateAuthSessionId();
   if (!sessionId) return "";
@@ -82,11 +93,7 @@ export async function registerAuthSession(userId: string): Promise<string> {
   let ref = doc(db, "authSessions", sessionId);
   let existing = await getDoc(ref);
 
-  if (existing.exists() && existing.data()?.userId !== userId) {
-    // Stored session id belongs to a different account (e.g. switching users
-    // in the same browser tab without logging out first). Firestore rules
-    // only let the owner update a session doc, so reusing it would always
-    // fail with permission-denied — start a fresh session instead.
+  if (sessionBelongsToOtherUser(existing.exists() ? existing.data()?.userId : undefined, userId)) {
     clearAuthSessionId();
     sessionId = getOrCreateAuthSessionId();
     ref = doc(db, "authSessions", sessionId);
