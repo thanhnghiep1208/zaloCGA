@@ -75,12 +75,23 @@ export function isAuthSessionActive(lastSeenSeconds: number | undefined): boolea
 }
 
 export async function registerAuthSession(userId: string): Promise<string> {
-  const sessionId = getOrCreateAuthSessionId();
+  let sessionId = getOrCreateAuthSessionId();
   if (!sessionId) return "";
 
   const ua = typeof navigator !== "undefined" ? navigator.userAgent : "";
-  const ref = doc(db, "authSessions", sessionId);
-  const existing = await getDoc(ref);
+  let ref = doc(db, "authSessions", sessionId);
+  let existing = await getDoc(ref);
+
+  if (existing.exists() && existing.data()?.userId !== userId) {
+    // Stored session id belongs to a different account (e.g. switching users
+    // in the same browser tab without logging out first). Firestore rules
+    // only let the owner update a session doc, so reusing it would always
+    // fail with permission-denied — start a fresh session instead.
+    clearAuthSessionId();
+    sessionId = getOrCreateAuthSessionId();
+    ref = doc(db, "authSessions", sessionId);
+    existing = await getDoc(ref);
+  }
 
   if (existing.exists()) {
     // Document already exists (same browser tab after refresh) — only update lastSeenAt
