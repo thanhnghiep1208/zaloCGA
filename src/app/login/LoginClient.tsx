@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { signInWithEmailAndPassword } from "firebase/auth";
 import { auth } from "@/lib/firebase";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { trackEvent } from "@/lib/gtag";
 import {
   isValidUsername,
@@ -11,6 +11,16 @@ import {
   usernameToAuthEmail,
 } from "@/lib/auth-username";
 import { useAuth } from "@/context/AuthContext";
+
+// `next` is attacker-controllable (anyone can craft /login?next=...): only
+// accept an internal, single-slash path so this can never send a signed-in
+// user off-site (open redirect).
+function sanitizeNextPath(value: string | null): string {
+  if (!value || !value.startsWith("/") || value.startsWith("//") || value.includes("://")) {
+    return "/chat";
+  }
+  return value;
+}
 
 function toFriendlyLoginError(err: unknown): string {
   const code = (err as { code?: string })?.code;
@@ -38,7 +48,6 @@ export default function LoginClient() {
   // form submit — which leaks the plaintext password into the URL as GET
   // query params instead of calling signInWithEmailAndPassword.
   const [hydrated, setHydrated] = useState(false);
-  const router = useRouter();
   const searchParams = useSearchParams();
   const { user, loading: authLoading, authError } = useAuth();
 
@@ -48,10 +57,16 @@ export default function LoginClient() {
 
   useEffect(() => {
     if (!authLoading && user) {
-      const next = searchParams.get("next") || "/chat";
-      router.replace(next);
+      // A full page load, not router.replace(): on a brand-new browser
+      // session, the client-side router transition to a route it has never
+      // rendered before can silently stall (no error, URL never changes),
+      // leaving the user stuck until they manually refresh. A hard
+      // navigation always works — it's exactly what that manual refresh
+      // does — so use it directly instead of depending on the SPA router
+      // for this one security-sensitive redirect.
+      window.location.assign(sanitizeNextPath(searchParams.get("next")));
     }
-  }, [user, authLoading, router, searchParams]);
+  }, [user, authLoading, searchParams]);
 
   // AuthContext keeps resolving (Firestore role lookup) after Firebase Auth
   // itself has already succeeded. Drop the button out of loading only once
