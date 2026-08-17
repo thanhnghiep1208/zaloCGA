@@ -24,12 +24,12 @@ export function Header({ onOpenMenu }: HeaderProps) {
 
   const handleLogout = async () => {
     try {
-      // Redirect to login first so the component unmounts and detaches listeners
-      router.replace("/login");
-      // Use a small delay to ensure navigation starts before the session is cleared
-      await new Promise(resolve => setTimeout(resolve, 100));
+      // Sign out fully before navigating: LoginClient hard-redirects back to
+      // the dashboard whenever `user` is still truthy on mount, so navigating
+      // first raced signOut() and sent the user right back in.
       await removeAuthSessionOnLogout(getAuthSessionId());
       await signOut(auth);
+      router.replace("/login");
     } catch (e) {
       console.error("Failed to signout", e);
     }
