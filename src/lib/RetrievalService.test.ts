@@ -39,7 +39,7 @@ describe("RetrievalService.getContext", () => {
     const snippets = [makeSnippet()];
     mockSearch.mockResolvedValue(snippets);
     const result = await RetrievalService.getContext("query");
-    expect(mockSearch).toHaveBeenCalledWith("query");
+    expect(mockSearch).toHaveBeenCalledWith("query", undefined, undefined);
     expect(result).toBe(snippets);
   });
 
