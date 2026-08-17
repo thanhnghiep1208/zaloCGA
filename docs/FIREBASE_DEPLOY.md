@@ -27,10 +27,11 @@ Set these in **Firebase App Hosting > Backend > Environment variables**:
 - `NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID`
 - `NEXT_PUBLIC_FIREBASE_APP_ID`
 - `FIREBASE_SERVICE_ACCOUNT_KEY` (full JSON string of service account)
-- `GEMINI_API_KEY` (cho `/api/chat`, `/api/ingest`, và embedding `text-embedding-004`; model mặc định `gemini-3.5-flash`, xem `src/lib/gemini-models.ts`)
+- `GEMINI_API_KEY` (cho `/api/chat`, `/api/ingest`, và embedding `gemini-embedding-2`; model mặc định `gemini-3.7-flash`, xem `src/lib/gemini-models.ts`)
 - Tùy chọn: `GEMINI_CHAT_MODELS` (danh sách model chat fallback, phân cách dấu phẩy)
 - Tùy chọn: `CHAT_RATE_LIMIT_PER_MINUTE` (mặc định `20` req/phút/user)
 - Tùy chọn: `NEXT_PUBLIC_SITE_URL` (canonical URL cho metadata/OG), `NEXT_PUBLIC_GA_ID`
+- Tùy chọn: `CHAT_ATTACHMENTS_CRON_SECRET` (bắt buộc nếu dùng cron dọn ảnh chat, xem mục 10.4 trong `PROJECT_OVERVIEW.md`)
 - `NEXT_PUBLIC_INTERNAL_AUTH_EMAIL_DOMAIN` và `INTERNAL_AUTH_EMAIL_DOMAIN` (cùng giá trị, ví dụ `accounts.internal`)
 
 Chi tiet pre-live audit env (bat buoc + khuyen nghi + token tuning):
@@ -49,7 +50,7 @@ Chi tiet pre-live audit env (bat buoc + khuyen nghi + token tuning):
      - Fields gợi ý: `uid`, `username` (ví dụ `"admin"`), `email` (cùng email Auth), `role: "admin"`, `createdAt` (server timestamp).
    - **Cách B (sau khi đã có admin):** `/admin/users` → **Tạo tài khoản mới** (`POST /api/admin/users`).
 3. User mới **không** tự đăng ký: chỉ đăng nhập được sau khi admin tạo cả Auth user **và** document `users/{uid}`.
-4. Trang `/login` hiển thị form username/password, mô tả *Zalo Content Guidelines*, và footer liên hệ xin cấp tài khoản (email + Zalo — chỉnh trong `src/app/login/page.tsx` nếu đổi người liên hệ).
+4. Trang `/login` hiển thị form username/password, mô tả *Zalo Content Guidelines*, và footer liên hệ xin cấp tài khoản (email + Zalo — chỉnh trong `src/app/login/LoginClient.tsx` nếu đổi người liên hệ).
 
 **Lỗi thường gặp:** đăng nhập đúng mật khẩu nhưng báo *chưa được cấp quyền* → thiếu hoặc sai ID document Firestore (phải khớp `auth.uid`).
 
@@ -83,7 +84,7 @@ Chi tiết kiến trúc: [PROJECT_OVERVIEW.md](./PROJECT_OVERVIEW.md) mục 8.5.
 firebase deploy --only firestore:rules,firestore:indexes,storage
 ```
 
-> `firestore:indexes` deploy cả vector index cho collection `document_chunks` (field `embedding`, 768 chiều). Index ở trạng thái `CREATING` vài phút — trong thời gian đó retrieval tự fallback về lexical search.
+> `firestore:indexes` deploy cả vector index cho collection `document_chunks` (field `embedding`, 1536 chiều). Index ở trạng thái `CREATING` vài phút — trong thời gian đó retrieval tự fallback về lexical search.
 
 ## 4b) Bật Firestore TTL policy (một lần)
 

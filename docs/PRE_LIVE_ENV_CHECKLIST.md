@@ -12,7 +12,7 @@ Dat trong **Firebase Console -> App Hosting -> Backend -> Environment variables*
 - `NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET`
 - `NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID`
 - `NEXT_PUBLIC_FIREBASE_APP_ID`
-- `GEMINI_API_KEY` (chat `/api/chat` + PDF ingest `/api/ingest`; model mac dinh `gemini-3.5-flash`)
+- `GEMINI_API_KEY` (chat `/api/chat` + PDF ingest `/api/ingest`; model mac dinh `gemini-3.7-flash`)
 - `FIREBASE_SERVICE_ACCOUNT_KEY` (khuyen nghi dung Secret Manager, xem muc 3)
 - `NEXT_PUBLIC_INTERNAL_AUTH_EMAIL_DOMAIN` (domain noi bo map username -> Firebase email, vi du `accounts.internal`)
 - `INTERNAL_AUTH_EMAIL_DOMAIN` (**bat buoc cung gia tri** voi bien `NEXT_PUBLIC_*`; server fail startup neu khac nhau)
@@ -21,8 +21,9 @@ Dat trong **Firebase Console -> App Hosting -> Backend -> Environment variables*
 
 ## 1b) Gemini & chat (tuy chon)
 
-- `GEMINI_CHAT_MODELS` — danh sach model chat, phan cach bang dau phay. Mac dinh: `gemini-3.5-flash,gemini-3-flash-preview,gemini-2.5-flash`
+- `GEMINI_CHAT_MODELS` — danh sach model chat, phan cach bang dau phay. Mac dinh: `gemini-3.7-flash,gemini-3.5-flash,gemini-3-flash-preview,gemini-2.5-flash`
 - `CHAT_RATE_LIMIT_PER_MINUTE` — so request toi da moi user moi phut. Mac dinh: `20`
+- `CHAT_ATTACHMENTS_CRON_SECRET` — bat buoc neu dung cron don anh chat het TTL (`apphosting.yaml` khai bao day la secret); route cron tra `503` neu chua dat
 
 ## 2) Khuyen nghi cho production
 

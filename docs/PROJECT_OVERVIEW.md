@@ -23,8 +23,8 @@ Tài liệu này là bản tổng hợp end-to-end cho dự án: kiến trúc t�
 - **Frontend + Backend app:** Next.js App Router (`src/app/`*)
 - **Auth / DB / Storage:** Firebase Auth, Firestore, Firebase Storage
 - **Server admin access:** Firebase Admin SDK
-- **LLM:** Google GenAI (`gemini-3.5-flash`, fallback `gemini-3-flash-preview` / `gemini-2.5-flash`)
-- **Embedding:** `text-embedding-004` (768 chiều) — dùng cho vector search
+- **LLM:** Google GenAI (`gemini-3.7-flash`, fallback `gemini-3.5-flash` → `gemini-3-flash-preview` → `gemini-2.5-flash`)
+- **Embedding:** `gemini-embedding-2` (1536 chiều) — dùng cho vector search
 - **DOCX parsing:** `mammoth`
 - **Deploy runtime:** Firebase App Hosting (Cloud Run managed)
 
@@ -97,7 +97,7 @@ Tóm tắt kỹ thuật:
 - `src/app/admin/library/page.tsx`: quản lý tài liệu.
 - `src/app/admin/upload/page.tsx`: upload + gọi ingest.
 - `src/app/admin/users/page.tsx`: admin tạo user, đổi role, reset mật khẩu, vô hiệu hóa, xóa (gọi `/api/admin/users`).
-- `src/app/admin/reports/page.tsx`: **Analytics Reports** — dashboard telemetry (chỉ `admin`). Chi tiết: [ANALYTICS_REPORTS.md](./ANALYTICS_REPORTS.md).
+- `src/app/admin/reports/page.tsx`: **Analytics Reports** — dashboard telemetry (`admin` hoặc `contributor`). Chi tiết: [ANALYTICS_REPORTS.md](./ANALYTICS_REPORTS.md).
 
 ### 4.3 Auth context và phân quyền UI
 
@@ -112,7 +112,7 @@ Tóm tắt kỹ thuật:
 
 Lưu ý: bảo vệ ở UI chỉ là lớp hiển thị. Bảo mật thật nằm ở Firestore/Storage rules + API auth server-side.
 
-**Đăng nhập đa phiên (hiện trạng):** một tài khoản **có thể** đăng nhập đồng thời trên nhiều trình duyệt/máy. App dùng Firebase Auth mặc định (mỗi client một refresh token); **không** có registry phiên, không giới hạn “một thiết bị”. Chi tiết: mục 8.5.
+**Đăng nhập đa phiên (hiện trạng):** một tài khoản **có thể** đăng nhập đồng thời trên nhiều trình duyệt/máy. App dùng Firebase Auth (mỗi client một refresh token) **cộng với** một registry phiên riêng (Firestore `authSessions`, heartbeat + remote sign-out) — không giới hạn “một thiết bị”. Chi tiết: mục 8.5.
 
 ---
 
@@ -125,7 +125,7 @@ File: `src/app/api/chat/route.ts`
 Chức năng:
 
 1. Verify Firebase ID token (`requireUidFromRequest`).
-2. **Rate limit**: kiểm tra Firestore `rate_limits/{uid}_{windowKey}` — mặc định 20 req/phút (env `CHAT_RATE_LIMIT_PER_MINUTE`); trả `429` nếu vượt.
+2. **Rate limit**: kiểm tra Firestore `rate_limits/{uid}_{routeKey}_{windowKey}` — mặc định 20 req/phút (env `CHAT_RATE_LIMIT_PER_MINUTE`); trả `429` nếu vượt.
 3. Nhận `query`, `conversation` (history), `attachments`, `sessionId` từ body.
 4. Retrieval tài liệu qua `RetrievalService.getContext` (vector search → lexical fallback, xem 5.5).
 5. Generate stream câu trả lời từ Gemini; conversation history được truyền đúng chuẩn multi-turn `contents[]` thay vì nhúng vào system prompt.
@@ -144,13 +144,13 @@ Chức năng:
 2. Check role `admin|contributor`.
 3. Validate `fileUrl` chỉ cho phép URL Firebase Storage bucket hiện tại (chống SSRF).
 4. Tải binary file và parse:
-   - **PDF < 4 MB**: gửi inline base64 tới `gemini-3.5-flash`.
+   - **PDF < 4 MB**: gửi inline base64 tới `gemini-3.7-flash`.
    - **PDF ≥ 4 MB**: upload lên **Gemini File API** → poll đến `state === ACTIVE` (timeout 90s) → dùng `fileData` URI → tự động xóa file sau khi extract xong. Nếu File API lỗi, fallback về inline.
    - **DOCX**: dùng `mammoth`.
    - **TXT/CSV**: decode text.
 5. **Chunking + Embedding**: nếu request chứa `docId`, tự động:
    - Chunk text thành đoạn ~1800 ký tự với overlap 200 ký tự.
-   - Gọi Gemini `text-embedding-004` (768 chiều) để embed từng chunk (5 concurrent).
+   - Gọi Gemini `gemini-embedding-2` (1536 chiều) để embed từng chunk (5 concurrent).
    - Ghi vào collection `document_chunks` qua Firestore batch write.
 6. Trả về `{ textContent, chunkCount }` để client ghi `textContent + status: "indexed"` vào `documents`.
 
@@ -168,10 +168,10 @@ File: `src/app/api/events/route.ts`
 Chức năng:
 
 1. Verify Firebase ID token.
-2. Chỉ chấp nhận `file_uploaded` và `user_feedback` từ client (whitelist).
+2. Chỉ chấp nhận 6 event trong whitelist `CLIENT_ANALYTICS_EVENTS` (`src/lib/analytics-events.ts`) từ client: `file_uploaded`, `user_feedback`, `session_started`, `session_ended`, `response_copied`, `document_viewed`.
 3. Ghi event vào Firestore `analyticsEvents` qua `logAnalyticsEvent()` (kèm `user_id`).
 
-Các event khác (`parse_success`, `query_sent`, `response_delivered`) được ghi **server-side** trong `/api/ingest` và `/api/chat`.
+Các event khác (`parse_success`, `parse_failed`, `query_sent`, `response_delivered`, `attachment_uploaded`) được ghi **server-side** trong `/api/ingest`, `/api/chat`, `/api/chat/attachments`.
 
 ## 5.5 Retrieval service
 
@@ -181,13 +181,13 @@ Các event khác (`parse_success`, `query_sent`, `response_delivered`) được 
     - Soạn microcopy UX
   - Luôn yêu cầu `SOURCES_USED` ở cuối câu trả lời.
   - Conversation history được truyền vào `contents[]` chuẩn multi-turn (không nhúng vào system prompt).
-  - Chat model: mặc định `gemini-3.5-flash`, fallback `gemini-3-flash-preview` → `gemini-2.5-flash` (override bằng `GEMINI_CHAT_MODELS`, comma-separated).
+  - Chat model: mặc định `gemini-3.7-flash`, fallback `gemini-3.5-flash` → `gemini-3-flash-preview` → `gemini-2.5-flash` (override bằng `GEMINI_CHAT_MODELS`, comma-separated).
 - `src/lib/gemini-models.ts` — hằng số model Gemini dùng chung (chat + ingest PDF).
 - `src/lib/retrieval/FirebaseRetrievalProvider.ts` — **hai chế độ retrieval**:
-  1. **Vector search (ưu tiên):** embed query bằng `text-embedding-004` → `findNearest()` trên collection `document_chunks` (COSINE, lấy top `RETRIEVAL_VECTOR_CANDIDATES` = 20) → dedup theo `docId` → trả ≤ `RETRIEVAL_MAX_SNIPPETS` (mặc định 6). Yêu cầu Firestore vector index đã deploy (xem mục 10).
+  1. **Vector search (ưu tiên):** embed query bằng `gemini-embedding-2` → `findNearest()` trên collection `document_chunks` (COSINE, lấy top `RETRIEVAL_VECTOR_CANDIDATES` = 20) → dedup theo `docId` → trả ≤ `RETRIEVAL_MAX_SNIPPETS` (mặc định 6). Yêu cầu Firestore vector index đã deploy (xem mục 10).
   2. **Lexical fallback:** nếu vector search thất bại hoặc trả về 0 kết quả (tài liệu chưa được embed), fetch ≤ `RETRIEVAL_FIRESTORE_FETCH_LIMIT` (mặc định 120) docs từ collection `documents`, rank bằng keyword overlap (`countTermHits`), lấy top `RETRIEVAL_MAX_SNIPPETS`.
 - `src/lib/documents/chunking.ts` — chia text thành `TextChunk[]` (~1800 ký tự/chunk, overlap 200 ký tự, tôn trọng ranh giới đoạn văn).
-- `src/lib/documents/embeddings.ts` — wrapper `text-embedding-004`: `embedTexts()` (batch), `embedQuery()` (RETRIEVAL_QUERY task type), `writeDocumentChunks()`, `deleteDocumentChunks()`.
+- `src/lib/documents/embeddings.ts` — wrapper `gemini-embedding-2`: `embedTexts()` (batch), `embedQuery()` (RETRIEVAL_QUERY task type), `writeDocumentChunks()`, `deleteDocumentChunks()`.
 
 ## 5.6 File viewer (`GET /references/file/[id]`)
 
@@ -251,7 +251,7 @@ Chunks nhỏ của tài liệu — backbone của vector search:
 - `fileName` (copy từ document cha để tra cứu nhanh)
 - `chunkIndex` (vị trí trong document)
 - `text` (nội dung đoạn, ~1800 ký tự)
-- `embedding` (Firestore `VectorValue`, 768 chiều — `text-embedding-004`)
+- `embedding` (Firestore `VectorValue`, 1536 chiều — `gemini-embedding-2`)
 - `status`: `"indexed"`
 - `createdAt`
 
@@ -276,7 +276,7 @@ Bảng đầy đủ loại event, luồng ghi, giới hạn mẫu 500/300, filte
 
 Counter rate-limit per-user per phút:
 
-- Document ID: `{uid}_{windowKey}` (windowKey = `Math.floor(Date.now() / 60000)`)
+- Document ID: `{uid}_{routeKey}_{windowKey}` (routeKey = tên route, vd. `chat`, `events`; windowKey = `Math.floor(Date.now() / 60000)`)
 - `count` (số request trong window hiện tại)
 - `expireAt` (Timestamp — end of next window)
 
@@ -288,7 +288,7 @@ Counter rate-limit per-user per phút:
 
 ## 7.1 Firestore Rules (`firestore.rules`)
 
-- `chatSessions`: user chỉ thao tác session của chính mình.
+- `chatSessions`: user đọc/ghi/xóa session của chính mình; `contributor`/`admin` được **đọc** (không ghi) mọi session, dùng cho dashboard analytics.
 - `users`:
   - user đọc/sửa hồ sơ của mình nhưng không tự nâng role; **không** được `create` (không tự đăng ký).
   - chỉ `admin` được `create` document `users/*`.
@@ -297,7 +297,7 @@ Counter rate-limit per-user per phút:
   - signed-in user được đọc.
   - chỉ `admin|contributor` mới được create/update/delete.
 - `analyticsEvents`:
-  - chỉ `admin` được đọc (dashboard).
+  - `admin` hoặc `contributor` được đọc (dashboard).
   - client/API user **không** ghi trực tiếp; ghi qua Admin SDK trên server.
 
 ## 7.2 Storage Rules (`storage.rules`)
@@ -366,7 +366,7 @@ img-src 'self' https: data:;
 ## 8.4 Login flow
 
 1. User nhập **username** + password (không phải email hiển thị).
-2. Client map username → `{username}@{INTERNAL_AUTH_EMAIL_DOMAIN}` rồi `signInWithEmailAndPassword` (`src/app/login/page.tsx`).
+2. Client map username → `{username}@{INTERNAL_AUTH_EMAIL_DOMAIN}` rồi `signInWithEmailAndPassword` (`src/app/login/LoginClient.tsx`).
 3. **Việc quyết định "được phép vào app hay không" nằm hoàn toàn ở `AuthContext`** (không có check trùng lặp ở trang login):
    - `onIdTokenChanged` fire → đọc `users/{uid}` (retry tối đa 2 lần, mỗi lần timeout 10s, xem mục 4.3).
    - Không có document, hoặc role không hợp lệ, hoặc hết cả 2 lần retry vẫn timeout/lỗi mạng → `signOut` + set `authError` (message khác nhau tùy nguyên nhân: *chưa được cấp quyền* vs *không thể tải thông tin tài khoản, có thể do mạng/trình chặn quảng cáo*).
@@ -415,7 +415,7 @@ img-src 'self' https: data:;
 
 ## 8.6 Analytics Reports
 
-Dashboard tại `/admin/reports` (admin only): telemetry từ `analyticsEvents`, polling **6 giờ** + nút **Cập nhật**, filter **Hôm nay / 7 / 30 ngày** (UTC).
+Dashboard tại `/admin/reports` (`admin` hoặc `contributor`): telemetry từ `analyticsEvents`, polling **6 giờ** + nút **Cập nhật**, filter **Hôm nay / 7 / 30 ngày** (UTC).
 
 **Tài liệu đầy đủ:** [ANALYTICS_REPORTS.md](./ANALYTICS_REPORTS.md) — event schema, metric definitions, code map, troubleshooting, smoke test.
 
@@ -454,7 +454,7 @@ Sự cố thực tế đã gặp (2026-07-14): `GEMINI_API_KEY` và `FIREBASE_SE
 
 Tùy chọn (Gemini & chat):
 
-- `GEMINI_CHAT_MODELS` — danh sách model chat, phân tách bằng dấu phẩy. Mặc định: `gemini-3.5-flash`, `gemini-3-flash-preview`, `gemini-2.5-flash` (thử lần lượt khi model trước lỗi).
+- `GEMINI_CHAT_MODELS` — danh sách model chat, phân tách bằng dấu phẩy. Mặc định: `gemini-3.7-flash`, `gemini-3.5-flash`, `gemini-3-flash-preview`, `gemini-2.5-flash` (thử lần lượt khi model trước lỗi).
 - `CHAT_RATE_LIMIT_PER_MINUTE` — số request tối đa mỗi user mỗi phút. Mặc định: `20`.
 
 Tùy chọn (retrieval):
@@ -556,7 +556,7 @@ Nếu không đặt `CHAT_ATTACHMENTS_CRON_SECRET`, route cron trả `503` (chư
 - **Admin không vào được:** kiểm tra email Auth = `{username}@{INTERNAL_AUTH_EMAIL_DOMAIN}` và field `role: "admin"` trong `users/{uid}`.
 - **Server configuration error** ở API: thiếu hoặc sai `FIREBASE_SERVICE_ACCOUNT_KEY` / project id env.
 - **Startup crash env domain:** `INTERNAL_AUTH_EMAIL_DOMAIN` và `NEXT_PUBLIC_INTERNAL_AUTH_EMAIL_DOMAIN` khác nhau — đặt cùng một giá trị (ví dụ `accounts.internal`).
-- **Chat/ingest Gemini lỗi model:** kiểm tra `GEMINI_API_KEY` và quyền model `gemini-3.5-flash`; fallback tự thử model trong `GEMINI_CHAT_MODELS`.
+- **Chat/ingest Gemini lỗi model:** kiểm tra `GEMINI_API_KEY` và quyền model `gemini-3.7-flash`; fallback tự thử model trong `GEMINI_CHAT_MODELS`.
 - **Gemini trả `API_KEY_INVALID` dù key vừa tạo còn hạn:** Google đang migrate key Gemini từ Standard (`AIza...`) sang Auth key gắn service account (`AQ.Ab...`); Standard key **unrestricted** đã bị từ chối từ 19/06/2026, và **toàn bộ** Standard key ngừng hoạt động từ 09/2026. Key tạo mới qua AI Studio giờ luôn là Auth key. Cần `@google/genai` ≥ 2.x (project hiện dùng `^2.11.0`) để tương thích Auth key — bản 1.x sẽ báo `API_KEY_INVALID`.
 - **Rotate `GEMINI_API_KEY`/`FIREBASE_SERVICE_ACCOUNT_KEY` xong vẫn lỗi `500`/`16 UNAUTHENTICATED`:** rất có thể do **Console override** đè lên `secret:` trong `apphosting.yaml` — xem mục 9.1 để biết cách kiểm tra và fix đúng quy trình.
 - **Vector search lỗi `index not ready`:** index `document_chunks.embedding` chưa deploy hoặc đang tạo → retrieval tự fallback lexical, deploy index bằng `firebase deploy --only firestore:indexes`.
