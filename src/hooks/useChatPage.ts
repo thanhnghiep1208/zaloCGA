@@ -17,6 +17,7 @@ import {
 import type { ChatMessage, ConversationTurn } from "@/types/chat";
 import { useChatSession } from "@/hooks/useChatSession";
 import { useChatAttachments } from "@/hooks/useChatAttachments";
+import { EMPTY_SCOPE, type ChatScope } from "@/lib/chat/scope-options";
 
 function toStoredMessages(msgs: ChatMessage[]): StoredMessage[] {
   return msgs
@@ -40,6 +41,7 @@ export function useChatPage() {
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [previewDocId, setPreviewDocId] = useState<string | null>(null);
+  const [scope, setScope] = useState<ChatScope>(EMPTY_SCOPE);
 
   const bottomRef = useRef<HTMLDivElement>(null);
   const messagesRef = useRef<ChatMessage[]>([]);
@@ -78,6 +80,7 @@ export function useChatPage() {
       setMessages([]);
       setInput("");
       setIsLoading(false);
+      setScope(EMPTY_SCOPE);
       session.resetSession();
       attachments.clearPendingImages();
       router.replace("/chat");
@@ -216,6 +219,7 @@ export function useChatPage() {
           conversation: buildConversationContext(),
           sessionId: currentSessionId,
           attachments: uploadedAttachments,
+          scope,
           ...(precomputedEmbedding ? { embedding: precomputedEmbedding } : {}),
         }),
       });
@@ -344,6 +348,8 @@ export function useChatPage() {
     sessionId: session.sessionId,
     previewDocId,
     setPreviewDocId,
+    scope,
+    setScope,
     selectedImages: attachments.selectedImages,
     isDropTarget: attachments.isDropTarget,
     hasVisibleMessages,

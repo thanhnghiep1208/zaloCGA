@@ -82,6 +82,12 @@
   --code-inline-bg: #f8fafc;
   --code-border: #e2e8f0;
   --strong-color: #0f172a;
+  --scope-info: #2f7fd1;
+  --scope-error: #d94a48;
+  --scope-warning: #c07a12;
+  --scope-success: #4f8a1e;
+  --scope-confirm: #6b60d6;
+  --scope-empty: #6f6e6b;
 }
 
 [data-theme="dark"] {
@@ -102,6 +108,12 @@
   --strong-color: rgba(255, 255, 255, 0.98);
   --shadow-sm: 0 2px 12px rgba(0, 0, 0, 0.35);
   --shadow-md: 0 12px 40px rgba(0, 0, 0, 0.45);
+  --scope-info: #6aa9e8;
+  --scope-error: #ef7a78;
+  --scope-warning: #eaa94b;
+  --scope-success: #86c25a;
+  --scope-confirm: #a79bf0;
+  --scope-empty: #9c9b98;
 }
 
 body {

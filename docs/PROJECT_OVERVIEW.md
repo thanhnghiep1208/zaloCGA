@@ -126,10 +126,14 @@ Chức năng:
 
 1. Verify Firebase ID token (`requireUidFromRequest`).
 2. **Rate limit**: kiểm tra Firestore `rate_limits/{uid}_{routeKey}_{windowKey}` — mặc định 20 req/phút (env `CHAT_RATE_LIMIT_PER_MINUTE`); trả `429` nếu vượt.
-3. Nhận `query`, `conversation` (history), `attachments`, `sessionId` từ body.
-4. Retrieval tài liệu qua `RetrievalService.getContext` (vector search → lexical fallback, xem 5.5).
-5. Generate stream câu trả lời từ Gemini; conversation history được truyền đúng chuẩn multi-turn `contents[]` thay vì nhúng vào system prompt.
-6. Stream về client theo **định dạng NDJSON** — mỗi dòng là một JSON object:
+3. Nhận `query`, `conversation` (history), `attachments`, `sessionId`, `scope` (optional) từ body.
+4. `scope` (`{ messageType, uiPattern }`, xem `src/lib/chat/scope-options.ts`) được `sanitizeScope()` lọc theo whitelist (không tin client), sau đó dùng để:
+   - `buildScopedQuery()`: prefix nhãn scope (vd. `[Lỗi · Snackbar]`) vào query trước khi gọi retrieval — chỉ là **soft ranking boost** (tăng điểm vector/lexical), không phải hard filter theo field trong Firestore (xem 5.5).
+   - `scopeHintForPrompt()`: chèn câu hint vào đầu turn hiện tại trong `contents[]` (không nhúng vào system prompt) để model bám đúng phạm vi.
+   - Query gốc (không prefix) vẫn dùng để lưu `chatSessions`/hiển thị UI và log analytics `query_sent` (kèm `scope_message_type`/`scope_ui_pattern`, xem 8.6).
+5. Retrieval tài liệu qua `RetrievalService.getContext` (vector search → lexical fallback, xem 5.5).
+6. Generate stream câu trả lời từ Gemini; conversation history được truyền đúng chuẩn multi-turn `contents[]` thay vì nhúng vào system prompt.
+7. Stream về client theo **định dạng NDJSON** — mỗi dòng là một JSON object:
    - Dòng 1: `{"t":"s","d":[...ChatSource[]]}` — danh sách nguồn tài liệu (gửi trước khi có text)
    - Dòng 2..N: `{"t":"x","d":"text delta"}` — từng đoạn text từ Gemini
    - `Content-Type: application/x-ndjson`
@@ -188,6 +192,7 @@ Các event khác (`parse_success`, `parse_failed`, `query_sent`, `response_deliv
   2. **Lexical fallback:** nếu vector search thất bại hoặc trả về 0 kết quả (tài liệu chưa được embed), fetch ≤ `RETRIEVAL_FIRESTORE_FETCH_LIMIT` (mặc định 120) docs từ collection `documents`, rank bằng keyword overlap (`countTermHits`), lấy top `RETRIEVAL_MAX_SNIPPETS`.
 - `src/lib/documents/chunking.ts` — chia text thành `TextChunk[]` (~1800 ký tự/chunk, overlap 200 ký tự, tôn trọng ranh giới đoạn văn).
 - `src/lib/documents/embeddings.ts` — wrapper `gemini-embedding-2`: `embedTexts()` (batch), `embedQuery()` (RETRIEVAL_QUERY task type), `writeDocumentChunks()`, `deleteDocumentChunks()`.
+- **Scope picker (chat, xem 5.1) không lọc cứng theo field:** cả `vectorSearch` lẫn `lexicalSearch` chỉ có một filter cứng duy nhất là `status == "indexed"`. `document_chunks` không có field `messageType`/`uiPattern`/`category`, nên nhãn scope chỉ ảnh hưởng gián tiếp qua embedding và keyword-overlap score, không đảm bảo trúng đúng tài liệu.
 
 ## 5.6 File viewer (`GET /references/file/[id]`)
 

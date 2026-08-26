@@ -39,6 +39,8 @@ export default function ChatView() {
           selectedImages={chat.selectedImages}
           isDropTarget={chat.isDropTarget}
           attachmentInputRef={chat.attachmentInputRef}
+          scope={chat.scope}
+          onScopeChange={chat.setScope}
           onSend={() => void chat.handleSend()}
           onPickAttachments={chat.onPickAttachments}
           onAttachmentFilesSelected={chat.onAttachmentFilesSelected}

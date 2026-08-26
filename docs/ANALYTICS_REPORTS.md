@@ -34,7 +34,7 @@ Mỗi document:
 | `file_uploaded` | Client → `POST /api/events` (sau upload Storage, từ `/admin/upload`) | `file_type`, `size`, `user_id` |
 | `parse_success` | Server → `/api/ingest` | `rule_count_extracted`, `latency_ms`, `user_id` |
 | `parse_failed` | Server → `/api/ingest` (extraction lỗi) | `error_type` (`ai_extraction` \| `docx_parse`), `latency_ms`, `user_id` |
-| `query_sent` | Server → `/api/chat` | `query_text`, `type` (`guideline` \| `microcopy`), `user_id` |
+| `query_sent` | Server → `/api/chat` | `query_text`, `type` (`guideline` \| `microcopy`), `scope_message_type` (nullable, xem `MessageType` trong `src/lib/chat/scope-options.ts`), `scope_ui_pattern` (nullable, `UiPattern`), `user_id` |
 | `response_delivered` | Server → `/api/chat` (sau stream xong) | `response_type`, `relevance_score`, `latency_ms`, `referenced_sources[]`, `user_id` |
 | `user_feedback` | Client → `POST /api/events` (nút 👍/👎 trên `/chat`) | `feedback` (`thumbs_up` \| `thumbs_down`), `session_id`, `message_id`, `user_id` |
 | `session_started` | Client → `POST /api/events` (tin chat đầu tạo session) | `session_id`, `user_id` |
@@ -105,6 +105,8 @@ Filter 30 ngày chỉ áp trên mẫu đã tải — **không** query Firestore 
 | Response copies | Đếm `response_copied` |
 
 `query_sent` hiện **chưa** có `session_id` trong payload — re-query dựa `chatSessions`, không gắn trực tiếp event telemetry.
+
+`scope_message_type`/`scope_ui_pattern` (từ chat scope picker) hiện **chưa** được tổng hợp thành metric trong `/admin/reports` — chỉ mới ghi vào payload thô. Follow-up: thêm mục "Scope usage" (đếm theo hai field này) khi có nhu cầu.
 
 ---
 

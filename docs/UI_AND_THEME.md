@@ -28,6 +28,7 @@ Nguồn sự thật: `src/app/globals.css` (`:root`, `[data-theme="light"]`, `[d
 | Thương hiệu tối | `--mysteria` | Hero / gradient landing |
 | Shadow | `--shadow-xs`, `--shadow-sm`, `--shadow-md` | Card, header, CTA |
 | Legacy / prose | `--cream`, `--charcoal`, `--parchment`, `--strong-color` | Nút, border hover, markdown chat |
+| Scope picker (chat) | `--scope-info`, `--scope-error`, `--scope-warning`, `--scope-success`, `--scope-confirm`, `--scope-empty` | Dot màu + chip cho `ChatScopePicker` (`src/components/chat/ChatScopePicker.tsx`); dùng qua `color-mix()` cho nền tint, không dùng làm tín hiệu duy nhất (luôn kèm label chữ) |
 
 **Theme switch:** `src/context/ThemeContext.tsx` — DOM nhận `data-theme="light" | "dark"` (đồng bộ với token ở trên).
 

@@ -10,6 +10,8 @@ import {
 } from "react";
 import type { LocalChatImage } from "@/types/chat";
 import { shortImageTitle } from "@/lib/chat/utils";
+import { ChatScopePicker } from "@/components/chat/ChatScopePicker";
+import type { ChatScope } from "@/lib/chat/scope-options";
 
 const TEXTAREA_MIN_HEIGHT_PX = 60;
 
@@ -20,6 +22,8 @@ type Props = {
   selectedImages: LocalChatImage[];
   isDropTarget: boolean;
   attachmentInputRef: RefObject<HTMLInputElement | null>;
+  scope: ChatScope;
+  onScopeChange: (scope: ChatScope) => void;
   onSend: () => void;
   onPickAttachments: () => void;
   onAttachmentFilesSelected: (e: ChangeEvent<HTMLInputElement>) => void;
@@ -37,6 +41,8 @@ export function ChatComposer({
   selectedImages,
   isDropTarget,
   attachmentInputRef,
+  scope,
+  onScopeChange,
   onSend,
   onPickAttachments,
   onAttachmentFilesSelected,
@@ -69,6 +75,7 @@ export function ChatComposer({
 
   return (
     <div className="pt-3 bg-background/95 backdrop-blur z-10 shrink-0 space-y-2">
+      <ChatScopePicker scope={scope} onChange={onScopeChange} className="mb-1 max-w-4xl mx-auto px-2" />
       <p className="text-center text-[11px] text-muted max-w-4xl mx-auto px-2">
         Kéo thả hoặc chọn ảnh (tối đa 4). Ảnh xem trước và tên file nằm chung trong khung soạn bên dưới. Sau khi
         gửi, ảnh hiện dưới tin nhắn.

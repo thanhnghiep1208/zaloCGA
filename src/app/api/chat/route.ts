@@ -13,6 +13,11 @@ import {
   nextJsonChatAuthError,
 } from "@/lib/server-json-response";
 import { checkChatRateLimit } from "@/lib/rate-limit";
+import {
+  buildScopedQuery,
+  sanitizeScope,
+  scopeHintForPrompt,
+} from "@/lib/chat/scope-options";
 
 const ChatAttachmentSchema = z.object({
   name: z.string(),
@@ -36,6 +41,7 @@ const ChatRequestSchema = z.object({
     .optional(),
   attachments: z.array(ChatAttachmentSchema).optional(),
   embedding: z.array(z.number()).optional(),
+  scope: z.unknown().optional(),
 });
 
 function envInt(name: string, fallback: number): number {
@@ -135,7 +141,8 @@ export async function POST(req: Request) {
       );
     }
 
-    const { query, conversation, attachments, sessionId, embedding } = parsed.data;
+    const { query, conversation, attachments, sessionId, embedding, scope } = parsed.data;
+    const safeScope = sanitizeScope(scope);
     const safeSessionId =
       typeof sessionId === "string" && sessionId.trim() ? sessionId.trim() : "draft";
 
@@ -185,11 +192,14 @@ export async function POST(req: Request) {
       user_id: uid,
       query_text: query,
       type: queryType,
+      scope_message_type: safeScope.messageType,
+      scope_ui_pattern: safeScope.uiPattern,
     });
 
     const responseStart = Date.now();
 
-    const contextSnippets = await RetrievalService.getContext(retrievalQuery, embedding);
+    const scopedRetrievalQuery = buildScopedQuery(retrievalQuery, safeScope);
+    const contextSnippets = await RetrievalService.getContext(scopedRetrievalQuery, embedding);
 
     console.log(
       `[ChatRoute] Query: "${query}". Found ${contextSnippets.length} relevant snippets.`
@@ -199,8 +209,10 @@ export async function POST(req: Request) {
     }
 
     // Get strictly-prompted stream from our isolated service
+    const scopeHint = scopeHintForPrompt(safeScope);
+    const promptQuery = scopeHint ? `${scopeHint}\n\n${boundedQuery}` : boundedQuery;
     const stream = await RetrievalService.generateChatResponse(
-      boundedQuery,
+      promptQuery,
       contextSnippets,
       boundedConversation,
       safeAttachments.map((a) => ({
