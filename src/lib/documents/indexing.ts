@@ -1,3 +1,5 @@
+import type { DocMessageType, DocUiPattern } from "@/lib/chat/scope-options";
+
 type IndexableInlineInput = {
   title: string;
   contentHtml: string;
@@ -5,6 +7,8 @@ type IndexableInlineInput = {
   category?: string | null;
   tags?: string[];
   images?: { path: string; downloadURL: string }[];
+  messageType?: DocMessageType | null;
+  uiPattern?: DocUiPattern | null;
 };
 
 function normalizeWhitespace(value: string): string {
@@ -36,6 +40,8 @@ export function buildInlineIndexPayload(input: IndexableInlineInput) {
     tags,
     category,
     images,
+    messageType: input.messageType ?? null,
+    uiPattern: input.uiPattern ?? null,
   };
 }
 
@@ -51,6 +57,8 @@ export function buildUploadedFileBasePayload(input: {
   sizeBytes: number;
   tags?: string[];
   description?: string;
+  messageType?: DocMessageType | null;
+  uiPattern?: DocUiPattern | null;
 }) {
   return {
     type: "uploaded_file" as const,
@@ -62,6 +70,8 @@ export function buildUploadedFileBasePayload(input: {
     status: "processing" as const,
     tags: Array.isArray(input.tags) ? input.tags.map((t) => t.trim()).filter(Boolean) : [],
     description: input.description || "",
+    messageType: input.messageType ?? null,
+    uiPattern: input.uiPattern ?? null,
   };
 }
 

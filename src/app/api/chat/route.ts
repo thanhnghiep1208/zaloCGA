@@ -199,7 +199,7 @@ export async function POST(req: Request) {
     const responseStart = Date.now();
 
     const scopedRetrievalQuery = buildScopedQuery(retrievalQuery, safeScope);
-    const contextSnippets = await RetrievalService.getContext(scopedRetrievalQuery, embedding);
+    const contextSnippets = await RetrievalService.getContext(scopedRetrievalQuery, embedding, safeScope);
 
     console.log(
       `[ChatRoute] Query: "${query}". Found ${contextSnippets.length} relevant snippets.`

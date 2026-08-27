@@ -9,6 +9,7 @@ import { buildInlineIndexPayload } from "@/lib/documents/indexing";
 import { cleanInlineTags } from "@/lib/documents/inlineTags";
 import { nextJsonFriendlyApiError } from "@/lib/server-json-response";
 import { writeDocumentChunks } from "@/lib/documents/embeddings";
+import { sanitizeDocMessageType, sanitizeDocUiPattern } from "@/lib/chat/scope-options";
 
 type InlineCreateBody = {
   title?: string;
@@ -16,6 +17,8 @@ type InlineCreateBody = {
   tags?: string[];
   contentHtml?: string;
   uploadedEmail?: string;
+  messageType?: string | null;
+  uiPattern?: string | null;
 };
 
 export async function POST(req: Request) {
@@ -34,6 +37,8 @@ export async function POST(req: Request) {
     const category = String(body.category || "").trim();
     const tags = cleanInlineTags(body.tags);
     const uploadedEmail = typeof body.uploadedEmail === "string" ? body.uploadedEmail : null;
+    const messageType = sanitizeDocMessageType(body.messageType);
+    const uiPattern = sanitizeDocUiPattern(body.uiPattern);
 
     if (!title) {
       return NextResponse.json({ error: "Title is required" }, { status: 400 });
@@ -58,6 +63,8 @@ export async function POST(req: Request) {
         contentHtml: safeHtml,
         contentPlain,
         images,
+        messageType,
+        uiPattern,
       }),
       uploadedBy: uid,
       uploadedEmail,

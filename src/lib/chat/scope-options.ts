@@ -60,6 +60,20 @@ export const UI_PATTERN_OPTIONS: UiPatternOption[] = [
 const MSG_LABEL = new Map(MESSAGE_TYPE_OPTIONS.map((o) => [o.value, o.label]));
 const UI_LABEL = new Map(UI_PATTERN_OPTIONS.map((o) => [o.value, o.label]));
 
+/** Giá trị gắn tag tài liệu: có thể chọn 1 facet cụ thể, hoặc "all" để khớp mọi giá trị của facet đó. */
+export type DocMessageType = MessageType | "all";
+export type DocUiPattern = UiPattern | "all";
+
+export const DOC_MESSAGE_TYPE_OPTIONS: { value: DocMessageType; label: string }[] = [
+  { value: "all", label: "Tất cả loại thông báo" },
+  ...MESSAGE_TYPE_OPTIONS,
+];
+
+export const DOC_UI_PATTERN_OPTIONS: { value: DocUiPattern; label: string }[] = [
+  { value: "all", label: "Tất cả kiểu UI" },
+  ...UI_PATTERN_OPTIONS,
+];
+
 export function hasScope(scope: ChatScope | null | undefined): boolean {
   return !!scope && (scope.messageType !== null || scope.uiPattern !== null);
 }
@@ -93,14 +107,30 @@ export function scopeHintForPrompt(
   return `Người dùng giới hạn phạm vi: ${bits.join(", ")}. Ưu tiên guideline/microcopy đúng phạm vi này; nếu tài liệu không phủ, nói rõ thay vì suy đoán.`;
 }
 
+const MESSAGE_TYPE_SET = new Set<MessageType>(MESSAGE_TYPE_OPTIONS.map((o) => o.value));
+const UI_PATTERN_SET = new Set<UiPattern>(UI_PATTERN_OPTIONS.map((o) => o.value));
+
 /** API không tin client: chỉ nhận giá trị nằm trong whitelist. */
 export function sanitizeScope(input: unknown): ChatScope {
-  const msgSet = new Set<MessageType>(MESSAGE_TYPE_OPTIONS.map((o) => o.value));
-  const uiSet = new Set<UiPattern>(UI_PATTERN_OPTIONS.map((o) => o.value));
   const raw = (input ?? {}) as Partial<ChatScope>;
   return {
     messageType:
-      raw.messageType && msgSet.has(raw.messageType) ? raw.messageType : null,
-    uiPattern: raw.uiPattern && uiSet.has(raw.uiPattern) ? raw.uiPattern : null,
+      raw.messageType && MESSAGE_TYPE_SET.has(raw.messageType) ? raw.messageType : null,
+    uiPattern: raw.uiPattern && UI_PATTERN_SET.has(raw.uiPattern) ? raw.uiPattern : null,
   };
+}
+
+/** Dùng khi gắn tag tài liệu (admin upload/library) — trả null nếu không hợp lệ/không chọn. */
+export function sanitizeDocMessageType(input: unknown): DocMessageType | null {
+  if (input === "all") return "all";
+  return typeof input === "string" && MESSAGE_TYPE_SET.has(input as MessageType)
+    ? (input as MessageType)
+    : null;
+}
+
+export function sanitizeDocUiPattern(input: unknown): DocUiPattern | null {
+  if (input === "all") return "all";
+  return typeof input === "string" && UI_PATTERN_SET.has(input as UiPattern)
+    ? (input as UiPattern)
+    : null;
 }

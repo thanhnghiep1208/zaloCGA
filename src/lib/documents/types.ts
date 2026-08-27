@@ -6,6 +6,8 @@
  * - Add a typed contract for future inline editor documents.
  */
 
+import type { DocMessageType, DocUiPattern } from "@/lib/chat/scope-options";
+
 export type DocumentType = "uploaded_file" | "inline_doc";
 
 export type DocumentStatus =
@@ -41,6 +43,10 @@ type DocumentBase = {
   tags?: string[];
   category?: string | null;
   description?: string;
+
+  /** Chat scope facets this document is tagged for (see src/lib/chat/scope-options.ts). "all" matches every value of that facet. */
+  messageType?: DocMessageType | null;
+  uiPattern?: DocUiPattern | null;
 
   uploadedBy?: string | null;
   updatedBy?: string | null;

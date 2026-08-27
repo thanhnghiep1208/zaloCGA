@@ -2,6 +2,7 @@ import { GoogleGenAI } from "@google/genai";
 import { DEFAULT_GEMINI_CHAT_MODELS } from "@/lib/gemini-models";
 import { RetrievalProvider, RetrievedSnippet } from "./retrieval/interfaces";
 import { FirebaseRetrievalProvider } from "./retrieval/FirebaseRetrievalProvider";
+import type { ChatScope } from "./chat/scope-options";
 
 let _chatAi: GoogleGenAI | null = null;
 function getChatAi(): GoogleGenAI {
@@ -39,8 +40,12 @@ type ContentTurn = {
 };
 
 export class RetrievalService {
-  static async getContext(query: string, precomputedEmbedding?: number[]): Promise<RetrievedSnippet[]> {
-    return currentProvider.search(query, undefined, precomputedEmbedding);
+  static async getContext(
+    query: string,
+    precomputedEmbedding?: number[],
+    scope?: ChatScope | null
+  ): Promise<RetrievedSnippet[]> {
+    return currentProvider.search(query, { precomputedEmbedding, scope });
   }
 
   static async generateChatResponse(

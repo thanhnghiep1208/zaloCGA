@@ -9,12 +9,15 @@ import { buildInlineIndexPayload } from "@/lib/documents/indexing";
 import { cleanInlineTags } from "@/lib/documents/inlineTags";
 import { nextJsonFriendlyApiError } from "@/lib/server-json-response";
 import { writeDocumentChunks, deleteDocumentChunks } from "@/lib/documents/embeddings";
+import { sanitizeDocMessageType, sanitizeDocUiPattern } from "@/lib/chat/scope-options";
 
 type InlineUpdateBody = {
   title?: string;
   category?: string;
   tags?: string[];
   contentHtml?: string;
+  messageType?: string | null;
+  uiPattern?: string | null;
 };
 
 export async function PUT(
@@ -46,6 +49,8 @@ export async function PUT(
     const contentHtml = String(body.contentHtml || "").trim();
     const category = String(body.category || "").trim();
     const tags = cleanInlineTags(body.tags);
+    const messageType = sanitizeDocMessageType(body.messageType);
+    const uiPattern = sanitizeDocUiPattern(body.uiPattern);
 
     if (!title) {
       return NextResponse.json({ error: "Title is required" }, { status: 400 });
@@ -71,6 +76,8 @@ export async function PUT(
         contentHtml: safeHtml,
         contentPlain,
         images,
+        messageType,
+        uiPattern,
       }),
       updatedAt: FieldValue.serverTimestamp(),
       updatedBy: uid,

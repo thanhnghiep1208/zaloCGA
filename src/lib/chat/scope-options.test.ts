@@ -3,6 +3,8 @@ import {
   EMPTY_SCOPE,
   buildScopedQuery,
   sanitizeScope,
+  sanitizeDocMessageType,
+  sanitizeDocUiPattern,
   scopeLabels,
 } from "@/lib/chat/scope-options";
 
@@ -33,5 +35,23 @@ describe("scopeLabels", () => {
     expect(
       scopeLabels({ messageType: "error", uiPattern: "snackbar" })
     ).toEqual(["Lỗi", "Snackbar"]);
+  });
+});
+
+describe("sanitizeDocMessageType / sanitizeDocUiPattern", () => {
+  it("accepts whitelisted values", () => {
+    expect(sanitizeDocMessageType("error")).toBe("error");
+    expect(sanitizeDocUiPattern("snackbar")).toBe("snackbar");
+  });
+
+  it("rejects unknown values and non-strings", () => {
+    expect(sanitizeDocMessageType("bogus")).toBeNull();
+    expect(sanitizeDocMessageType(null)).toBeNull();
+    expect(sanitizeDocUiPattern(undefined)).toBeNull();
+  });
+
+  it("accepts 'all' as a wildcard tag", () => {
+    expect(sanitizeDocMessageType("all")).toBe("all");
+    expect(sanitizeDocUiPattern("all")).toBe("all");
   });
 });

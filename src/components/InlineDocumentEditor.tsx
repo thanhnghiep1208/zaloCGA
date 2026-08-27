@@ -8,6 +8,12 @@ import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { firebaseBearerAuthHeader } from "@/lib/client-bearer-auth";
 import { toFriendlyErrorMessage } from "@/lib/user-error";
+import {
+  DOC_MESSAGE_TYPE_OPTIONS,
+  DOC_UI_PATTERN_OPTIONS,
+  DocMessageType,
+  DocUiPattern,
+} from "@/lib/chat/scope-options";
 
 type InlineDraftPayload = {
   title: string;
@@ -15,6 +21,8 @@ type InlineDraftPayload = {
   tags: string[];
   contentHtml: string;
   contentPlain: string;
+  messageType: DocMessageType | null;
+  uiPattern: DocUiPattern | null;
 };
 
 type InlineDocumentEditorProps = {
@@ -23,6 +31,8 @@ type InlineDocumentEditorProps = {
     category: string;
     tags: string[];
     contentHtml: string;
+    messageType?: DocMessageType | null;
+    uiPattern?: DocUiPattern | null;
   };
   submitLabel?: string;
   onSubmitDraft: (payload: InlineDraftPayload) => Promise<void> | void;
@@ -61,6 +71,8 @@ export function InlineDocumentEditor({
   const [title, setTitle] = useState(initialDraft?.title || "");
   const [category, setCategory] = useState(initialDraft?.category || "");
   const [tagsInput, setTagsInput] = useState((initialDraft?.tags || []).join(", "));
+  const [messageType, setMessageType] = useState<DocMessageType | "">(initialDraft?.messageType || "");
+  const [uiPattern, setUiPattern] = useState<DocUiPattern | "">(initialDraft?.uiPattern || "");
   const [submitting, setSubmitting] = useState(false);
   const [imageUploading, setImageUploading] = useState(false);
   const imageInputRef = useRef<HTMLInputElement | null>(null);
@@ -97,6 +109,8 @@ export function InlineDocumentEditor({
     setTitle(initialDraft.title || "");
     setCategory(initialDraft.category || "");
     setTagsInput((initialDraft.tags || []).join(", "));
+    setMessageType(initialDraft.messageType || "");
+    setUiPattern(initialDraft.uiPattern || "");
     if (editor) {
       editor.commands.setContent(initialDraft.contentHtml || "<p></p>");
     }
@@ -132,6 +146,8 @@ export function InlineDocumentEditor({
           .filter(Boolean),
         contentHtml: editor.getHTML(),
         contentPlain: editor.getText(),
+        messageType: messageType || null,
+        uiPattern: uiPattern || null,
       };
       await onSubmitDraft(payload);
     } catch (err: unknown) {
@@ -226,6 +242,39 @@ export function InlineDocumentEditor({
           placeholder="microcopy, guideline, warning"
           className="w-full px-4 py-2 border border-border rounded-[8px] bg-background focus:outline-none focus:ring-2 focus:ring-accent/35 text-sm"
         />
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <label className="text-xs font-semibold uppercase text-muted">Loại thông báo (chat scope)</label>
+          <select
+            id="doc-message-type"
+            name="messageType"
+            value={messageType}
+            onChange={(e) => setMessageType(e.target.value as DocMessageType | "")}
+            className="w-full px-4 py-2 border border-border rounded-[8px] bg-background focus:outline-none focus:ring-2 focus:ring-accent/35 text-sm"
+          >
+            <option value="">—</option>
+            {DOC_MESSAGE_TYPE_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
+          </select>
+        </div>
+        <div className="space-y-2">
+          <label className="text-xs font-semibold uppercase text-muted">Kiểu UI (chat scope)</label>
+          <select
+            id="doc-ui-pattern"
+            name="uiPattern"
+            value={uiPattern}
+            onChange={(e) => setUiPattern(e.target.value as DocUiPattern | "")}
+            className="w-full px-4 py-2 border border-border rounded-[8px] bg-background focus:outline-none focus:ring-2 focus:ring-accent/35 text-sm"
+          >
+            <option value="">—</option>
+            {DOC_UI_PATTERN_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
+          </select>
+        </div>
       </div>
 
       <div className="border border-border rounded-[12px] overflow-hidden">

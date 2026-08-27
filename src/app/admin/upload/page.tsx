@@ -12,6 +12,12 @@ import { trackEvent } from "@/lib/gtag";
 import { buildUploadedFileBasePayload } from "@/lib/documents/indexing";
 import { firebaseBearerAuthHeader } from "@/lib/client-bearer-auth";
 import { toFriendlyErrorMessage } from "@/lib/user-error";
+import {
+  DOC_MESSAGE_TYPE_OPTIONS,
+  DOC_UI_PATTERN_OPTIONS,
+  DocMessageType,
+  DocUiPattern,
+} from "@/lib/chat/scope-options";
 
 const InlineDocumentEditor = dynamic(
   () => import("@/components/InlineDocumentEditor").then((m) => ({ default: m.InlineDocumentEditor })),
@@ -34,11 +40,15 @@ export default function AdminUploadPage() {
 
   const [description, setDescription] = useState("");
   const [tagsInput, setTagsInput] = useState("");
+  const [messageType, setMessageType] = useState<DocMessageType | "">("");
+  const [uiPattern, setUiPattern] = useState<DocUiPattern | "">("");
   const [inlineInitialDraft, setInlineInitialDraft] = useState<{
     title: string;
     category: string;
     tags: string[];
     contentHtml: string;
+    messageType: DocMessageType | null;
+    uiPattern: DocUiPattern | null;
   } | null>(null);
   const [inlineLoading, setInlineLoading] = useState(false);
 
@@ -65,6 +75,8 @@ export default function AdminUploadPage() {
     setFiles([]);
     setDescription("");
     setTagsInput("");
+    setMessageType("");
+    setUiPattern("");
   };
 
   const handleUpload = async () => {
@@ -123,6 +135,8 @@ export default function AdminUploadPage() {
             sizeBytes: file.size,
             tags,
             description,
+            messageType: messageType || null,
+            uiPattern: uiPattern || null,
           }),
           uploadedBy: user.uid,
           uploadedEmail: user.email,
@@ -193,6 +207,8 @@ export default function AdminUploadPage() {
               category?: string | null;
               tags?: string[];
               contentHtml?: string;
+              messageType?: DocMessageType | null;
+              uiPattern?: DocUiPattern | null;
             }
           | undefined;
         if (!snap.exists() || data?.type !== "inline_doc") {
@@ -203,6 +219,8 @@ export default function AdminUploadPage() {
           category: data.category || "",
           tags: Array.isArray(data.tags) ? data.tags : [],
           contentHtml: data.contentHtml || "<p></p>",
+          messageType: data.messageType ?? null,
+          uiPattern: data.uiPattern ?? null,
         });
       } catch (err: unknown) {
         alert(toFriendlyErrorMessage(err));
@@ -219,6 +237,8 @@ export default function AdminUploadPage() {
     tags: string[];
     contentHtml: string;
     contentPlain: string;
+    messageType: DocMessageType | null;
+    uiPattern: DocUiPattern | null;
   }) => {
     if (!user) return;
     const authHeader = await firebaseBearerAuthHeader(user);
@@ -236,6 +256,8 @@ export default function AdminUploadPage() {
         category: payload.category,
         tags: payload.tags,
         contentHtml: payload.contentHtml,
+        messageType: payload.messageType,
+        uiPattern: payload.uiPattern,
         uploadedEmail: user.email || null,
       }),
     });
@@ -352,6 +374,38 @@ export default function AdminUploadPage() {
                    className="w-full px-4 py-2 border border-border rounded-[8px] bg-background focus:outline-none focus:ring-2 focus:ring-accent/35 text-sm"
                    placeholder="policy, rules"
                 />
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs font-semibold uppercase text-muted">Loại thông báo (chat scope)</label>
+                <select
+                   id="upload-message-type"
+                   name="messageType"
+                   disabled={uploading}
+                   value={messageType}
+                   onChange={e => setMessageType(e.target.value as DocMessageType | "")}
+                   className="w-full px-4 py-2 border border-border rounded-[8px] bg-background focus:outline-none focus:ring-2 focus:ring-accent/35 text-sm"
+                >
+                  <option value="">—</option>
+                  {DOC_MESSAGE_TYPE_OPTIONS.map(o => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs font-semibold uppercase text-muted">Kiểu UI (chat scope)</label>
+                <select
+                   id="upload-ui-pattern"
+                   name="uiPattern"
+                   disabled={uploading}
+                   value={uiPattern}
+                   onChange={e => setUiPattern(e.target.value as DocUiPattern | "")}
+                   className="w-full px-4 py-2 border border-border rounded-[8px] bg-background focus:outline-none focus:ring-2 focus:ring-accent/35 text-sm"
+                >
+                  <option value="">—</option>
+                  {DOC_UI_PATTERN_OPTIONS.map(o => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                  ))}
+                </select>
               </div>
             </div>
 

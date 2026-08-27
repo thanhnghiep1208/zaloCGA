@@ -1,9 +1,11 @@
 import { vi, describe, it, expect, beforeEach } from "vitest";
-import type { RetrievedSnippet } from "@/lib/retrieval/interfaces";
+import type { RetrievedSnippet, SearchOptions } from "@/lib/retrieval/interfaces";
 
 // --- Mocks (hoisted so they're ready before module evaluation) ---
 
-const mockSearch = vi.hoisted(() => vi.fn<(query: string, limit?: number) => Promise<RetrievedSnippet[]>>());
+const mockSearch = vi.hoisted(() =>
+  vi.fn<(query: string, options?: SearchOptions) => Promise<RetrievedSnippet[]>>()
+);
 
 vi.mock("@/lib/retrieval/FirebaseRetrievalProvider", () => ({
   FirebaseRetrievalProvider: vi.fn().mockImplementation(() => ({ search: mockSearch })),
@@ -39,13 +41,26 @@ describe("RetrievalService.getContext", () => {
     const snippets = [makeSnippet()];
     mockSearch.mockResolvedValue(snippets);
     const result = await RetrievalService.getContext("query");
-    expect(mockSearch).toHaveBeenCalledWith("query", undefined, undefined);
+    expect(mockSearch).toHaveBeenCalledWith("query", {
+      precomputedEmbedding: undefined,
+      scope: undefined,
+    });
     expect(result).toBe(snippets);
   });
 
   it("returns empty array when provider finds nothing", async () => {
     mockSearch.mockResolvedValue([]);
     expect(await RetrievalService.getContext("unknown")).toEqual([]);
+  });
+
+  it("forwards the scope to the provider's search method", async () => {
+    mockSearch.mockResolvedValue([]);
+    const scope = { messageType: "error" as const, uiPattern: "snackbar" as const };
+    await RetrievalService.getContext("query", [0.1, 0.2], scope);
+    expect(mockSearch).toHaveBeenCalledWith("query", {
+      precomputedEmbedding: [0.1, 0.2],
+      scope,
+    });
   });
 });
 

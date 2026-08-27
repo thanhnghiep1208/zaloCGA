@@ -6,7 +6,7 @@ export type DocForRanking = {
   text: string;
 };
 
-type RankedDoc = DocForRanking & { score: number };
+type RankedDoc<T extends DocForRanking = DocForRanking> = T & { score: number };
 
 function normalizeForSearch(text: string): string {
   return text
@@ -146,13 +146,13 @@ function scoreDocument(fileName: string, text: string, terms: string[]): number 
 /**
  * Rank corpus by simple lexical overlap; caller passes already-fetched docs (same Firestore read cost as before).
  */
-export function rankDocumentsForQuery(
-  docs: DocForRanking[],
+export function rankDocumentsForQuery<T extends DocForRanking>(
+  docs: T[],
   query: string,
   topK: number
-): RankedDoc[] {
+): RankedDoc<T>[] {
   const terms = extractQueryTerms(query);
-  const ranked: RankedDoc[] = docs.map((d) => ({
+  const ranked: RankedDoc<T>[] = docs.map((d) => ({
     ...d,
     score: scoreDocument(d.fileName, d.text, terms),
   }));

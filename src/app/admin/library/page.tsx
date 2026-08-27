@@ -11,6 +11,12 @@ import { trackEvent } from "@/lib/gtag";
 import { useAuth } from "@/context/AuthContext";
 import { firebaseBearerAuthHeader } from "@/lib/client-bearer-auth";
 import { useTheme } from "@/context/ThemeContext";
+import {
+  DOC_MESSAGE_TYPE_OPTIONS,
+  DOC_UI_PATTERN_OPTIONS,
+  DocMessageType,
+  DocUiPattern,
+} from "@/lib/chat/scope-options";
 
 type FirestoreTimestampLike = { seconds: number; nanoseconds?: number };
 
@@ -29,6 +35,8 @@ type LibraryDocumentRow = {
   description?: string;
   uploadedEmail?: string | null;
   uploadedAt?: FirestoreTimestampLike;
+  messageType?: DocMessageType | null;
+  uiPattern?: DocUiPattern | null;
 };
 
 export default function AdminLibraryPage() {
@@ -108,6 +116,18 @@ export default function AdminLibraryPage() {
       await updateDoc(doc(db, "documents", id), { status: newStatus });
     } catch (e) {
       console.error("Failed to update status", e);
+    }
+  };
+
+  const handleScopeTagChange = async (
+    id: string,
+    field: "messageType" | "uiPattern",
+    value: string
+  ) => {
+    try {
+      await updateDoc(doc(db, "documents", id), { [field]: value || null });
+    } catch (e) {
+      console.error("Failed to update scope tag", e);
     }
   };
 
@@ -230,6 +250,7 @@ export default function AdminLibraryPage() {
                      <th className="font-medium p-4">File Details</th>
                      <th className="font-medium p-4">Status</th>
                      <th className="font-medium p-4">Tags</th>
+                     <th className="font-medium p-4">Chat scope</th>
                      <th className="font-medium p-4">Uploaded By</th>
                      <th className="font-medium p-4">Date</th>
                      <th className="font-medium p-4 text-right">Actions</th>
@@ -263,6 +284,32 @@ export default function AdminLibraryPage() {
                             {doc.tags?.length ? doc.tags.map((t) => (
                                <span key={t} className="bg-border/50 text-xs px-2 py-0.5 rounded text-foreground">{t}</span>
                             )) : "—"}
+                          </div>
+                       </td>
+                       <td className="p-4">
+                          <div className="flex flex-col gap-1.5 min-w-[140px]">
+                            <select
+                              aria-label="Loại thông báo"
+                              value={doc.messageType || ""}
+                              onChange={(e) => handleScopeTagChange(doc.id, "messageType", e.target.value)}
+                              className="px-2 py-1 border border-border rounded-[6px] bg-surface focus:outline-none text-xs text-foreground"
+                            >
+                              <option value="">Loại thông báo: —</option>
+                              {DOC_MESSAGE_TYPE_OPTIONS.map((o) => (
+                                <option key={o.value} value={o.value}>{o.label}</option>
+                              ))}
+                            </select>
+                            <select
+                              aria-label="Kiểu UI"
+                              value={doc.uiPattern || ""}
+                              onChange={(e) => handleScopeTagChange(doc.id, "uiPattern", e.target.value)}
+                              className="px-2 py-1 border border-border rounded-[6px] bg-surface focus:outline-none text-xs text-foreground"
+                            >
+                              <option value="">Kiểu UI: —</option>
+                              {DOC_UI_PATTERN_OPTIONS.map((o) => (
+                                <option key={o.value} value={o.value}>{o.label}</option>
+                              ))}
+                            </select>
                           </div>
                        </td>
                        <td className="p-4 text-muted">
