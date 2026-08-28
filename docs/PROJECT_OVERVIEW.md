@@ -188,7 +188,7 @@ Các event khác (`parse_success`, `parse_failed`, `query_sent`, `response_deliv
   - Chat model: mặc định `gemini-3.7-flash`, fallback `gemini-3.5-flash` → `gemini-3-flash-preview` → `gemini-2.5-flash` (override bằng `GEMINI_CHAT_MODELS`, comma-separated).
 - `src/lib/gemini-models.ts` — hằng số model Gemini dùng chung (chat + ingest PDF).
 - `src/lib/retrieval/FirebaseRetrievalProvider.ts` — **hai chế độ retrieval**:
-  1. **Vector search (ưu tiên):** embed query bằng `gemini-embedding-2` → `findNearest()` trên collection `document_chunks` (COSINE, lấy top `RETRIEVAL_VECTOR_CANDIDATES` = 20) → dedup theo `docId` → trả ≤ `RETRIEVAL_MAX_SNIPPETS` (mặc định 6). Yêu cầu Firestore vector index đã deploy (xem mục 10).
+  1. **Vector search (ưu tiên):** embed query bằng `gemini-embedding-2` → `findNearest()` trên collection `document_chunks` (COSINE, lấy top `RETRIEVAL_VECTOR_CANDIDATES` = 20) → dedup theo `docId` → trả ≤ `RETRIEVAL_MAX_SNIPPETS` (mặc định 10). Yêu cầu Firestore vector index đã deploy (xem mục 10).
   2. **Lexical fallback:** nếu vector search thất bại hoặc trả về 0 kết quả (tài liệu chưa được embed), fetch ≤ `RETRIEVAL_FIRESTORE_FETCH_LIMIT` (mặc định 120) docs từ collection `documents`, rank bằng keyword overlap (`countTermHits`), lấy top `RETRIEVAL_MAX_SNIPPETS`.
 - `src/lib/documents/chunking.ts` — chia text thành `TextChunk[]` (~1800 ký tự/chunk, overlap 200 ký tự, tôn trọng ranh giới đoạn văn).
 - `src/lib/documents/embeddings.ts` — wrapper `gemini-embedding-2`: `embedTexts()` (batch), `embedQuery()` (RETRIEVAL_QUERY task type), `writeDocumentChunks()`, `deleteDocumentChunks()`.
@@ -465,7 +465,7 @@ Tùy chọn (Gemini & chat):
 Tùy chọn (retrieval):
 
 - `RETRIEVAL_VECTOR_CANDIDATES` — số chunk candidates lấy từ `findNearest()` trước khi dedup theo docId. Mặc định: `20`.
-- `RETRIEVAL_MAX_SNIPPETS` — số snippet tối đa truyền vào context Gemini. Mặc định: `6`.
+- `RETRIEVAL_MAX_SNIPPETS` — số snippet tối đa truyền vào context Gemini. Mặc định: `10`.
 - `RETRIEVAL_MAX_CHARS_PER_SNIPPET` — ký tự tối đa mỗi snippet. Mặc định: `2600`.
 - `RETRIEVAL_FIRESTORE_FETCH_LIMIT` — giới hạn doc khi dùng lexical fallback. Mặc định: `120`.
 

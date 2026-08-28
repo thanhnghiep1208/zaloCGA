@@ -13,7 +13,7 @@ function envInt(name: string, fallback: number): number {
 }
 
 const FIRESTORE_FETCH_LIMIT = envInt("RETRIEVAL_FIRESTORE_FETCH_LIMIT", 120);
-const MAX_SNIPPETS = envInt("RETRIEVAL_MAX_SNIPPETS", 6);
+const MAX_SNIPPETS = envInt("RETRIEVAL_MAX_SNIPPETS", 10);
 const MAX_CHARS_PER_SNIPPET = envInt("RETRIEVAL_MAX_CHARS_PER_SNIPPET", 2600);
 // Fetch more vector candidates than MAX_SNIPPETS to allow dedup by docId
 const VECTOR_CANDIDATES = envInt("RETRIEVAL_VECTOR_CANDIDATES", 20);
