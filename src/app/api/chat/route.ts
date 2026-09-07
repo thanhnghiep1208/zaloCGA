@@ -18,6 +18,7 @@ import {
   sanitizeScope,
   scopeHintForPrompt,
 } from "@/lib/chat/scope-options";
+import { extractPrototypeSpec, hasPrototypeFence } from "@/lib/chat/prototype-extract";
 
 const ChatAttachmentSchema = z.object({
   name: z.string(),
@@ -223,8 +224,9 @@ export async function POST(req: Request) {
     );
 
     // NDJSON stream: each line is a complete JSON object.
-    // Line 1: {"t":"s","d":[...sources]}  — sent before any text
-    // Line N: {"t":"x","d":"text delta"}  — one per Gemini chunk
+    // Line 1:    {"t":"s","d":[...sources]}   — sent before any text
+    // Line N:    {"t":"x","d":"text delta"}   — one per Gemini chunk, relayed unbuffered
+    // Last line: {"t":"p","d":{...spec}}      — optional prototype, only once the text is complete
     const encoder = new TextEncoder();
     const ndjsonLine = (obj: unknown) => encoder.encode(JSON.stringify(obj) + "\n");
 
@@ -241,6 +243,15 @@ export async function POST(req: Request) {
             }
           }
 
+          const prototype = extractPrototypeSpec(fullResponse);
+          if (prototype) {
+            controller.enqueue(ndjsonLine({ t: "p", d: prototype }));
+          } else if (hasPrototypeFence(fullResponse)) {
+            // Model tuân thủ fence nhưng payload không dùng được. Tỉ lệ dòng log này
+            // là thứ cho biết có cần chuyển sang function-calling để ép schema hay không.
+            console.warn("[Chat] Unusable zalo-prototype block:", fullResponse.slice(-600));
+          }
+
           const latencyMs = Date.now() - responseStart;
           const referencedSources = extractReferencedSources(
             fullResponse,
@@ -252,6 +263,7 @@ export async function POST(req: Request) {
             relevance_score: estimateRelevanceScore(query, fullResponse),
             latency_ms: latencyMs,
             referenced_sources: referencedSources,
+            prototype_pattern: prototype?.pattern ?? null,
           });
         } catch (e) {
           console.error("Streaming error", e);

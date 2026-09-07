@@ -11,6 +11,7 @@ import {
   Timestamp,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import type { PrototypeSpec } from "@/lib/chat/prototype-spec";
 
 export type StoredMessage = {
   id: string;
@@ -18,6 +19,8 @@ export type StoredMessage = {
   content: string;
   sources?: { docId?: string; fileName: string; excerpt?: string; reference?: string }[];
   attachments?: ChatAttachmentMeta[];
+  /** Visual prototype the model produced for this answer, if any. */
+  prototype?: PrototypeSpec;
   timestamp: number; // Unix ms
 };
 
@@ -39,17 +42,9 @@ export type ChatSession = {
   messages: StoredMessage[];
 };
 
-/** Create a new chat session for the user (optionally with first messages). */
-export async function createChatSession(
-  userId: string,
-  initialMessages: StoredMessage[] = []
-): Promise<string> {
-  const firstUserMsg = initialMessages.find((m) => m.role === "user");
-  const title = firstUserMsg
-    ? firstUserMsg.content.slice(0, 60) + (firstUserMsg.content.length > 60 ? "..." : "")
-    : "New Chat";
-
-  const sanitizedMessages = initialMessages.map((m) => ({
+/** Firestore rejects `undefined`, so every optional field is spread in only when present. */
+function sanitizeStoredMessage(m: StoredMessage) {
+  return {
     id: m.id,
     role: m.role,
     content: m.content,
@@ -65,7 +60,21 @@ export async function createChatSession(
         }
       : {}),
     ...(m.attachments && m.attachments.length > 0 ? { attachments: m.attachments } : {}),
-  }));
+    ...(m.prototype ? { prototype: m.prototype } : {}),
+  };
+}
+
+/** Create a new chat session for the user (optionally with first messages). */
+export async function createChatSession(
+  userId: string,
+  initialMessages: StoredMessage[] = []
+): Promise<string> {
+  const firstUserMsg = initialMessages.find((m) => m.role === "user");
+  const title = firstUserMsg
+    ? firstUserMsg.content.slice(0, 60) + (firstUserMsg.content.length > 60 ? "..." : "")
+    : "New Chat";
+
+  const sanitizedMessages = initialMessages.map(sanitizeStoredMessage);
 
   const docRef = await addDoc(collection(db, "chatSessions"), {
     userId,
@@ -87,24 +96,7 @@ export async function updateChatSession(
     ? firstUserMsg.content.slice(0, 60) + (firstUserMsg.content.length > 60 ? "..." : "")
     : "New Chat";
 
-  // Sanitize: Firestore does not accept `undefined` values
-  const sanitizedMessages = messages.map((m) => ({
-    id: m.id,
-    role: m.role,
-    content: m.content,
-    timestamp: m.timestamp,
-    ...(m.sources && m.sources.length > 0
-      ? {
-          sources: m.sources.map((s) => ({
-            fileName: s.fileName,
-            ...(s.docId !== undefined ? { docId: s.docId } : {}),
-            ...(s.excerpt !== undefined ? { excerpt: s.excerpt } : {}),
-            ...(s.reference !== undefined ? { reference: s.reference } : {}),
-          })),
-        }
-      : {}),
-    ...(m.attachments && m.attachments.length > 0 ? { attachments: m.attachments } : {}),
-  }));
+  const sanitizedMessages = messages.map(sanitizeStoredMessage);
 
   await updateDoc(doc(db, "chatSessions", sessionId), {
     messages: sanitizedMessages,

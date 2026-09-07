@@ -1,4 +1,5 @@
 import type { ChatAttachmentMeta } from "@/lib/chatHistory";
+import type { PrototypeSpec } from "@/lib/chat/prototype-spec";
 
 export const SESSION_IDLE_MS = 10 * 60 * 1000;
 
@@ -17,6 +18,8 @@ export type ChatMessage = {
   attachments?: ChatAttachmentMeta[];
   /** Shown while uploads run so the thumb row does not pop in late (layout stability). */
   attachmentPlaceholders?: { id: string; name: string }[];
+  /** Visual prototype for this answer. Arrives on the last stream line, after the text. */
+  prototype?: PrototypeSpec;
   isStreaming?: boolean;
   feedback?: "up" | "down";
 };

@@ -9,6 +9,12 @@ function textLine(text: string): string {
   return JSON.stringify({ t: "x", d: text }) + "\n";
 }
 
+function prototypeLine(spec: unknown): string {
+  return JSON.stringify({ t: "p", d: spec }) + "\n";
+}
+
+const VALID_SPEC = { pattern: "snackbar", messageType: "error", body: "Kiểm tra kết nối." };
+
 describe("feedChatStreamChunk", () => {
   it("parses a sources line and returns the sources array", () => {
     const state = createChatStreamParseState();
@@ -70,5 +76,41 @@ describe("feedChatStreamChunk", () => {
     expect(first).not.toBeNull();
     const second = feedChatStreamChunk(state, textLine("more text"));
     expect(second).toBeNull();
+  });
+});
+
+describe("feedChatStreamChunk — prototype line", () => {
+  it("starts with no prototype", () => {
+    expect(createChatStreamParseState().prototype).toBeNull();
+  });
+
+  it("stores a valid prototype spec", () => {
+    const state = createChatStreamParseState();
+    feedChatStreamChunk(state, sourcesLine([]));
+    feedChatStreamChunk(state, textLine("Câu trả lời."));
+    feedChatStreamChunk(state, prototypeLine(VALID_SPEC));
+    expect(state.prototype).toEqual(VALID_SPEC);
+    expect(state.accumulatedText).toBe("Câu trả lời.");
+  });
+
+  it("handles a prototype line split across two chunks", () => {
+    const state = createChatStreamParseState();
+    const line = prototypeLine(VALID_SPEC);
+    feedChatStreamChunk(state, line.slice(0, 15));
+    expect(state.prototype).toBeNull();
+    feedChatStreamChunk(state, line.slice(15));
+    expect(state.prototype).toEqual(VALID_SPEC);
+  });
+
+  it("ignores a malformed prototype payload without throwing", () => {
+    const state = createChatStreamParseState();
+    expect(() => feedChatStreamChunk(state, prototypeLine({ pattern: "carousel" }))).not.toThrow();
+    expect(state.prototype).toBeNull();
+  });
+
+  it("does not treat a prototype line as sources", () => {
+    const state = createChatStreamParseState();
+    expect(feedChatStreamChunk(state, prototypeLine(VALID_SPEC))).toBeNull();
+    expect(state.hasParsedSources).toBe(false);
   });
 });

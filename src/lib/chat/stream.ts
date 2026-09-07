@@ -1,4 +1,5 @@
 import type { ChatSource } from "@/types/chat";
+import { sanitizePrototypeSpec, type PrototypeSpec } from "./prototype-spec";
 
 export type ChatStreamParseState = {
   /** Bytes received but not yet parsed (incomplete last line). */
@@ -6,6 +7,8 @@ export type ChatStreamParseState = {
   hasParsedSources: boolean;
   accumulatedText: string;
   finalSources: ChatSource[];
+  /** Visual prototype spec, if the model emitted a usable one. Arrives after the text. */
+  prototype: PrototypeSpec | null;
 };
 
 export function createChatStreamParseState(): ChatStreamParseState {
@@ -14,6 +17,7 @@ export function createChatStreamParseState(): ChatStreamParseState {
     hasParsedSources: false,
     accumulatedText: "",
     finalSources: [],
+    prototype: null,
   };
 }
 
@@ -23,6 +27,7 @@ export function createChatStreamParseState(): ChatStreamParseState {
  * Each server line is a JSON object:
  *   {"t":"s","d":[...ChatSource[]]}  — sources (always first line)
  *   {"t":"x","d":"text delta"}       — text chunk
+ *   {"t":"p","d":PrototypeSpec}      — optional visual prototype (always last)
  *
  * Returns the sources array the first time it is parsed; null otherwise.
  */
@@ -49,6 +54,9 @@ export function feedChatStreamChunk(
         sourcesFound = state.finalSources;
       } else if (msg.t === "x" && typeof msg.d === "string") {
         state.accumulatedText += msg.d;
+      } else if (msg.t === "p") {
+        // Server đã validate, nhưng validate lại vẫn rẻ và chặn spec hỏng lọt vào render.
+        state.prototype = sanitizePrototypeSpec(msg.d);
       }
     } catch {
       /* ignore malformed lines */

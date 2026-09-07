@@ -104,7 +104,15 @@ export function scopeHintForPrompt(
   if (scope.messageType)
     bits.push(`loại thông báo = ${MSG_LABEL.get(scope.messageType)}`);
   if (scope.uiPattern) bits.push(`kiểu UI = ${UI_LABEL.get(scope.uiPattern)}`);
-  return `Người dùng giới hạn phạm vi: ${bits.join(", ")}. Ưu tiên guideline/microcopy đúng phạm vi này; nếu tài liệu không phủ, nói rõ thay vì suy đoán.`;
+
+  const hint = `Người dùng giới hạn phạm vi: ${bits.join(", ")}. Ưu tiên guideline/microcopy đúng phạm vi này; nếu tài liệu không phủ, nói rõ thay vì suy đoán.`;
+
+  // Người dùng đã tự chọn kiểu UI thì đừng để model đoán lại — ghim giá trị máy.
+  const pinned: string[] = [];
+  if (scope.uiPattern) pinned.push(`"pattern" PHẢI bằng "${scope.uiPattern}"`);
+  if (scope.messageType) pinned.push(`"messageType" PHẢI bằng "${scope.messageType}"`);
+
+  return `${hint} Khi xuất khối zalo-prototype, ${pinned.join(" và ")}.`;
 }
 
 const MESSAGE_TYPE_SET = new Set<MessageType>(MESSAGE_TYPE_OPTIONS.map((o) => o.value));

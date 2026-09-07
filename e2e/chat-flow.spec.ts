@@ -157,3 +157,203 @@ test.describe("Chat page (authenticated)", () => {
     await expect(composer).toHaveValue("");
   });
 });
+
+test.describe("Visual prototype in the answer", () => {
+  test.skip(
+    !process.env.E2E_USER_USERNAME,
+    "Set E2E_USER_USERNAME and E2E_USER_PASSWORD to run authenticated tests"
+  );
+
+  // Ca nặng nội dung: title + body + 3 bullet + helper + 3 nút.
+  // Bản dựng phải hiện ĐỦ, đây là thứ từng bị lược mất.
+  const SPEC = {
+    pattern: "bottom-sheet",
+    messageType: "error",
+    title: "Không gửi được ảnh vì kết nối mạng bị ngắt",
+    body: "Ảnh của bạn chưa được gửi đi. Hệ thống đã thử lại tự động 3 lần nhưng vẫn thất bại.",
+    bullets: ["Kiểm tra Wi-Fi hoặc dữ liệu di động", "Ảnh phải nhỏ hơn 10MB", "Định dạng hỗ trợ: JPG, PNG"],
+    helperText: "Bản nháp được lưu trong 24 giờ.",
+    actions: [
+      { label: "Thử lại ngay", kind: "primary" },
+      { label: "Chọn ảnh khác", kind: "secondary" },
+      { label: "Để sau", kind: "text" },
+    ],
+  };
+
+  /** Canned NDJSON so this test never depends on the model actually complying. */
+  function cannedChatStream(): string {
+    return (
+      JSON.stringify({ t: "s", d: [{ fileName: "guideline.pdf", excerpt: "quy tắc" }] }) +
+      "\n" +
+      JSON.stringify({ t: "x", d: "### Recommended final version\n\nDùng snackbar báo lỗi.\n\n" }) +
+      "\n" +
+      JSON.stringify({ t: "x", d: "[SOURCES_USED: guideline.pdf]" }) +
+      "\n" +
+      JSON.stringify({ t: "p", d: SPEC }) +
+      "\n"
+    );
+  }
+
+  test("renders the prototype from the stream without leaking raw JSON", async ({ userPage: page }) => {
+    await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
+    await page.route("**/api/chat", (route) =>
+      route.fulfill({
+        status: 200,
+        headers: { "content-type": "application/x-ndjson; charset=utf-8" },
+        body: cannedChatStream(),
+      })
+    );
+
+    await page.goto("/chat");
+    const composer = page.getByRole("textbox", { name: /nội dung tin nhắn/i });
+    await composer.fill("Viết snackbar báo lỗi gửi ảnh");
+    await composer.press("Enter");
+
+    const prototype = page.getByTestId("prototype-preview");
+    await expect(prototype).toBeVisible({ timeout: 15_000 });
+
+    // Chips carry the human labels for the two facets
+    await expect(prototype.getByText("Lỗi", { exact: true })).toBeVisible();
+    await expect(prototype.getByText("Bottom sheet", { exact: true })).toBeVisible();
+
+    // MỌI thông tin phải có mặt — không được lược bớt gì
+    await expect(prototype.getByText(SPEC.title)).toBeVisible();
+    await expect(prototype.getByText(SPEC.body)).toBeVisible();
+    for (const bullet of SPEC.bullets) {
+      await expect(prototype.getByText(bullet)).toBeVisible();
+    }
+    await expect(prototype.getByText(SPEC.helperText)).toBeVisible();
+    for (const action of SPEC.actions) {
+      await expect(prototype.getByText(action.label, { exact: true })).toBeVisible();
+    }
+
+    // Không có cảnh báo "không chở hết nội dung" cho bottom sheet
+    await expect(prototype.getByText(/không chở hết nội dung/i)).toHaveCount(0);
+
+    // Honesty caption — this is a rebuild, not a screenshot and not a generated image
+    await expect(prototype.getByText(/không phải ảnh chụp màn hình/i)).toBeVisible();
+
+    // Raw transport must never reach the DOM
+    await expect(page.locator("body")).not.toContainText("zalo-prototype");
+    await expect(page.locator("body")).not.toContainText('"messageType"');
+    await expect(page.locator("body")).not.toContainText("SOURCES_USED");
+  });
+
+  test("copies the microcopy text to the clipboard", async ({ userPage: page }) => {
+    await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
+    await page.route("**/api/chat", (route) =>
+      route.fulfill({
+        status: 200,
+        headers: { "content-type": "application/x-ndjson; charset=utf-8" },
+        body: cannedChatStream(),
+      })
+    );
+
+    await page.goto("/chat");
+    const composer = page.getByRole("textbox", { name: /nội dung tin nhắn/i });
+    await composer.fill("Viết snackbar báo lỗi gửi ảnh");
+    await composer.press("Enter");
+
+    const prototype = page.getByTestId("prototype-preview");
+    await expect(prototype).toBeVisible({ timeout: 15_000 });
+    await prototype.getByRole("button", { name: /copy chữ/i }).click();
+
+    await expect(prototype.getByText(/đã copy chữ/i)).toBeVisible();
+    // Chữ copy ra phải chở đủ mọi dòng, mọi bullet, mọi nút
+    const clipboard = await page.evaluate(() => navigator.clipboard.readText());
+    expect(clipboard).toBe(
+      [
+        SPEC.title,
+        SPEC.body,
+        ...SPEC.bullets.map((b) => `• ${b}`),
+        SPEC.helperText,
+        SPEC.actions.map((a) => a.label).join("  ·  "),
+      ].join("\n")
+    );
+  });
+
+  test("exports the prototype as a real JPG file", async ({ userPage: page }) => {
+    await page.route("**/api/chat", (route) =>
+      route.fulfill({
+        status: 200,
+        headers: { "content-type": "application/x-ndjson; charset=utf-8" },
+        body: cannedChatStream(),
+      })
+    );
+
+    await page.goto("/chat");
+    const composer = page.getByRole("textbox", { name: /nội dung tin nhắn/i });
+    await composer.fill("Viết snackbar báo lỗi gửi ảnh");
+    await composer.press("Enter");
+
+    const prototype = page.getByTestId("prototype-preview");
+    await expect(prototype).toBeVisible({ timeout: 15_000 });
+
+    const download = page.waitForEvent("download", { timeout: 30_000 });
+    await prototype.getByRole("button", { name: /tải jpg/i }).click();
+    const file = await download;
+
+    // Tên file mang theo pattern + messageType để dán vào ticket là biết ngay của cái gì
+    expect(file.suggestedFilename()).toBe("zalo-bottom-sheet-error.jpg");
+
+    const stream = await file.createReadStream();
+    const chunks: Buffer[] = [];
+    for await (const c of stream) chunks.push(c as Buffer);
+    const bytes = Buffer.concat(chunks);
+
+    // JPEG thật: SOI marker FF D8 FF, và đủ lớn để không phải ảnh rỗng
+    expect(bytes.subarray(0, 3).toString("hex")).toBe("ffd8ff");
+    expect(bytes.length).toBeGreaterThan(10_000);
+  });
+
+  test("warns instead of silently dropping content the pattern cannot show", async ({ userPage: page }) => {
+    const overloaded = { ...SPEC, pattern: "snackbar" };
+    await page.route("**/api/chat", (route) =>
+      route.fulfill({
+        status: 200,
+        headers: { "content-type": "application/x-ndjson; charset=utf-8" },
+        body:
+          JSON.stringify({ t: "s", d: [] }) +
+          "\n" +
+          JSON.stringify({ t: "x", d: "Dùng snackbar." }) +
+          "\n" +
+          JSON.stringify({ t: "p", d: overloaded }) +
+          "\n",
+      })
+    );
+
+    await page.goto("/chat");
+    const composer = page.getByRole("textbox", { name: /nội dung tin nhắn/i });
+    await composer.fill("Viết snackbar báo lỗi gửi ảnh");
+    await composer.press("Enter");
+
+    const prototype = page.getByTestId("prototype-preview");
+    await expect(prototype).toBeVisible({ timeout: 15_000 });
+
+    // Snackbar là toast một dòng — phải nói rõ phần nào chưa dựng được
+    await expect(prototype.getByText(/không chở hết nội dung/i)).toBeVisible();
+    await expect(prototype.getByText(/3 ý trong danh sách/i)).toBeVisible();
+    await expect(prototype.getByText(/2 nút phụ/i)).toBeVisible();
+  });
+
+  test("asks the real model for a prototype end to end", async ({ userPage: page }) => {
+    test.skip(
+      !process.env.E2E_RUN_LLM_TESTS,
+      "Set E2E_RUN_LLM_TESTS=1 to exercise the live model"
+    );
+    test.setTimeout(120_000);
+
+    await page.goto("/chat");
+    // Pin the scope so the model has no room to guess the pattern
+    await page.getByRole("button", { name: /loại thông báo/i }).click();
+    await page.getByRole("button", { name: "Lỗi", exact: true }).click();
+    await page.getByRole("button", { name: /kiểu ui/i }).click();
+    await page.getByRole("button", { name: "Snackbar", exact: true }).click();
+
+    const composer = page.getByRole("textbox", { name: /nội dung tin nhắn/i });
+    await composer.fill("Viết snackbar báo lỗi khi gửi ảnh thất bại vì mất mạng");
+    await composer.press("Enter");
+
+    await expect(page.getByTestId("prototype-preview")).toBeVisible({ timeout: 90_000 });
+  });
+});

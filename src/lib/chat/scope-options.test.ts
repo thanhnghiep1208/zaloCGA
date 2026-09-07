@@ -5,6 +5,7 @@ import {
   sanitizeScope,
   sanitizeDocMessageType,
   sanitizeDocUiPattern,
+  scopeHintForPrompt,
   scopeLabels,
 } from "@/lib/chat/scope-options";
 
@@ -53,5 +54,26 @@ describe("sanitizeDocMessageType / sanitizeDocUiPattern", () => {
   it("accepts 'all' as a wildcard tag", () => {
     expect(sanitizeDocMessageType("all")).toBe("all");
     expect(sanitizeDocUiPattern("all")).toBe("all");
+  });
+});
+
+describe("scopeHintForPrompt", () => {
+  it("returns null when no facet is selected", () => {
+    expect(scopeHintForPrompt(EMPTY_SCOPE)).toBeNull();
+    expect(scopeHintForPrompt(null)).toBeNull();
+  });
+
+  it("pins the machine values so the model does not re-guess the user's choice", () => {
+    const hint = scopeHintForPrompt({ messageType: "error", uiPattern: "snackbar" })!;
+    expect(hint).toContain("Lỗi");
+    expect(hint).toContain("Snackbar");
+    expect(hint).toContain('"pattern" PHẢI bằng "snackbar"');
+    expect(hint).toContain('"messageType" PHẢI bằng "error"');
+  });
+
+  it("pins only the facet that was actually selected", () => {
+    const hint = scopeHintForPrompt({ messageType: null, uiPattern: "modal" })!;
+    expect(hint).toContain('"pattern" PHẢI bằng "modal"');
+    expect(hint).not.toContain('"messageType" PHẢI');
   });
 });

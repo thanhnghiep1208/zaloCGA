@@ -28,7 +28,12 @@ Nguồn sự thật: `src/app/globals.css` (`:root`, `[data-theme="light"]`, `[d
 | Thương hiệu tối | `--mysteria` | Hero / gradient landing |
 | Shadow | `--shadow-xs`, `--shadow-sm`, `--shadow-md` | Card, header, CTA |
 | Legacy / prose | `--cream`, `--charcoal`, `--parchment`, `--strong-color` | Nút, border hover, markdown chat |
-| Scope picker (chat) | `--scope-info`, `--scope-error`, `--scope-warning`, `--scope-success`, `--scope-confirm`, `--scope-empty` | Dot màu + chip cho `ChatScopePicker` (`src/components/chat/ChatScopePicker.tsx`); dùng qua `color-mix()` cho nền tint, không dùng làm tín hiệu duy nhất (luôn kèm label chữ) |
+| Scope picker (chat) | `--scope-info`, `--scope-error`, `--scope-warning`, `--scope-success`, `--scope-confirm`, `--scope-empty` | Dot màu + chip cho `ChatScopePicker` (`src/components/chat/ChatScopePicker.tsx`); dùng qua `color-mix()` cho nền tint, không dùng làm tín hiệu duy nhất (luôn kèm label chữ). Bản dựng minh hoạ dùng lại đúng bảng màu này qua `accentFor()` — **không tạo bảng map thứ hai** |
+| Bản dựng minh hoạ | `--proto-surface`, `--proto-surface-2`, `--proto-text`, `--proto-text-muted`, `--proto-divider` | Bề mặt mock trong `src/components/chat/prototype/` — cố ý **không** dùng `--surface` của app, vì mock phải đọc ra như Zalo mobile chứ không phải chrome của chính app này |
+| Overlay trong bản dựng | `--proto-overlay`, `--proto-on-overlay` | Snackbar & tooltip là overlay tối ở **cả hai theme** — chúng không lật màu theo app, nên hai biến này cố ý không phải là nghịch đảo của `--proto-text`/`--proto-surface` |
+| Chrome Zalo trong bản dựng | `--proto-brand`, `--proto-bubble-out`, `--proto-chat-bg` | Xanh Zalo cho status bar/header, bong bóng tin nhắn gửi đi, nền luồng chat |
+
+**Bản dựng minh hoạ (`src/components/chat/prototype/`):** chuẩn UI cho 8 kiểu pattern nằm trong `patterns.tsx` và được review qua PR — model chỉ đổ nội dung chữ vào, không bao giờ tự chọn màu/icon/kích thước. Mỗi pattern dựng trên một màn hình Zalo đầy đủ (status bar → header → luồng chat → thanh nhập liệu), khung `SCREEN_W`×`SCREEN_H` = 320×600. Xuất JPG/PNG ngay trên trình duyệt qua `src/lib/chat/prototype-image.ts`. Xem `docs/PROJECT_OVERVIEW.md` §5.7.
 
 **Theme switch:** `src/context/ThemeContext.tsx` — DOM nhận `data-theme="light" | "dark"` (đồng bộ với token ở trên).
 

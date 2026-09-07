@@ -28,6 +28,7 @@ function toStoredMessages(msgs: ChatMessage[]): StoredMessage[] {
       content: m.content,
       ...(m.sources !== undefined ? { sources: m.sources } : {}),
       ...(m.attachments && m.attachments.length > 0 ? { attachments: m.attachments } : {}),
+      ...(m.prototype ? { prototype: m.prototype } : {}),
       timestamp: Date.now(),
     }));
 }
@@ -265,14 +266,20 @@ export function useChatPage() {
         }
       }
 
-      const { accumulatedText, finalSources } = streamState;
+      const { accumulatedText, finalSources, prototype } = streamState;
 
       // messagesRef.current is always up-to-date (synced via useEffect after every render).
       // By the time the streaming loop finishes (with its await calls), React has committed
       // all prior setMessages updates and the effect has run — so the ref is current.
       const finalMessages = messagesRef.current.map((msg) =>
         msg.id === assistantId
-          ? { ...msg, content: accumulatedText, sources: finalSources, isStreaming: false }
+          ? {
+              ...msg,
+              content: accumulatedText,
+              sources: finalSources,
+              ...(prototype ? { prototype } : {}),
+              isStreaming: false,
+            }
           : msg
       );
       setMessages(finalMessages);

@@ -7,11 +7,11 @@ import { db } from "@/lib/firebase";
 import { useAuth } from "@/context/AuthContext";
 import { useTheme } from "@/context/ThemeContext";
 import { useRouter } from "next/navigation";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
 import Link from "next/link";
 import { deleteChatSession } from "@/lib/chatHistory";
 import { ReferencePreviewModal } from "@/components/ReferencePreviewModal";
+import { AssistantMessageBody } from "@/components/chat/AssistantMessageBody";
+import { sanitizePrototypeSpec, type PrototypeSpec } from "@/lib/chat/prototype-spec";
 
 type StoredMessage = {
   id: string;
@@ -26,6 +26,7 @@ type StoredMessage = {
     downloadURL: string;
     expiresAt: number;
   }[];
+  prototype?: PrototypeSpec;
   timestamp: number;
 };
 
@@ -138,96 +139,12 @@ export default function ChatSessionPage({ params }: { params: Promise<{ id: stri
                   </div>
                 ) : (
                   <div className="bg-surface border border-border px-6 py-6 rounded-[16px] w-full">
-                    <style dangerouslySetInnerHTML={{ __html: `
-                      .ai-hist-container p { margin-bottom: 16px !important; line-height: 1.5 !important; display: block !important; color: var(--foreground) !important; }
-                      .ai-hist-container h1,
-                      .ai-hist-container h2,
-                      .ai-hist-container h3,
-                      .ai-hist-container h4,
-                      .ai-hist-container h5,
-                      .ai-hist-container h6 { margin-top: 24px !important; margin-bottom: 12px !important; font-weight: 700 !important; line-height: 1.2 !important; display: block !important; color: var(--strong-color) !important; }
-                      .ai-hist-container h3 { font-size: 1.25rem !important; }
-                      .ai-hist-container ul, .ai-hist-container ol { margin-bottom: 24px !important; padding-left: 20px !important; color: var(--foreground) !important; }
-                      .ai-hist-container li { margin-bottom: 8px !important; color: var(--foreground) !important; }
-                      .ai-hist-container strong {
-                        color: var(--strong-color) !important;
-                      }
-                      .ai-hist-container em,
-                      .ai-hist-container code,
-                      .ai-hist-container span {
-                        color: var(--foreground) !important;
-                      }
-                      .ai-hist-container a {
-                        color: var(--link) !important;
-                        text-decoration: underline !important;
-                      }
-                      .ai-hist-container pre {
-                        background: var(--code-bg) !important;
-                        color: var(--foreground) !important;
-                        border: 1px solid var(--code-border) !important;
-                        border-radius: 8px !important;
-                      }
-                      .ai-hist-container pre code {
-                        background: transparent !important;
-                        color: var(--foreground) !important;
-                      }
-                      .ai-hist-container :not(pre) > code {
-                        background: var(--code-inline-bg) !important;
-                        color: var(--foreground) !important;
-                        border: 1px solid var(--code-border) !important;
-                        border-radius: 8px !important;
-                        padding: 1px 4px !important;
-                      }
-                      .ai-hist-container table { width: 100% !important; border-collapse: collapse !important; }
-                      .ai-hist-container th,
-                      .ai-hist-container td { color: var(--foreground) !important; border: 1px solid var(--code-border) !important; padding: 8px 10px !important; }
-                      .ai-hist-container th { color: var(--strong-color) !important; background: var(--code-inline-bg) !important; font-weight: 700 !important; }
-                    `}} />
-                    <div className="ai-hist-container prose prose-base max-w-none text-foreground">
-                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                        {msg.content.replace(/\[SOURCES_USED:\s*.*?\]/, "").trim()}
-                      </ReactMarkdown>
-                    </div>
-
-                    {msg.sources && msg.sources.length > 0 && (
-                      <div className="mt-6 pt-4 border-t border-border/60">
-                        <p className="text-xs font-semibold text-muted uppercase tracking-widest mb-3">Nguồn tham khảo</p>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                          {msg.sources.map((src, i) => (
-                            <div key={i} className="bg-background border border-border/80 p-3 rounded-[16px] flex items-center gap-2 text-sm">
-                              <svg className="w-4 h-4 text-accent shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-                              <div className="min-w-0 flex-1">
-                                <span className="font-medium truncate block">{src.fileName}</span>
-                                {src.docId ? (
-                                  <button
-                                    type="button"
-                                    onClick={() => setPreviewDocId(src.docId ?? null)}
-                                    className="text-xs text-link hover:underline font-medium text-left"
-                                  >
-                                    Mở nội dung tham khảo
-                                  </button>
-                                ) : src.reference ? (
-                                  src.reference.startsWith("/") ? (
-                                    <Link href={src.reference} className="text-xs text-link hover:underline font-medium">
-                                      Mở nội dung tham khảo
-                                    </Link>
-                                  ) : (
-                                    <a
-                                      href={src.reference}
-                                      target="_blank"
-                                      rel="noreferrer"
-                                      className="text-xs text-link hover:underline font-medium"
-                                    >
-                                      Mở nội dung tham khảo
-                                    </a>
-                                  )
-                                ) : null}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
+                    <AssistantMessageBody
+                      content={msg.content}
+                      sources={msg.sources}
+                      prototype={sanitizePrototypeSpec(msg.prototype)}
+                      onPreviewDoc={(docId) => setPreviewDocId(docId)}
+                    />
                   </div>
                 )}
               </div>

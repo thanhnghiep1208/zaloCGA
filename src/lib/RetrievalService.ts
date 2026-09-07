@@ -3,6 +3,7 @@ import { DEFAULT_GEMINI_CHAT_MODELS } from "@/lib/gemini-models";
 import { RetrievalProvider, RetrievedSnippet } from "./retrieval/interfaces";
 import { FirebaseRetrievalProvider } from "./retrieval/FirebaseRetrievalProvider";
 import type { ChatScope } from "./chat/scope-options";
+import { PROTOTYPE_PROMPT_SECTION } from "./chat/prototype-spec";
 
 let _chatAi: GoogleGenAI | null = null;
 function getChatAi(): GoogleGenAI {
@@ -92,7 +93,8 @@ Nếu thiếu thông tin, nêu giả định ngắn trong **Pre-write analysis**
 
 ### QUY TẮC KHI CÓ ẢNH ĐÍNH KÈM (BẮT BUỘC)
 - Ảnh chỉ dùng để PHÂN TÍCH ngữ cảnh UI theo guideline và đưa TƯ VẤN BẰNG TEXT.
-- TUYỆT ĐỐI KHÔNG đề nghị "đã chỉnh sửa ảnh", "đính kèm ảnh đã sửa", hoặc bất kỳ thao tác chỉnh sửa ảnh trực tiếp.
+- TUYỆT ĐỐI KHÔNG đề nghị "đã chỉnh sửa ảnh", "đính kèm ảnh đã sửa", "ảnh đã sửa bên dưới", hoặc bất kỳ thao tác chỉnh sửa trực tiếp trên ảnh người dùng gửi.
+- Bạn KHÔNG vẽ và KHÔNG xuất ảnh. Bạn CHỈ mô tả nội dung bằng dữ liệu có cấu trúc (khối \`zalo-prototype\` bên dưới); ứng dụng sẽ tự dựng lại bằng component chuẩn của hệ thống. Nếu cần nhắc tới, gọi là "bản dựng minh hoạ bên dưới" — KHÔNG gọi là "ảnh".
 - Kết quả phải tập trung vào: mức độ phù hợp, điểm chưa phù hợp, và gợi ý sửa wording/structure/layout bằng mô tả text.
 
 Bắt buộc cấu trúc Markdown (tiếng Việt), KHÔNG JSON, KHÔNG đổi tên heading, KHÔNG thêm/bớt section:
@@ -110,11 +112,15 @@ Quy tắc bắt buộc:
 
 Tuân thủ tone, xưng hô, độ dài và thuật ngữ trong guideline khi có; nếu guideline không đủ, ghi rõ phần nào là suy luận có kiểm soát.
 
+${PROTOTYPE_PROMPT_SECTION}
+
 ### TÀI LIỆU NỘI BỘ (cơ sở duy nhất cho quy tắc)
 ${contextText || "KHÔNG TÌM THẤY TÀI LIỆU LIÊN QUAN — với Kiểu B vẫn hoàn thành khung đầy đủ và ghi rõ không có nguồn nội bộ để bám."}
 
 ---
-KẾT THÚC MỌI CÂU TRẢ LỜI PHẢI LUÔN CÓ (dòng cuối):
+THỨ TỰ PHẦN ĐUÔI CỦA MỌI CÂU TRẢ LỜI:
+1. (tuỳ chọn) khối \`\`\`zalo-prototype
+2. Dòng CUỐI CÙNG, luôn luôn phải có:
 [SOURCES_USED: tên_file1.pdf, tên_file2.pdf]`;
 
     try {

@@ -135,7 +135,8 @@ Chức năng:
 6. Generate stream câu trả lời từ Gemini; conversation history được truyền đúng chuẩn multi-turn `contents[]` thay vì nhúng vào system prompt.
 7. Stream về client theo **định dạng NDJSON** — mỗi dòng là một JSON object:
    - Dòng 1: `{"t":"s","d":[...ChatSource[]]}` — danh sách nguồn tài liệu (gửi trước khi có text)
-   - Dòng 2..N: `{"t":"x","d":"text delta"}` — từng đoạn text từ Gemini
+   - Dòng 2..N: `{"t":"x","d":"text delta"}` — từng đoạn text từ Gemini, relay nguyên vẹn (không buffer)
+   - Dòng cuối (tuỳ chọn): `{"t":"p","d":PrototypeSpec}` — bản dựng minh hoạ, chỉ gửi sau khi text đã xong (xem 5.7)
    - `Content-Type: application/x-ndjson`
 
 ## 5.2 API ingest (`POST /api/ingest`)
@@ -192,7 +193,31 @@ Các event khác (`parse_success`, `parse_failed`, `query_sent`, `response_deliv
   2. **Lexical fallback:** nếu vector search thất bại hoặc trả về 0 kết quả (tài liệu chưa được embed), fetch ≤ `RETRIEVAL_FIRESTORE_FETCH_LIMIT` (mặc định 120) docs từ collection `documents`, rank bằng keyword overlap (`countTermHits`), lấy top `RETRIEVAL_MAX_SNIPPETS`.
 - `src/lib/documents/chunking.ts` — chia text thành `TextChunk[]` (~1800 ký tự/chunk, overlap 200 ký tự, tôn trọng ranh giới đoạn văn).
 - `src/lib/documents/embeddings.ts` — wrapper `gemini-embedding-2`: `embedTexts()` (batch), `embedQuery()` (RETRIEVAL_QUERY task type), `writeDocumentChunks()`, `deleteDocumentChunks()`.
-- **Scope picker (chat, xem 5.1) không lọc cứng theo field:** cả `vectorSearch` lẫn `lexicalSearch` chỉ có một filter cứng duy nhất là `status == "indexed"`. `document_chunks` không có field `messageType`/`uiPattern`/`category`, nên nhãn scope chỉ ảnh hưởng gián tiếp qua embedding và keyword-overlap score, không đảm bảo trúng đúng tài liệu.
+- **Scope picker (chat, xem 5.1) không lọc cứng theo field:** cả `vectorSearch` lẫn `lexicalSearch` chỉ có một filter cứng duy nhất là `status == "indexed"`. Nhãn scope ảnh hưởng theo hai đường, đều là **soft boost**, không đảm bảo trúng đúng tài liệu:
+  1. Gián tiếp qua embedding và keyword-overlap score (`buildScopedQuery()` prefix nhãn vào query).
+  2. Trực tiếp qua tag tài liệu: khi có scope, `fetchDocScopeMeta()` batch-load `messageType`/`uiPattern` từ collection `documents` (vì `document_chunks` không mang các field này) rồi `applyScopeBoost()` sort ổn định theo `scopeMatchScore` (2 = khớp cả hai facet hoặc doc gắn `"all"`, 1 = khớp một, 0 = chưa gắn tag / xung đột). Không loại bỏ tài liệu nào.
+
+## 5.7 Bản dựng minh hoạ (visual prototype)
+
+Khi câu hỏi thuộc **Kiểu B — microcopy UX** và model xác định được chính xác một kiểu UI, câu trả lời kèm thêm một bản dựng trực quan để user nhìn phát hiểu, không phải đọc hết markdown.
+
+**Nguyên tắc:** chuẩn UI nằm trong **code**, không nằm ở LLM. Model chỉ cung cấp *nội dung chữ* + chọn `pattern`/`messageType`; màu, icon, bo góc, spacing, font đều do component quyết định và được review qua PR. Không có HTML nào do model sinh ra được render — app không có `rehype-raw` và feature này cố ý không thêm HTML sink mới.
+
+- `src/lib/chat/prototype-spec.ts` — Zod schema + `sanitizePrototypeSpec()` + `PROTOTYPE_PROMPT_SECTION`. Enum `pattern`/`messageType` **derive từ `scope-options.ts`** nên prompt và schema không thể lệch nhau (có test chặn). Enum sai → loại cả spec; key lạ → strip.
+  - **Không làm mất thông tin** là ràng buộc trung tâm: schema chở `title`, `body`, `bullets[]` (giữ cấu trúc danh sách), `helperText`, và `actions[]` (tới 4 nút, không giới hạn 2). Giới hạn độ dài trong `LIMITS` đặt ở mức chặn lạm dụng (body 900 ký tự), **không** phải mức "gọt cho vừa layout" — cắt chữ là mất thông tin, tệ hơn layout dài. Prompt bắt model giữ đủ mọi dòng/nhãn/nút của bản gốc và chỉ sửa cách viết cho đúng guideline.
+  - Field cũ `primaryAction`/`secondaryAction` được `foldLegacyActions()` gộp vào `actions[]` nên spec đã lưu trong Firestore vẫn đọc được.
+- `src/lib/chat/prototype-extract.ts` — `extractPrototypeSpec()` / `stripPrototypeBlock()` / `hasPrototypeFence()`. Model xuất khối ```` ```zalo-prototype ```` ngay trước dòng `[SOURCES_USED: …]`.
+- `src/app/api/chat/route.ts` — sau khi stream text xong: trích, validate, enqueue `{"t":"p","d":spec}`. Nếu có fence nhưng spec không dùng được thì `console.warn` (tỉ lệ dòng log này cho biết có cần chuyển sang function-calling để ép schema hay không) và analytics `response_delivered` mang thêm `prototype_pattern`.
+- `src/components/chat/prototype/patterns.tsx` — chrome Zalo dùng chung (`StatusBar`, `ChatHeader`, `MessageStream`, `InputBar`, `ZaloScreen`, `PhoneFrame`) + 8 thân pattern. `Record<UiPattern, …>` nên thêm pattern mà quên dựng component sẽ fail ở tsc. Mỗi pattern đặt đúng chỗ nó xuất hiện thật: snackbar nổi trên thanh nhập liệu, banner đẩy luồng chat xuống (**không** absolute — từng đè chữ lên bong bóng tin nhắn), tooltip trỏ vào icon header, card/ZInstant card chèn thẳng vào luồng chat.
+- `src/components/chat/prototype/PrototypePreview.tsx` — khung, chip facet, thanh nút (Tải JPG / Copy ảnh / Copy chữ), caption "không phải ảnh chụp màn hình".
+- `src/lib/chat/prototype-image.ts` — xuất ảnh **ngay trên trình duyệt** bằng `html-to-image` (2x cho màn retina). Không cần headless Chromium trên Cloud Run. Tải về là **JPG**; copy vào clipboard là **PNG** vì Clipboard API chỉ bắt buộc hỗ trợ `image/png` (Chrome từ chối `image/jpeg` trong `ClipboardItem`). JPEG không có alpha nên luôn truyền `backgroundColor` lấy từ nền thật, nếu không vùng trong suốt sẽ ra đen.
+- Spec được lưu trong `StoredMessage.prototype` và re-validate khi replay lịch sử.
+
+**Khung máy giãn theo nội dung:** `SCREEN_MIN_H` là chiều cao *tối thiểu* (600px), không phải cố định — bottom sheet/modal nằm trong luồng layout (không `absolute`) nên nội dung dài làm khung cao lên thay vì bị `overflow-hidden` cắt mất. Khung khoá cứng 320px bằng `shrink-0`: thiếu nó, cột chat hẹp sẽ bóp khung lại làm chữ ngắt dòng liên tục và khung cao vọt lên.
+
+**Pattern không chở hết nội dung:** snackbar theo chuẩn là toast một dòng, không thể hiện bullet/helper/nhiều nút. Thay vì bịa ra "snackbar nhiều dòng" sai chuẩn hoặc âm thầm ăn mất nội dung, `describeUnrenderedContent()` liệt kê phần không dựng được và `PrototypePreview` hiện cảnh báo, gợi ý đổi sang bottom sheet/modal. Nội dung đầy đủ vẫn nằm trong câu trả lời và ở nút "Copy chữ".
+
+Bản dựng hoàn toàn **tĩnh**: action giả render bằng `<span>`, không phải `<button>`.
 
 ## 5.6 File viewer (`GET /references/file/[id]`)
 

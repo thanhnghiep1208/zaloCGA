@@ -48,6 +48,103 @@
   margin-bottom: 0.5rem !important;
 }
 
+/* Assistant answer prose — shared by live chat and read-only history */
+.ai-response-container p {
+  margin-bottom: 16px !important;
+  line-height: 1.5 !important;
+  display: block !important;
+  color: var(--foreground) !important;
+}
+
+.ai-response-container h1,
+.ai-response-container h2,
+.ai-response-container h3,
+.ai-response-container h4,
+.ai-response-container h5,
+.ai-response-container h6 {
+  margin-top: 24px !important;
+  margin-bottom: 12px !important;
+  font-weight: 700 !important;
+  line-height: 1.2 !important;
+  display: block !important;
+  color: var(--strong-color) !important;
+}
+
+.ai-response-container h3 {
+  font-size: 1.25rem !important;
+}
+
+.ai-response-container ul,
+.ai-response-container ol {
+  margin-bottom: 24px !important;
+  padding-left: 20px !important;
+  color: var(--foreground) !important;
+}
+
+.ai-response-container li {
+  margin-bottom: 8px !important;
+  color: var(--foreground) !important;
+}
+
+.ai-response-container strong {
+  color: var(--strong-color) !important;
+}
+
+.ai-response-container em,
+.ai-response-container code,
+.ai-response-container span {
+  color: var(--foreground) !important;
+}
+
+.ai-response-container a {
+  color: var(--link) !important;
+  text-decoration: underline !important;
+}
+
+.ai-response-container pre {
+  background: var(--code-bg) !important;
+  color: var(--foreground) !important;
+  border: 1px solid var(--code-border) !important;
+  border-radius: 8px !important;
+}
+
+.ai-response-container pre code {
+  background: transparent !important;
+  color: var(--foreground) !important;
+}
+
+.ai-response-container :not(pre) > code {
+  background: var(--code-inline-bg) !important;
+  color: var(--foreground) !important;
+  border: 1px solid var(--code-border) !important;
+  border-radius: 8px !important;
+  padding: 1px 4px !important;
+}
+
+.ai-response-container hr {
+  margin: 40px 0 !important;
+  border: 0 !important;
+  border-top: 1px solid var(--border) !important;
+}
+
+.ai-response-container table {
+  width: 100% !important;
+  border-collapse: collapse !important;
+}
+
+.ai-response-container th,
+.ai-response-container td {
+  color: var(--foreground) !important;
+  border: 1px solid var(--code-border) !important;
+  padding: 8px 10px !important;
+}
+
+.ai-response-container th {
+  color: var(--strong-color) !important;
+  background: var(--code-inline-bg) !important;
+  font-weight: 700 !important;
+}
+
 :root {
   --font-ui: var(--font-app-sans), ui-sans-serif, system-ui, sans-serif;
   --mysteria: #0b1f3a;
@@ -88,6 +185,18 @@
   --scope-success: #4f8a1e;
   --scope-confirm: #6b60d6;
   --scope-empty: #6f6e6b;
+  /* Prototype mock surfaces — read as Zalo mobile, deliberately not the app's own chrome */
+  --proto-surface: #ffffff;
+  --proto-surface-2: #eef1f6;
+  --proto-text: #0f172a;
+  --proto-text-muted: #64748b;
+  --proto-divider: rgba(15, 23, 42, 0.1);
+  /* Snackbar/tooltip stay dark overlays in BOTH themes — they never invert with the app. */
+  --proto-overlay: #23262e;
+  --proto-on-overlay: #ffffff;
+  --proto-brand: #0068ff;
+  --proto-bubble-out: #e5efff;
+  --proto-chat-bg: #eef2f7;
 }
 
 [data-theme="dark"] {
@@ -114,6 +223,16 @@
   --scope-success: #86c25a;
   --scope-confirm: #a79bf0;
   --scope-empty: #9c9b98;
+  --proto-surface: #1c1a2e;
+  --proto-surface-2: #272343;
+  --proto-text: rgba(255, 255, 255, 0.95);
+  --proto-text-muted: rgba(255, 255, 255, 0.62);
+  --proto-divider: rgba(255, 255, 255, 0.14);
+  --proto-overlay: #3a3750;
+  --proto-on-overlay: rgba(255, 255, 255, 0.95);
+  --proto-brand: #4a9bff;
+  --proto-bubble-out: #22406b;
+  --proto-chat-bg: #16142a;
 }
 
 body {

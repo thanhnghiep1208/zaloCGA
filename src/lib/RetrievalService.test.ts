@@ -23,6 +23,10 @@ vi.mock("@google/genai", () => ({
 process.env.GEMINI_API_KEY = "test-key";
 
 import { RetrievalService } from "@/lib/RetrievalService";
+import {
+  PROTOTYPE_MESSAGE_TYPES,
+  PROTOTYPE_UI_PATTERNS,
+} from "@/lib/chat/prototype-spec";
 
 // --- Helpers ---
 
@@ -109,6 +113,29 @@ describe("RetrievalService.generateChatResponse", () => {
     expect(call.config.systemInstruction.parts[0].text).toContain(
       "No relevant internal documents found"
     );
+  });
+
+  it("describes the zalo-prototype contract, including every allowed enum value", async () => {
+    await RetrievalService.generateChatResponse("q", []);
+    const call = mockGenerateContentStream.mock.calls[0][0] as {
+      config: { systemInstruction: { parts: [{ text: string }] } };
+    };
+    const systemText = call.config.systemInstruction.parts[0].text;
+    expect(systemText).toContain("zalo-prototype");
+    for (const value of [...PROTOTYPE_UI_PATTERNS, ...PROTOTYPE_MESSAGE_TYPES]) {
+      expect(systemText).toContain(value);
+    }
+  });
+
+  it("keeps the no-image-editing rule while allowing the structured prototype", async () => {
+    await RetrievalService.generateChatResponse("q", []);
+    const call = mockGenerateContentStream.mock.calls[0][0] as {
+      config: { systemInstruction: { parts: [{ text: string }] } };
+    };
+    const systemText = call.config.systemInstruction.parts[0].text;
+    expect(systemText).toContain("đính kèm ảnh đã sửa");
+    expect(systemText).toContain("Bạn KHÔNG vẽ và KHÔNG xuất ảnh");
+    expect(systemText).toContain("bản dựng minh hoạ bên dưới");
   });
 
   it("maps conversation history to model/user turns in contents", async () => {
