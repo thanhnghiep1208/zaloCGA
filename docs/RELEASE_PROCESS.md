@@ -58,7 +58,7 @@ Typical vars:
 - `NEXT_PUBLIC_FIREBASE_APP_ID`
 - `FIREBASE_SERVICE_ACCOUNT_KEY`
 - `NEXT_PUBLIC_INTERNAL_AUTH_EMAIL_DOMAIN` and `INTERNAL_AUTH_EMAIL_DOMAIN` (same value; username → Auth email mapping)
-- `GEMINI_API_KEY` (chat + ingest PDF; default model `gemini-3.7-flash`)
+- `GEMINI_API_KEY` (chat + ingest PDF; default model `gemini-3.8-flash`)
 - Optional: `GEMINI_CHAT_MODELS` (comma-separated fallback list for `/api/chat`)
 - `CHAT_ATTACHMENTS_CRON_SECRET` (secret, required if the chat-attachments cleanup cron is enabled)
 - See `docs/PRE_LIVE_ENV_CHECKLIST.md` for the full pre-live list

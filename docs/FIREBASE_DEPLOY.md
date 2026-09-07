@@ -27,7 +27,7 @@ Set these in **Firebase App Hosting > Backend > Environment variables**:
 - `NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID`
 - `NEXT_PUBLIC_FIREBASE_APP_ID`
 - `FIREBASE_SERVICE_ACCOUNT_KEY` (full JSON string of service account)
-- `GEMINI_API_KEY` (cho `/api/chat`, `/api/ingest`, và embedding `gemini-embedding-2`; model mặc định `gemini-3.7-flash`, xem `src/lib/gemini-models.ts`)
+- `GEMINI_API_KEY` (cho `/api/chat`, `/api/ingest`, và embedding `gemini-embedding-2`; model mặc định `gemini-3.8-flash`, xem `src/lib/gemini-models.ts`)
 - Tùy chọn: `GEMINI_CHAT_MODELS` (danh sách model chat fallback, phân cách dấu phẩy)
 - Tùy chọn: `CHAT_RATE_LIMIT_PER_MINUTE` (mặc định `20` req/phút/user)
 - Tùy chọn: `NEXT_PUBLIC_SITE_URL` (canonical URL cho metadata/OG), `NEXT_PUBLIC_GA_ID`

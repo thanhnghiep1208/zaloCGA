@@ -23,7 +23,7 @@ Tài liệu này là bản tổng hợp end-to-end cho dự án: kiến trúc t�
 - **Frontend + Backend app:** Next.js App Router (`src/app/`*)
 - **Auth / DB / Storage:** Firebase Auth, Firestore, Firebase Storage
 - **Server admin access:** Firebase Admin SDK
-- **LLM:** Google GenAI (`gemini-3.7-flash`, fallback `gemini-3.5-flash` → `gemini-3-flash-preview` → `gemini-2.5-flash`)
+- **LLM:** Google GenAI (`gemini-3.8-flash`, fallback `gemini-3.7-flash` → `gemini-3.5-flash` → `gemini-3-flash-preview` → `gemini-2.5-flash`)
 - **Embedding:** `gemini-embedding-2` (1536 chiều) — dùng cho vector search
 - **DOCX parsing:** `mammoth`
 - **Deploy runtime:** Firebase App Hosting (Cloud Run managed)
@@ -149,7 +149,7 @@ Chức năng:
 2. Check role `admin|contributor`.
 3. Validate `fileUrl` chỉ cho phép URL Firebase Storage bucket hiện tại (chống SSRF).
 4. Tải binary file và parse:
-   - **PDF < 4 MB**: gửi inline base64 tới `gemini-3.7-flash`.
+   - **PDF < 4 MB**: gửi inline base64 tới `gemini-3.8-flash`.
    - **PDF ≥ 4 MB**: upload lên **Gemini File API** → poll đến `state === ACTIVE` (timeout 90s) → dùng `fileData` URI → tự động xóa file sau khi extract xong. Nếu File API lỗi, fallback về inline.
    - **DOCX**: dùng `mammoth`.
    - **TXT/CSV**: decode text.
@@ -186,7 +186,7 @@ Các event khác (`parse_success`, `parse_failed`, `query_sent`, `response_deliv
     - Soạn microcopy UX
   - Luôn yêu cầu `SOURCES_USED` ở cuối câu trả lời.
   - Conversation history được truyền vào `contents[]` chuẩn multi-turn (không nhúng vào system prompt).
-  - Chat model: mặc định `gemini-3.7-flash`, fallback `gemini-3.5-flash` → `gemini-3-flash-preview` → `gemini-2.5-flash` (override bằng `GEMINI_CHAT_MODELS`, comma-separated).
+  - Chat model: mặc định `gemini-3.8-flash`, fallback `gemini-3.7-flash` → `gemini-3.5-flash` → `gemini-3-flash-preview` → `gemini-2.5-flash` (override bằng `GEMINI_CHAT_MODELS`, comma-separated).
 - `src/lib/gemini-models.ts` — hằng số model Gemini dùng chung (chat + ingest PDF).
 - `src/lib/retrieval/FirebaseRetrievalProvider.ts` — **hai chế độ retrieval**:
   1. **Vector search (ưu tiên):** embed query bằng `gemini-embedding-2` → `findNearest()` trên collection `document_chunks` (COSINE, lấy top `RETRIEVAL_VECTOR_CANDIDATES` = 20) → dedup theo `docId` → trả ≤ `RETRIEVAL_MAX_SNIPPETS` (mặc định 10). Yêu cầu Firestore vector index đã deploy (xem mục 10).
@@ -484,7 +484,7 @@ Sự cố thực tế đã gặp (2026-07-14): `GEMINI_API_KEY` và `FIREBASE_SE
 
 Tùy chọn (Gemini & chat):
 
-- `GEMINI_CHAT_MODELS` — danh sách model chat, phân tách bằng dấu phẩy. Mặc định: `gemini-3.7-flash`, `gemini-3.5-flash`, `gemini-3-flash-preview`, `gemini-2.5-flash` (thử lần lượt khi model trước lỗi).
+- `GEMINI_CHAT_MODELS` — danh sách model chat, phân tách bằng dấu phẩy. Mặc định: `gemini-3.8-flash`, `gemini-3.7-flash`, `gemini-3.5-flash`, `gemini-3-flash-preview`, `gemini-2.5-flash` (thử lần lượt khi model trước lỗi).
 - `CHAT_RATE_LIMIT_PER_MINUTE` — số request tối đa mỗi user mỗi phút. Mặc định: `20`.
 
 Tùy chọn (retrieval):
@@ -586,7 +586,7 @@ Nếu không đặt `CHAT_ATTACHMENTS_CRON_SECRET`, route cron trả `503` (chư
 - **Admin không vào được:** kiểm tra email Auth = `{username}@{INTERNAL_AUTH_EMAIL_DOMAIN}` và field `role: "admin"` trong `users/{uid}`.
 - **Server configuration error** ở API: thiếu hoặc sai `FIREBASE_SERVICE_ACCOUNT_KEY` / project id env.
 - **Startup crash env domain:** `INTERNAL_AUTH_EMAIL_DOMAIN` và `NEXT_PUBLIC_INTERNAL_AUTH_EMAIL_DOMAIN` khác nhau — đặt cùng một giá trị (ví dụ `accounts.internal`).
-- **Chat/ingest Gemini lỗi model:** kiểm tra `GEMINI_API_KEY` và quyền model `gemini-3.7-flash`; fallback tự thử model trong `GEMINI_CHAT_MODELS`.
+- **Chat/ingest Gemini lỗi model:** kiểm tra `GEMINI_API_KEY` và quyền model `gemini-3.8-flash`; fallback tự thử model trong `GEMINI_CHAT_MODELS`.
 - **Gemini trả `API_KEY_INVALID` dù key vừa tạo còn hạn:** Google đang migrate key Gemini từ Standard (`AIza...`) sang Auth key gắn service account (`AQ.Ab...`); Standard key **unrestricted** đã bị từ chối từ 19/06/2026, và **toàn bộ** Standard key ngừng hoạt động từ 09/2026. Key tạo mới qua AI Studio giờ luôn là Auth key. Cần `@google/genai` ≥ 2.x (project hiện dùng `^2.11.0`) để tương thích Auth key — bản 1.x sẽ báo `API_KEY_INVALID`.
 - **Rotate `GEMINI_API_KEY`/`FIREBASE_SERVICE_ACCOUNT_KEY` xong vẫn lỗi `500`/`16 UNAUTHENTICATED`:** rất có thể do **Console override** đè lên `secret:` trong `apphosting.yaml` — xem mục 9.1 để biết cách kiểm tra và fix đúng quy trình.
 - **Vector search lỗi `index not ready`:** index `document_chunks.embedding` chưa deploy hoặc đang tạo → retrieval tự fallback lexical, deploy index bằng `firebase deploy --only firestore:indexes`.
