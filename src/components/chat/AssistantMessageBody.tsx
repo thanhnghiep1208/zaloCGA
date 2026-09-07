@@ -9,6 +9,8 @@ import type { PrototypeSpec } from "@/lib/chat/prototype-spec";
 import { PrototypePreview } from "./prototype/PrototypePreview";
 
 const SOURCES_USED_RE = /\[SOURCES_USED:\s*(.*?)\]/;
+/** Bản global để xoá HẾT marker: model đôi khi xuất hai lần, cái thứ hai từng lọt ra UI. */
+const SOURCES_USED_RE_ALL = /\[SOURCES_USED:\s*.*?\]/g;
 
 /**
  * Sources the model said it actually used, per the trailing [SOURCES_USED: ...] marker.
@@ -27,7 +29,7 @@ export function selectVisibleSources(
 }
 
 export function stripSourcesMarker(content: string): string {
-  return content.replace(SOURCES_USED_RE, "").trim();
+  return content.replace(SOURCES_USED_RE_ALL, "").trim();
 }
 
 type Props = {
