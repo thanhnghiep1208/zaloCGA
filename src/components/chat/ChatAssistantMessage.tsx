@@ -10,9 +10,21 @@ type Props = {
   onCopy: (text: string, messageId: string) => void;
 };
 
+/* Tertiary actions: ghost by default so they never outshout the answer.
+   Colour appears only on the option the user actually picked. */
+const ACTION_BASE =
+  "inline-flex min-h-[44px] cursor-pointer items-center gap-1.5 rounded-[8px] border px-3 text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-link";
+const ACTION_IDLE = "border-transparent text-muted hover:bg-border/50 hover:text-foreground";
+
+/* Written out in full — Tailwind only sees class names that appear literally in source. */
+const ACTION_UP_ON = `${ACTION_BASE} border-[var(--scope-success)] text-[var(--scope-success)]`;
+const ACTION_DOWN_ON = `${ACTION_BASE} border-[var(--scope-error)] text-[var(--scope-error)]`;
+const ACTION_OFF = `${ACTION_BASE} ${ACTION_IDLE}`;
+
 export function ChatAssistantMessage({ msg, onPreviewDoc, onFeedback, onCopy }: Props) {
+
   return (
-    <div className="clay-card px-6 py-6 rounded-[16px] w-full">
+    <div className="clay-card px-5 py-6 sm:px-7 rounded-[16px] w-full">
       <AssistantMessageBody
         content={msg.content}
         sources={msg.sources}
@@ -20,18 +32,15 @@ export function ChatAssistantMessage({ msg, onPreviewDoc, onFeedback, onCopy }: 
         onPreviewDoc={onPreviewDoc}
       />
 
-      <div className="mt-5 flex items-center gap-2 border-t border-border/40 pt-3">
-        <span className="text-xs text-muted shrink-0">Đánh giá:</span>
+      <div className="mt-6 flex items-center gap-1 border-t border-border/40 pt-2">
         <button
+          type="button"
           onClick={() => onFeedback(msg.id, "up")}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-[8px] text-sm font-medium border transition-colors ${
-            msg.feedback === "up"
-              ? "text-green-700 bg-green-100 border-green-500"
-              : "text-green-600 border-green-300 hover:bg-green-50 hover:text-green-700 hover:border-green-400"
-          }`}
-          title="Hữu ích"
+          className={msg.feedback === "up" ? ACTION_UP_ON : ACTION_OFF}
+          aria-pressed={msg.feedback === "up"}
+          title="Câu trả lời hữu ích"
         >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
             <path
               strokeLinecap="round"
               strokeLinejoin="round"
@@ -42,15 +51,13 @@ export function ChatAssistantMessage({ msg, onPreviewDoc, onFeedback, onCopy }: 
           Hữu ích
         </button>
         <button
+          type="button"
           onClick={() => onFeedback(msg.id, "down")}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-[8px] text-sm font-medium border transition-colors ${
-            msg.feedback === "down"
-              ? "text-red-700 bg-red-100 border-red-500"
-              : "text-red-500 border-red-300 hover:bg-red-50 hover:text-red-600 hover:border-red-400"
-          }`}
-          title="Chưa hữu ích"
+          className={msg.feedback === "down" ? ACTION_DOWN_ON : ACTION_OFF}
+          aria-pressed={msg.feedback === "down"}
+          title="Câu trả lời chưa hữu ích"
         >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
             <path
               strokeLinecap="round"
               strokeLinejoin="round"
@@ -60,13 +67,13 @@ export function ChatAssistantMessage({ msg, onPreviewDoc, onFeedback, onCopy }: 
           </svg>
           Chưa hữu ích
         </button>
-        <div className="flex-1" />
         <button
+          type="button"
           onClick={() => void onCopy(msg.content, msg.id)}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-[8px] text-sm font-medium border border-border text-foreground hover:bg-border/60 transition-colors"
+          className={`${ACTION_OFF} ml-auto`}
           title="Copy câu trả lời"
         >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
             <path
               strokeLinecap="round"
               strokeLinejoin="round"

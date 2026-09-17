@@ -138,7 +138,7 @@ export default function ChatSessionPage({ params }: { params: Promise<{ id: stri
                     <p className="whitespace-pre-wrap">{msg.content}</p>
                   </div>
                 ) : (
-                  <div className="bg-surface border border-border px-6 py-6 rounded-[16px] w-full">
+                  <div className="bg-surface border border-border px-5 py-6 sm:px-7 rounded-[16px] w-full">
                     <AssistantMessageBody
                       content={msg.content}
                       sources={msg.sources}
