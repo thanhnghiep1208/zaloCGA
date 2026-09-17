@@ -44,7 +44,6 @@ export function useChatPage() {
   const [previewDocId, setPreviewDocId] = useState<string | null>(null);
   const [scope, setScope] = useState<ChatScope>(EMPTY_SCOPE);
 
-  const bottomRef = useRef<HTMLDivElement>(null);
   const messagesRef = useRef<ChatMessage[]>([]);
   const embeddingRef = useRef<number[] | null>(null);
   const embedDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -57,10 +56,6 @@ export function useChatPage() {
     (m) => m.role === "user" || (m.role === "assistant" && !!m.content.trim())
   );
   const showConversationLayout = hasVisibleMessages || isLoading;
-
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "auto" });
-  }, [messages, isLoading]);
 
   useEffect(() => {
     messagesRef.current = messages;
@@ -362,7 +357,6 @@ export function useChatPage() {
     hasVisibleMessages,
     showConversationLayout,
     attachmentInputRef: attachments.attachmentInputRef,
-    bottomRef,
     handleSend,
     handleComposerDragEnter: attachments.handleComposerDragEnter,
     handleComposerDragOver: attachments.handleComposerDragOver,

@@ -5,29 +5,53 @@ import { ReferencePreviewModal } from "@/components/ReferencePreviewModal";
 import { ChatComposer } from "@/components/chat/ChatComposer";
 import { ChatEmptyState } from "@/components/chat/ChatEmptyState";
 import { ChatMessageList } from "@/components/chat/ChatMessageList";
+import { ChatScrollControls } from "@/components/chat/ChatScrollControls";
+import { useAnswerNavigation } from "@/hooks/useAnswerNavigation";
 import { useChatPage } from "@/hooks/useChatPage";
 
 export default function ChatView() {
   const chat = useChatPage();
+  const {
+    scrollRef,
+    answerRef,
+    bottomRef,
+    isPinnedToBottom,
+    canScrollToAnswerTop,
+    scrollToAnswerTop,
+    scrollToBottom,
+  } = useAnswerNavigation(chat.messages, chat.isLoading);
 
   return (
     <ProtectedRoute>
       <div className="h-[calc(100dvh-8.5rem)] min-h-[560px] flex flex-col pt-2 animate-in fade-in duration-500 w-full">
-        <div
-          className={`flex-1 min-h-0 py-4 pr-3 space-y-8 scrollbar-thin ${
-            chat.showConversationLayout ? "overflow-y-auto" : "overflow-y-hidden"
-          }`}
-        >
-          {!chat.showConversationLayout && <ChatEmptyState />}
+        <div className="relative flex-1 min-h-0">
+          <div
+            ref={scrollRef}
+            className={`absolute inset-0 py-4 pr-3 space-y-8 scrollbar-thin ${
+              chat.showConversationLayout ? "overflow-y-auto" : "overflow-y-hidden"
+            }`}
+          >
+            {!chat.showConversationLayout && <ChatEmptyState />}
+
+            {chat.showConversationLayout && (
+              <ChatMessageList
+                messages={chat.messages}
+                isLoading={chat.isLoading}
+                bottomRef={bottomRef}
+                answerRef={answerRef}
+                onPreviewDoc={(docId) => chat.setPreviewDocId(docId)}
+                onFeedback={chat.handleFeedback}
+                onCopy={(text, messageId) => void chat.copyToClipboard(text, messageId)}
+              />
+            )}
+          </div>
 
           {chat.showConversationLayout && (
-            <ChatMessageList
-              messages={chat.messages}
-              isLoading={chat.isLoading}
-              bottomRef={chat.bottomRef}
-              onPreviewDoc={(docId) => chat.setPreviewDocId(docId)}
-              onFeedback={chat.handleFeedback}
-              onCopy={(text, messageId) => void chat.copyToClipboard(text, messageId)}
+            <ChatScrollControls
+              canScrollToAnswerTop={canScrollToAnswerTop}
+              isPinnedToBottom={isPinnedToBottom}
+              onScrollToAnswerTop={scrollToAnswerTop}
+              onScrollToBottom={scrollToBottom}
             />
           )}
         </div>

@@ -11,6 +11,8 @@ type Props = {
   messages: ChatMessage[];
   isLoading: boolean;
   bottomRef: React.RefObject<HTMLDivElement | null>;
+  /** Marks the newest answer so the transcript can scroll back to its first line. */
+  answerRef: React.RefObject<HTMLDivElement | null>;
   onPreviewDoc: (docId: string) => void;
   onFeedback: (messageId: string, value: "up" | "down") => void;
   onCopy: (text: string, messageId: string) => void;
@@ -20,59 +22,65 @@ export function ChatMessageList({
   messages,
   isLoading,
   bottomRef,
+  answerRef,
   onPreviewDoc,
   onFeedback,
   onCopy,
 }: Props) {
   const { theme } = useTheme();
 
+  const visibleMessages = messages.filter(
+    (msg) => !(msg.role === "assistant" && msg.isStreaming && !msg.content.trim())
+  );
+  const assistantMessages = visibleMessages.filter((msg) => msg.role === "assistant");
+  const newestAnswerId = assistantMessages[assistantMessages.length - 1]?.id;
+
   return (
     <>
-      {messages
-        .filter((msg) => !(msg.role === "assistant" && msg.isStreaming && !msg.content.trim()))
-        .map((msg) => (
-          <div
-            key={msg.id}
-            className={`flex flex-col w-full ${msg.role === "user" ? "items-end" : "items-start"}`}
-          >
-            {msg.role === "user" ? (
-              <div className="flex max-w-[85%] flex-col items-end gap-2 [contain:layout]">
-                {(msg.content.trim() ||
-                  (!msg.attachments?.length && !msg.attachmentPlaceholders?.length)) && (
-                  <div
-                    className={`px-5 py-3 rounded-[8px] text-[15px] leading-relaxed border ${
-                      theme === "dark"
-                        ? "bg-cream text-charcoal border-border"
-                        : "bg-charcoal text-white border-charcoal"
-                    }`}
-                  >
-                    <p className="whitespace-pre-wrap">
-                      {msg.content.trim() || (msg.attachments?.length ? "Ảnh đính kèm" : "")}
-                    </p>
-                  </div>
-                )}
-                {msg.attachments?.length || msg.attachmentPlaceholders?.length ? (
-                  <div className="flex flex-wrap justify-end gap-2">
-                    {msg.attachments?.map((att, idx) => (
-                      <UserAttachmentThumb key={`${att.storagePath}-${idx}`} att={att} />
+      {visibleMessages.map((msg) => (
+        <div
+          key={msg.id}
+          ref={msg.id === newestAnswerId ? answerRef : undefined}
+          className={`flex flex-col w-full ${msg.role === "user" ? "items-end" : "items-start"}`}
+        >
+          {msg.role === "user" ? (
+            <div className="flex max-w-[85%] flex-col items-end gap-2 [contain:layout]">
+              {(msg.content.trim() ||
+                (!msg.attachments?.length && !msg.attachmentPlaceholders?.length)) && (
+                <div
+                  className={`px-5 py-3 rounded-[8px] text-[15px] leading-relaxed border ${
+                    theme === "dark"
+                      ? "bg-cream text-charcoal border-border"
+                      : "bg-charcoal text-white border-charcoal"
+                  }`}
+                >
+                  <p className="whitespace-pre-wrap">
+                    {msg.content.trim() || (msg.attachments?.length ? "Ảnh đính kèm" : "")}
+                  </p>
+                </div>
+              )}
+              {msg.attachments?.length || msg.attachmentPlaceholders?.length ? (
+                <div className="flex flex-wrap justify-end gap-2">
+                  {msg.attachments?.map((att, idx) => (
+                    <UserAttachmentThumb key={`${att.storagePath}-${idx}`} att={att} />
+                  ))}
+                  {!msg.attachments?.length &&
+                    msg.attachmentPlaceholders?.map((p) => (
+                      <UserAttachmentSkeleton key={p.id} name={p.name} />
                     ))}
-                    {!msg.attachments?.length &&
-                      msg.attachmentPlaceholders?.map((p) => (
-                        <UserAttachmentSkeleton key={p.id} name={p.name} />
-                      ))}
-                  </div>
-                ) : null}
-              </div>
-            ) : (
-              <ChatAssistantMessage
-                msg={msg}
-                onPreviewDoc={onPreviewDoc}
-                onFeedback={onFeedback}
-                onCopy={onCopy}
-              />
-            )}
-          </div>
-        ))}
+                </div>
+              ) : null}
+            </div>
+          ) : (
+            <ChatAssistantMessage
+              msg={msg}
+              onPreviewDoc={onPreviewDoc}
+              onFeedback={onFeedback}
+              onCopy={onCopy}
+            />
+          )}
+        </div>
+      ))}
 
       {isLoading && (
         <div className="flex flex-col mr-auto items-start max-w-[85%] w-full animate-in fade-in pb-2">
