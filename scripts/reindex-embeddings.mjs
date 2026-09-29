@@ -12,6 +12,7 @@
 import { readFileSync, existsSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { chunkText, embedInputFor } from "./lib/chunking.mjs";
 
 // ─── env loader ──────────────────────────────────────────────────────────────
 
@@ -84,41 +85,7 @@ if (!SERVICE_ACCOUNT_KEY) {
   process.exit(1);
 }
 
-// ─── chunking (mirrors src/lib/documents/chunking.ts) ────────────────────────
-
-const CHUNK_TARGET_CHARS = 1800;
-const CHUNK_OVERLAP_CHARS = 200;
-
-function findSplitBoundary(text, targetPos) {
-  const window = text.slice(targetPos, Math.min(text.length, targetPos + 300));
-  const para = window.indexOf("\n\n");
-  if (para >= 0 && para < 200) return targetPos + para + 2;
-  const nl = window.indexOf("\n");
-  if (nl >= 0 && nl < 150) return targetPos + nl + 1;
-  for (const sep of [". ", "! ", "? "]) {
-    const idx = window.indexOf(sep);
-    if (idx >= 0 && idx < 150) return targetPos + idx + sep.length;
-  }
-  const space = window.indexOf(" ");
-  return targetPos + (space >= 0 ? space + 1 : Math.min(100, window.length));
-}
-
-function chunkText(text) {
-  const trimmed = text.trim();
-  if (!trimmed) return [];
-  if (trimmed.length <= CHUNK_TARGET_CHARS) return [{ text: trimmed, chunkIndex: 0 }];
-  const chunks = [];
-  let pos = 0, idx = 0;
-  while (pos < trimmed.length) {
-    const targetEnd = Math.min(pos + CHUNK_TARGET_CHARS, trimmed.length);
-    const splitAt = targetEnd >= trimmed.length ? targetEnd : findSplitBoundary(trimmed, targetEnd);
-    const chunk = trimmed.slice(pos, splitAt).trim();
-    if (chunk.length >= 50) chunks.push({ text: chunk, chunkIndex: idx++ });
-    if (splitAt >= trimmed.length) break;
-    pos = Math.max(pos + 1, splitAt - CHUNK_OVERLAP_CHARS);
-  }
-  return chunks;
-}
+// Chunking comes from ./lib/chunking.mjs (kept in sync with src/lib/documents/chunking.ts by tests).
 
 // ─── Firebase Admin ───────────────────────────────────────────────────────────
 
@@ -180,7 +147,7 @@ async function writeChunks(docId, fileName, text) {
   const chunks = chunkText(text);
   if (chunks.length === 0) return 0;
 
-  const embeddings = await embedBatch(chunks.map((c) => c.text));
+  const embeddings = await embedBatch(chunks.map(embedInputFor));
 
   const ref = db.collection("document_chunks");
   const BATCH_SIZE = 400;
@@ -192,6 +159,7 @@ async function writeChunks(docId, fileName, text) {
         fileName,
         chunkIndex: chunks[j].chunkIndex,
         text: chunks[j].text,
+        headingPath: chunks[j].headingPath,
         embedding: FieldValue.vector(embeddings[j]),
         status: "indexed",
         createdAt: FieldValue.serverTimestamp(),
