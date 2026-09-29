@@ -1,7 +1,7 @@
 import { GoogleGenAI } from "@google/genai";
 import { adminDb } from "@/lib/firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
-import { chunkText } from "./chunking";
+import { chunkText, type TextChunk } from "./chunking";
 
 const EMBEDDING_MODEL = "gemini-embedding-2";
 const EMBEDDING_DIM = 1536;
@@ -66,6 +66,14 @@ export async function embedQuery(text: string): Promise<number[]> {
 export type ChunkWriteResult = { chunkCount: number };
 
 /**
+ * Embed `[headingPath] + text` so vector search benefits from the section
+ * context; the stored `text` itself stays unprefixed for display/excerpting.
+ */
+export function embeddingInputFor(chunk: TextChunk): string {
+  return chunk.headingPath ? `[${chunk.headingPath}] ${chunk.text}` : chunk.text;
+}
+
+/**
  * Chunk text, generate embeddings, and write all chunks to the
  * `document_chunks` collection. Deletes existing chunks first so
  * re-indexing a document is idempotent.
@@ -82,12 +90,7 @@ export async function writeDocumentChunks(
   const chunks = chunkText(text);
   if (chunks.length === 0) return { chunkCount: 0 };
 
-  // M5: embed `[headingPath] + text` so vector search benefits from the section
-  // context, but store the original `text` (no prefix) for display/excerpting.
-  const embedInputs = chunks.map((c) =>
-    c.headingPath ? `[${c.headingPath}] ${c.text}` : c.text
-  );
-  const embeddings = await embedTexts(embedInputs);
+  const embeddings = await embedTexts(chunks.map(embeddingInputFor));
 
   const chunksRef = adminDb.collection("document_chunks");
   const batch = adminDb.batch();
