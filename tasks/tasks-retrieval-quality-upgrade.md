@@ -119,3 +119,14 @@
   - [x] 6.11 **Đã chạy trên dữ liệu production thật** (bạn tự chạy sau khi xác nhận): 17/17 tài liệu migrate thành công, 0 lỗi. Verify idempotent bằng `--dry-run` lần 2: 17/17 "already migrated".
   - [x] 6.12 Eval cuối cùng: `eval-retrieval.mjs` → recall@6/recall@3/MRR không đổi (100%/91.7%/0.786, giống M0-M4). `verify-relevance-check-e2e.mjs` chạy lại sau re-embed → POSITIVE 19/24 (không đổi), NEGATIVE 14/15 (giảm 1, 1 câu lẻ dao động — không phải regression hệ thống). Bảng tổng hợp M0→M5 đầy đủ trong `BASELINE.md`.
   - [ ] 6.13 **Review tổng kết với tech lead — đang chờ** (xem tóm tắt bên dưới)
+
+- [x] 7.0 Rà lại toàn bộ FR theo TDD (sau khi merge PR #1)
+  - [x] 7.1 Thừa nhận: phần lớn test M1–M5 viết **sau** code. Với code đã có, mỗi test mới đều được kiểm chứng bằng mutation: cố ý làm hỏng đúng dòng code → xác nhận test FAIL → khôi phục → PASS.
+  - [x] 7.2 FR#21: test chặn tái diễn bug cắt excerpt 400 ký tự (`llm-relevance-check.test.ts`).
+  - [x] 7.3 FR#13/#14: tách `resolveRetrievalQuery()` (viết test trước khi hàm tồn tại), `route.ts` dùng đúng hàm đó.
+  - [x] 7.4 FR#20/#21: `FirebaseRetrievalProvider.search.test.ts` chạy `search()` thật trên Firestore giả — ngưỡng lexical, wiring relevance check, kill switch. Xoá test cũ trong `excerptBudget.test.ts` tự viết lại bộ lọc (xoá bộ lọc thật mà test đó vẫn pass).
+  - [x] 7.5 FR#18: test số lượt đọc Firestore mỗi lần `search()` (đúng 1 chunks + 1 documents, 0 getAll).
+  - [x] 7.6 FR#25: tách logic migrate ra `scripts/lib/migrate-heading-path-core.mjs` (nhận `db` qua tham số), 6 test trên Firestore giả: ghi đủ field, chạy lần 2 không ghi/embed gì, `null` ≠ thiếu field, dry-run, bỏ qua doc rỗng, lỗi giữa chừng được thử lại ở lần sau.
+  - [x] 7.7 Chống lệch script ↔ TS: gom mọi bản sao logic trong script về `scripts/lib/` (`retrieval-mirror.mjs`, `chunking.mjs`, `pipeline.mjs`, `runtime.mjs`). `mirror-drift.test.ts` + test pipeline trong `FirebaseRetrievalProvider.search.test.ts` chạy cùng input qua cả 2 bản và so kết quả — đã kiểm chứng bằng 11 mutation phía TS, tất cả bị bắt (mutation thứ 12 — thêm stopword — không đổi hành vi, chính nó dẫn tới bug 7.9). Chạy lại `eval-retrieval`, `calibrate`, `migrate --dry-run` trên dữ liệu thật: kết quả giống hệt trước refactor.
+  - [x] 7.8 **Bug tìm thêm, đã sửa:** `reindex-embeddings.mjs` (có từ trước) giữ bản `chunkText` cũ trước M5 → chạy nó sẽ âm thầm xoá `headingPath` của toàn bộ chunk. Đã cho dùng `scripts/lib/chunking.mjs` + ghi `headingPath`. **Chưa chạy** (script ghi production).
+  - [ ] 7.9 **Bug tìm thêm, CHƯA sửa (cần quyết định):** stopword tiếng Việt trong `queryTerms.ts` gần như vô tác dụng — stopword lưu có dấu (`"của"`) nhưng token bị bỏ dấu trước khi so (`"cua"`), chỉ `"cho"`/`"trong"` còn lọc được. Sửa sẽ đổi kết quả lexical search trên production nên cần chạy lại eval trước khi merge.
