@@ -88,6 +88,18 @@ describe("checkRelevance", () => {
     expect(result).toEqual(snippets);
   });
 
+  it("sends the excerpt past its first 400 chars to the model, where the answer often sits", async () => {
+    mockGenerateContent.mockResolvedValue({ text: '{"relevant_indices": [0]}' });
+    const answer = "Card gồm 5 state: Default, Pressed, Selected, Selected Disabled và Disabled";
+    const longExcerpt = `${"Mô tả chung về Card. ".repeat(50)}${answer}`;
+    expect(longExcerpt.indexOf(answer)).toBeGreaterThan(1000);
+
+    await checkRelevance("Card có những state nào?", [snip("card", "008 Card.pdf", longExcerpt)]);
+
+    const prompt = mockGenerateContent.mock.calls[0][0].contents[0].parts[0].text as string;
+    expect(prompt).toContain(answer);
+  });
+
   it("times out and fails open when the model call never resolves", async () => {
     mockGenerateContent.mockImplementation(() => new Promise(() => {}));
     const result = await checkRelevance("q", snippets, 50);

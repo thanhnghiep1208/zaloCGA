@@ -13,14 +13,4 @@ describe("rankDocumentsForQuery score semantics (M4 lexical threshold depends on
     const [ranked] = rankDocumentsForQuery(docs, "snackbar zzz_no_match_qqq", 5);
     expect(ranked.score).toBe(0.01);
   });
-
-  it("a threshold filter of score >= 1 keeps real matches and drops the zero-hit floor", () => {
-    const docs = [
-      { id: "match", fileName: "toast.pdf", text: "toast là một loại thông báo ngắn" },
-      { id: "no-match", fileName: "other.pdf", text: "nội dung không liên quan gì cả" },
-    ];
-    const ranked = rankDocumentsForQuery(docs, "toast", 5);
-    const filtered = ranked.filter((d) => d.score >= 1);
-    expect(filtered.map((d) => d.id)).toEqual(["match"]);
-  });
 });

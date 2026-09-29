@@ -105,3 +105,16 @@ export async function rewriteQuery(
     return fallback;
   }
 }
+
+/** Picks the query to search with and the analytics query type from a rewrite result. */
+export function resolveRetrievalQuery(
+  rewritten: QueryRewriteResult,
+  naiveRetrievalQuery: string,
+  fallbackIntent: QueryRewriteIntent
+): { retrievalQuery: string; queryType: QueryRewriteIntent } {
+  if (!rewritten.ok) return { retrievalQuery: naiveRetrievalQuery, queryType: fallbackIntent };
+  return {
+    retrievalQuery: rewritten.rewriteQuery,
+    queryType: rewritten.intent ?? fallbackIntent,
+  };
+}
