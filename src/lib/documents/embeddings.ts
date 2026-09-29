@@ -82,7 +82,12 @@ export async function writeDocumentChunks(
   const chunks = chunkText(text);
   if (chunks.length === 0) return { chunkCount: 0 };
 
-  const embeddings = await embedTexts(chunks.map((c) => c.text));
+  // M5: embed `[headingPath] + text` so vector search benefits from the section
+  // context, but store the original `text` (no prefix) for display/excerpting.
+  const embedInputs = chunks.map((c) =>
+    c.headingPath ? `[${c.headingPath}] ${c.text}` : c.text
+  );
+  const embeddings = await embedTexts(embedInputs);
 
   const chunksRef = adminDb.collection("document_chunks");
   const batch = adminDb.batch();
@@ -94,6 +99,7 @@ export async function writeDocumentChunks(
       fileName,
       chunkIndex: chunks[i].chunkIndex,
       text: chunks[i].text,
+      headingPath: chunks[i].headingPath,
       embedding: FieldValue.vector(embeddings[i]),
       status: "indexed",
       createdAt: FieldValue.serverTimestamp(),
