@@ -4,6 +4,9 @@ import { adminDb } from "@/lib/firebase-admin";
 import { embedQuery } from "@/lib/documents/embeddings";
 import { buildBudgetedExcerpt, rankDocumentsForQuery } from "./excerptBudget";
 import { ChatScope, hasScope } from "@/lib/chat/scope-options";
+import { dedupeByContentHash, mergeAdjacentChunksByDoc, type CandidateChunk } from "./chunkMerge";
+import { fuseSnippetsByDoc, type RRFWeights } from "./rrf";
+import { checkRelevance } from "./llm-relevance-check";
 
 function envInt(name: string, fallback: number): number {
   const v = process.env[name];
@@ -15,14 +18,23 @@ function envInt(name: string, fallback: number): number {
 const FIRESTORE_FETCH_LIMIT = envInt("RETRIEVAL_FIRESTORE_FETCH_LIMIT", 120);
 const MAX_SNIPPETS = envInt("RETRIEVAL_MAX_SNIPPETS", 10);
 const MAX_CHARS_PER_SNIPPET = envInt("RETRIEVAL_MAX_CHARS_PER_SNIPPET", 2600);
-// Fetch more vector candidates than MAX_SNIPPETS to allow dedup by docId
-const VECTOR_CANDIDATES = envInt("RETRIEVAL_VECTOR_CANDIDATES", 20);
+// Fetch more vector candidates than MAX_SNIPPETS — several chunks per doc can now
+// survive (see M1: mergeAdjacentChunksByDoc), so a wider pool avoids starving docs
+// whose relevant content spans multiple chunks.
+const VECTOR_CANDIDATES = envInt("RETRIEVAL_VECTOR_CANDIDATES", 30);
+// Cap how many merged snippets a single document can contribute, so one large file
+// doesn't crowd out every other document in the final context.
+const MAX_SNIPPETS_PER_DOC = envInt("RETRIEVAL_MAX_SNIPPETS_PER_DOC", 3);
 // When a scope is active, widen the lexical ranked pool before boosting/slicing
 // so scope-matching docs beyond the top MAX_SNIPPETS by raw score have a chance to surface.
 const LEXICAL_RERANK_POOL = envInt("RETRIEVAL_LEXICAL_RERANK_POOL", 20);
 // COSINE distance threshold: 0 = identical, 1 = orthogonal, 2 = opposite.
 // Only chunks with cosine_distance <= threshold are returned.
-// Default 0.55 keeps clearly relevant results and discards unrelated chunks.
+// NB: 0.55 is loose, not a reliable "not found" gate — a calibration pass
+// (scripts/calibrate-not-found-threshold.mjs) found on-topic and off-topic
+// queries overlap fully in this range on this corpus (see eval/BASELINE.md,
+// "Sau M4"). It only exists to bound the candidate pool size for performance;
+// `checkRelevance()` (M4) is what actually decides relevance/"not found".
 function envFloat(name: string, fallback: number): number {
   const v = process.env[name];
   if (!v) return fallback;
@@ -30,6 +42,29 @@ function envFloat(name: string, fallback: number): number {
   return Number.isFinite(n) ? n : fallback;
 }
 const VECTOR_DISTANCE_THRESHOLD = envFloat("RETRIEVAL_VECTOR_DISTANCE_THRESHOLD", 0.55);
+// `scoreDocument()` in excerptBudget.ts returns exactly 0.01 as a synthetic floor
+// when a doc has zero real term-hits (so it can still rank last, never zero-div).
+// Anything at or below that floor is noise, not a match — drop it before it can
+// occupy a filler slot in the RRF fusion (M4, FR#20).
+const LEXICAL_MIN_SCORE = envFloat("RETRIEVAL_LEXICAL_MIN_SCORE", 1);
+// M4 (FR#21/22): a calibration pass (scripts/calibrate-not-found-threshold.mjs,
+// see eval/BASELINE.md) found no vector-distance or lexical-score threshold that
+// separates on-topic from off-topic queries on this corpus — ranges fully
+// overlap. An LLM relevance check (also reorders/reranks) replaces the
+// threshold approach. Keep an env kill switch in case of cost/latency issues.
+const RELEVANCE_CHECK_ENABLED = process.env.RETRIEVAL_RELEVANCE_CHECK_ENABLED !== "0";
+// RRF fusion weights (M3). Default lexical weight is 0, NOT the PRD's initial
+// suggestion of 0.3 — verified via scripts/eval-retrieval.mjs that any nonzero
+// lexical weight regresses recall@3/MRR below the M1 baseline on the current
+// golden set, because lexicalSearch()'s scorer (queryTerms.ts) is too noisy on
+// this small corpus: short/common Vietnamese syllables match as substrings
+// almost everywhere, so long documents win on volume, not relevance. Raising
+// this above 0 is only safe once that scorer is fixed — see BASELINE.md "Sau M3".
+const RRF_WEIGHTS: RRFWeights = {
+  vector: envFloat("RETRIEVAL_RRF_WEIGHT_VECTOR", 1.0),
+  lexical: envFloat("RETRIEVAL_RRF_WEIGHT_LEXICAL", 0.0),
+  k: envInt("RETRIEVAL_RRF_K", 60),
+};
 
 /**
  * How well a snippet's document-level scope tags match the user's selected scope.
@@ -81,17 +116,26 @@ export class FirebaseRetrievalProvider implements RetrievalProvider {
       }),
     ]);
 
-    return this.mergeResults(vectorResults, lexicalResults);
+    const merged = this.mergeResults(vectorResults, lexicalResults);
+    if (!RELEVANCE_CHECK_ENABLED || merged.length === 0) return merged;
+
+    const checked = await checkRelevance(queryText, merged);
+    if (checked.length !== merged.length || checked.some((s, i) => s !== merged[i])) {
+      console.log(
+        `[Retrieval] Relevance check: ${merged.length} candidates -> ${checked.length} kept/reordered`
+      );
+    }
+    return checked;
   }
 
   private mergeResults(vector: RetrievedSnippet[], lexical: RetrievedSnippet[]): RetrievedSnippet[] {
-    const seen = new Set(vector.map((s) => s.docId));
-    const extras = lexical.filter((s) => !seen.has(s.docId));
-    const merged = [...vector, ...extras].slice(0, MAX_SNIPPETS);
+    const merged = fuseSnippetsByDoc(vector, lexical, MAX_SNIPPETS, RRF_WEIGHTS);
     if (merged.length === 0) {
       console.warn("[Retrieval] Both vector and lexical search returned 0 results");
     } else {
-      console.log(`[Retrieval] Merged: ${vector.length} vector + ${extras.length} lexical-only = ${merged.length} total`);
+      console.log(
+        `[Retrieval] RRF fused: ${vector.length} vector + ${lexical.length} lexical -> ${merged.length} total (weights=${JSON.stringify(RRF_WEIGHTS)})`
+      );
     }
     return merged;
   }
@@ -122,51 +166,57 @@ export class FirebaseRetrievalProvider implements RetrievalProvider {
 
     if (snapshot.empty) return [];
 
-    // Keep best (lowest distance = first) chunk per document
-    const seen = new Map<string, { text: string; fileName: string; distance: number }>();
-    snapshot.docs.forEach((doc) => {
+    // Keep every candidate chunk (not just the best one per doc) — a large document
+    // can legitimately have several distinct relevant chunks. Content-hash dedup still
+    // drops true duplicates (e.g. re-ingestion leftovers).
+    const rawChunks: CandidateChunk[] = snapshot.docs.map((doc) => {
       const data = doc.data() as {
         docId?: string;
         fileName?: string;
         text?: string;
+        chunkIndex?: number;
         _dist?: number;
       };
       const docId = typeof data.docId === "string" ? data.docId : doc.id;
-      const fileName = typeof data.fileName === "string" ? data.fileName : docId;
-      const text = typeof data.text === "string" ? data.text : "";
-      const dist = typeof data._dist === "number" ? data._dist : 1;
-      // findNearest returns docs ordered by distance — first occurrence = best match
-      if (!seen.has(docId)) {
-        seen.set(docId, { text, fileName, distance: dist });
-      }
+      return {
+        docId,
+        fileName: typeof data.fileName === "string" ? data.fileName : docId,
+        chunkIndex: typeof data.chunkIndex === "number" ? data.chunkIndex : 0,
+        text: typeof data.text === "string" ? data.text : "",
+        // findNearest returns docs ordered by distance — this preserves relative rank.
+        distance: typeof data._dist === "number" ? data._dist : 1,
+      };
     });
 
+    const deduped = dedupeByContentHash(rawChunks);
+    const merged = mergeAdjacentChunksByDoc(deduped, MAX_SNIPPETS_PER_DOC);
+
+    const uniqueDocIds = [...new Set(merged.map((m) => m.docId))];
     console.log(
-      `[Retrieval] Vector candidates: ${snapshot.size}, unique docs: ${seen.size}`,
-      [...seen.values()].map((v) => `${v.fileName}(d=${v.distance.toFixed(3)})`).join(", ")
+      `[Retrieval] Vector candidates: ${snapshot.size}, unique docs: ${uniqueDocIds.length}, merged snippets: ${merged.length}`,
+      merged.map((m) => `${m.fileName}(d=${m.bestDistance.toFixed(3)})`).join(", ")
     );
 
     const scopeActive = hasScope(scope);
-    const docMeta = scopeActive ? await this.fetchDocScopeMeta([...seen.keys()]) : null;
+    const docMeta = scopeActive ? await this.fetchDocScopeMeta(uniqueDocIds) : null;
 
-    let snippets: RetrievedSnippet[] = [];
-    for (const [docId, { text, fileName }] of seen) {
-      // Without a scope, keep the original early-break behavior (cheapest path).
-      if (!scopeActive && snippets.length >= MAX_SNIPPETS) break;
-      const meta = docMeta?.get(docId);
-      snippets.push({
-        docId,
-        fileName,
-        excerpt: buildBudgetedExcerpt(text, queryText, MAX_CHARS_PER_SNIPPET),
-        reference: `/references/${docId}`,
+    let snippets: RetrievedSnippet[] = merged.map((m) => {
+      const meta = docMeta?.get(m.docId);
+      return {
+        docId: m.docId,
+        fileName: m.fileName,
+        excerpt: buildBudgetedExcerpt(m.text, queryText, MAX_CHARS_PER_SNIPPET),
+        reference: `/references/${m.docId}`,
         messageType: meta?.messageType ?? null,
         uiPattern: meta?.uiPattern ?? null,
-      });
-    }
+      };
+    });
 
-    if (scopeActive) {
-      snippets = applyScopeBoost(snippets, scope).slice(0, MAX_SNIPPETS);
-    }
+    // `merged` is already sorted by bestDistance ascending, so a plain slice keeps
+    // the strongest matches when no scope is active.
+    snippets = scopeActive
+      ? applyScopeBoost(snippets, scope).slice(0, MAX_SNIPPETS)
+      : snippets.slice(0, MAX_SNIPPETS);
 
     return snippets;
   }
@@ -246,7 +296,9 @@ export class FirebaseRetrievalProvider implements RetrievalProvider {
 
     const scopeActive = hasScope(scope);
     const rankLimit = scopeActive ? Math.max(MAX_SNIPPETS, LEXICAL_RERANK_POOL) : MAX_SNIPPETS;
-    const ranked = rankDocumentsForQuery(docs, queryText, rankLimit);
+    const ranked = rankDocumentsForQuery(docs, queryText, rankLimit).filter(
+      (d) => d.score >= LEXICAL_MIN_SCORE
+    );
     let snippets: RetrievedSnippet[] = ranked.map((d) => ({
       docId: d.id,
       fileName: d.fileName,
