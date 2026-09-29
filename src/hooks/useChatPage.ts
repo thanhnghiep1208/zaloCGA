@@ -68,20 +68,33 @@ export function useChatPage() {
     };
   }, []);
 
-  // Handle ?new=1 — reset chat state and redirect
+  // Handle ?new=1 — reset chat state and redirect.
+  // Depend on the stable callbacks, not on `session`/`attachments`: those hooks
+  // return a fresh object every render, which made this effect re-run on every
+  // render — each run reset state, re-rendered, and ran again (React error #185),
+  // leaving the URL stuck on ?new=1 and nav links unable to leave the page.
+  const isNewChat = searchParams.get("new") === "1";
+  const { endSessionAnalytics, resetSession } = session;
+  const { clearPendingImages } = attachments;
   useEffect(() => {
-    if (searchParams.get("new") !== "1") return;
+    if (!isNewChat) return;
+    let cancelled = false;
     void (async () => {
-      await session.endSessionAnalytics();
+      await endSessionAnalytics();
+      // The user may have navigated elsewhere meanwhile — don't yank them back.
+      if (cancelled) return;
       setMessages([]);
       setInput("");
       setIsLoading(false);
       setScope(EMPTY_SCOPE);
-      session.resetSession();
-      attachments.clearPendingImages();
+      resetSession();
+      clearPendingImages();
       router.replace("/chat");
     })();
-  }, [searchParams, router, session, attachments]);
+    return () => {
+      cancelled = true;
+    };
+  }, [isNewChat, router, endSessionAnalytics, resetSession, clearPendingImages]);
 
   const handleInputChange = useCallback(
     (value: string) => {
