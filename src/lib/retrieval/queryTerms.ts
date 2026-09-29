@@ -16,10 +16,14 @@ function normalizeToken(t: string): string {
  * Terms used for overlap scoring between query and document text.
  */
 export function extractQueryTerms(query: string): string[] {
+  // Match stopwords BEFORE stripping diacritics: stripped, "có"/"đó" would also
+  // swallow "cỡ"/"đỏ" (size/red), which matter for UI guideline questions.
   const raw = query
     .split(/[\s,.;:!?()[\]{}'"\/\\]+/u)
-    .map((s) => normalizeToken(s.trim()))
-    .filter((t) => t.length >= 2 && !STOP.has(t));
+    .map((s) => s.trim().toLowerCase().normalize("NFC"))
+    .filter((t) => !STOP.has(t))
+    .map(normalizeToken)
+    .filter((t) => t.length >= 2);
 
   return Array.from(new Set(raw));
 }
