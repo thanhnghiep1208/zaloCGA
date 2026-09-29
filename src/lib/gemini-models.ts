@@ -13,3 +13,10 @@ export const DEFAULT_GEMINI_CHAT_MODELS: string[] = [
   GEMINI_FLASH_MODEL,
   ...GEMINI_CHAT_MODEL_FALLBACKS,
 ];
+
+/** Chat model chain in fallback order — `GEMINI_CHAT_MODELS` (comma-separated) or the default. */
+export function configuredChatModels(): string[] {
+  const raw = process.env.GEMINI_CHAT_MODELS;
+  if (!raw) return DEFAULT_GEMINI_CHAT_MODELS;
+  return raw.split(",").map((s) => s.trim()).filter(Boolean);
+}

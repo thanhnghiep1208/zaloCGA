@@ -13,6 +13,7 @@ type ReportsApiResponse = {
   events?: AnalyticsEvent[];
   chatSessions?: ChatSessionRow[];
   usernameByUid?: Record<string, string>;
+  chatModels?: string[];
   error?: string;
   userMessage?: string;
 };
@@ -25,6 +26,7 @@ export function useAnalyticsReportsData(
   const [events, setEvents] = useState<AnalyticsEvent[]>([]);
   const [chatSessions, setChatSessions] = useState<ChatSessionRow[]>([]);
   const [usernameByUid, setUsernameByUid] = useState<Map<string, string>>(new Map());
+  const [chatModels, setChatModels] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [lastRefreshedAt, setLastRefreshedAt] = useState<Date | null>(null);
@@ -61,6 +63,7 @@ export function useAnalyticsReportsData(
         setEvents(data.events ?? []);
         setUsernameByUid(new Map(Object.entries(data.usernameByUid ?? {})));
         setChatSessions(data.chatSessions ?? []);
+        setChatModels(data.chatModels ?? []);
         setLastRefreshedAt(new Date());
       } catch (err) {
         if (fetchId !== fetchIdRef.current) return;
@@ -102,6 +105,7 @@ export function useAnalyticsReportsData(
     events,
     chatSessions,
     usernameByUid,
+    chatModels,
     loading,
     refreshing,
     lastRefreshedAt,

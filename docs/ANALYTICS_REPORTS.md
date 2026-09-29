@@ -35,7 +35,7 @@ Mỗi document:
 | `parse_success` | Server → `/api/ingest` | `rule_count_extracted`, `latency_ms`, `user_id` |
 | `parse_failed` | Server → `/api/ingest` (extraction lỗi) | `error_type` (`ai_extraction` \| `docx_parse`), `latency_ms`, `user_id` |
 | `query_sent` | Server → `/api/chat` | `query_text`, `type` (`guideline` \| `microcopy`), `scope_message_type` (nullable, xem `MessageType` trong `src/lib/chat/scope-options.ts`), `scope_ui_pattern` (nullable, `UiPattern`), `user_id` |
-| `response_delivered` | Server → `/api/chat` (sau stream xong) | `response_type`, `relevance_score`, `latency_ms`, `referenced_sources[]`, `user_id` |
+| `response_delivered` | Server → `/api/chat` (sau stream xong) | `response_type`, `relevance_score`, `latency_ms`, `referenced_sources[]`, `session_id`, `model` (model chat thực sự trả lời, sau fallback), `llm_usage[]` (`{step, model, input_tokens, output_tokens}` cho từng lần gọi Gemini: `chat`, `rewrite`, `relevance`), `user_id` |
 | `user_feedback` | Client → `POST /api/events` (nút 👍/👎 trên `/chat`) | `feedback` (`thumbs_up` \| `thumbs_down`), `session_id`, `message_id`, `user_id` |
 | `session_started` | Client → `POST /api/events` (tin chat đầu tạo session) | `session_id`, `user_id` |
 | `session_ended` | Client → `POST /api/events` (unmount `/chat` hoặc idle 10 phút) | `session_id`, `duration_ms`, `query_count`, `user_id` |
@@ -135,6 +135,21 @@ Filter 30 ngày chỉ áp trên mẫu đã tải — **không** query Firestore 
 | Feedback rate | (👍 + 👎) / số `response_delivered` × 100% |
 | Avg response latency | Trung bình `latency_ms` trên `response_delivered` |
 
+### Model & chi phí Gemini
+
+Nguồn: `response_delivered.llm_usage` (ghi từ 2026-09-29; event cũ hơn không có → đếm riêng là "lượt chưa theo dõi token", không tính vào chi phí).
+
+| Chỉ số UI | Cách tính (tóm tắt) |
+| --- | --- |
+| Model đang sử dụng | `model` của lượt chat mới nhất; nếu chưa có thì model đầu chuỗi `GEMINI_CHAT_MODELS` (API trả `chatModels`) + số lượt theo từng model |
+| Tổng chi phí | Σ token × giá model của **từng** lần gọi (`src/lib/gemini-pricing.ts`, giá Standard paid tier theo https://ai.google.dev/gemini-api/docs/pricing) |
+| Token input / output | Σ `input_tokens` / `output_tokens`; output gồm thinking token (Gemini tính tiền như output) |
+| Trung bình / session, / lượt chat | Tổng ÷ số session có token / số lượt có token |
+| Theo bước xử lý | Nhóm theo `step` + `model` |
+| Chi phí theo session | Nhóm theo `session_id`, sắp chi phí giảm dần (hiện tối đa 50) |
+
+Chưa tính: embedding query (`gemini-embedding-2`, vài chục token/lượt) và ingest tài liệu. Model không có trong bảng giá: token vẫn đếm, chi phí bỏ qua và được liệt kê dưới mục. Khi Google đổi giá (giá input 3.8/3.7-flash là giá ưu đãi đến 31/12/2026) → sửa `GEMINI_PRICES_USD_PER_1M`; chi phí tính lại lúc xem nên áp cho cả dữ liệu cũ.
+
 ### Hiệu suất & Retention
 
 | Chỉ số UI | Cách tính (tóm tắt) |
@@ -160,6 +175,10 @@ Khi chọn filter **Hôm nay**, retention D1/D7 phản ánh cohort trong mẫu n
 | `src/lib/reports/date-utils.ts` | `ReportsTimeRange`, `eventInRange`, `sessionInRange` |
 | `src/lib/reports/compute-user-behavior.ts` | User Behavior + DAU |
 | `src/lib/reports/compute-event-summary.ts` | Upload, query, retention, funnel |
+| `src/lib/reports/compute-llm-cost.ts` | Model & chi phí Gemini (token, chi phí theo bước / session) |
+| `src/components/reports/LlmCostSection.tsx` | UI mục Model & chi phí |
+| `src/lib/gemini-pricing.ts` | Bảng giá USD / 1M token |
+| `src/lib/llm-usage.ts` | `LlmUsage`, `usageFromMetadata()` (đọc `usageMetadata` của Gemini) |
 | `src/lib/reports/types.ts` | Limits: `ANALYTICS_EVENT_LIMIT` (500), `CHAT_SESSION_SAMPLE_LIMIT` (300) |
 | `src/lib/analytics-events.ts` | Ghi event, `inferQueryType`, `estimateRelevanceScore` |
 

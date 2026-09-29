@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
+import { LlmCostSection } from "@/components/reports/LlmCostSection";
 import { ReportsToolbar } from "@/components/reports/ReportsToolbar";
 import { UserAnalyticsDetailModal } from "@/components/UserAnalyticsDetailModal";
 import { useAuth } from "@/context/AuthContext";
@@ -13,6 +14,7 @@ import {
   type ReportsTimeRange,
 } from "@/lib/reports/date-utils";
 import { computeEventSummary } from "@/lib/reports/compute-event-summary";
+import { computeLlmCost } from "@/lib/reports/compute-llm-cost";
 import { computeUserBehavior } from "@/lib/reports/compute-user-behavior";
 import {
   ANALYTICS_EVENT_LIMIT,
@@ -30,6 +32,7 @@ export default function AdminReportsPage() {
     events,
     chatSessions,
     usernameByUid,
+    chatModels,
     loading,
     refreshing,
     lastRefreshedAt,
@@ -64,6 +67,11 @@ export default function AdminReportsPage() {
     [filteredEvents, loading]
   );
 
+  const llmCost = useMemo(
+    () => computeLlmCost(filteredEvents, usernameByUid),
+    [filteredEvents, usernameByUid]
+  );
+
   const dauChartLabel =
     timeRange === "today" ? "DAU (hôm nay)" : `DAU (${dauDayCountForRange(timeRange)} ngày)`;
 
@@ -75,7 +83,7 @@ export default function AdminReportsPage() {
         <div>
           <h1 className="text-2xl font-light tracking-tight">Analytics Reports</h1>
           <p className="text-sm text-muted">
-            Theo dõi Upload/Parsing, Query/Response, Performance, Retention và User Behavior.
+            Theo dõi Upload/Parsing, Query/Response, chi phí Gemini, Performance, Retention và User Behavior.
           </p>
         </div>
 
@@ -116,7 +124,9 @@ export default function AdminReportsPage() {
                 </li>
                 <li>
                   <code className="text-xs">query_sent</code>,{" "}
-                  <code className="text-xs">response_delivered</code> — mỗi lượt chat (/api/chat)
+                  <code className="text-xs">response_delivered</code> — mỗi lượt chat (/api/chat); kèm{" "}
+                  <code className="text-xs">model</code>, <code className="text-xs">session_id</code>,{" "}
+                  <code className="text-xs">llm_usage</code> (token từng lần gọi Gemini) cho mục chi phí
                 </li>
                 <li>
                   <code className="text-xs">user_feedback</code> — 👍/👎 trên /chat
@@ -327,6 +337,8 @@ export default function AdminReportsPage() {
                 </div>
               </div>
             </section>
+
+            <LlmCostSection summary={llmCost} chatModels={chatModels} />
 
             <section className="space-y-4">
               <h2 className="text-[22px] font-light">Metrics Hiệu suất & Retention</h2>

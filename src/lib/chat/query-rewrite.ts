@@ -1,6 +1,7 @@
 import { GoogleGenAI } from "@google/genai";
 import { GEMINI_CHAT_MODEL_FALLBACKS } from "@/lib/gemini-models";
 import { withTimeout } from "@/lib/with-timeout";
+import { usageFromMetadata, type UsageSink } from "@/lib/llm-usage";
 
 /**
  * Cheapest model to spend on rewrite — the last entry in the fallback chain
@@ -79,7 +80,8 @@ function parseRewriteResponse(raw: string): Omit<QueryRewriteResult, "ok"> | nul
 export async function rewriteQuery(
   query: string,
   history: ConversationTurn[],
-  timeoutMs: number = REWRITE_TIMEOUT_MS
+  timeoutMs: number = REWRITE_TIMEOUT_MS,
+  onUsage?: UsageSink
 ): Promise<QueryRewriteResult> {
   const fallback: QueryRewriteResult = { rewriteQuery: query, intent: null, ok: false };
   if (history.length === 0) return fallback;
@@ -94,6 +96,8 @@ export async function rewriteQuery(
       }),
       timeoutMs
     );
+    const usage = usageFromMetadata("rewrite", REWRITE_MODEL, response.usageMetadata);
+    if (usage) onUsage?.(usage);
     const text = response.text;
     if (!text) return fallback;
     const parsed = parseRewriteResponse(text);

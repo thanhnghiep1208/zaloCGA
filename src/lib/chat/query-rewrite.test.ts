@@ -163,3 +163,31 @@ describe("reusableClientEmbedding", () => {
     expect(reusableClientEmbedding([], "a", "a")).toBeUndefined();
   });
 });
+
+describe("rewriteQuery — token usage", () => {
+  it("reports the call's token usage to the sink", async () => {
+    mockGenerateContent.mockResolvedValue({
+      text: '{"rewrite_query": "Snackbar dài tối đa bao nhiêu?", "intent": "guideline"}',
+      usageMetadata: { promptTokenCount: 180, candidatesTokenCount: 20 },
+    });
+    const onUsage = vi.fn();
+    await rewriteQuery("còn snackbar thì sao?", history, undefined, onUsage);
+    expect(onUsage).toHaveBeenCalledWith({
+      step: "rewrite",
+      model: "gemini-2.5-flash",
+      input_tokens: 180,
+      output_tokens: 20,
+    });
+  });
+
+  it("still reports usage when the response is unparseable (tokens were billed)", async () => {
+    mockGenerateContent.mockResolvedValue({
+      text: "not json",
+      usageMetadata: { promptTokenCount: 180, candidatesTokenCount: 5 },
+    });
+    const onUsage = vi.fn();
+    const result = await rewriteQuery("còn snackbar thì sao?", history, undefined, onUsage);
+    expect(result.ok).toBe(false);
+    expect(onUsage).toHaveBeenCalledTimes(1);
+  });
+});

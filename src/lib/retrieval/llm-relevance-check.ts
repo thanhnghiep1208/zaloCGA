@@ -1,6 +1,7 @@
 import { GoogleGenAI } from "@google/genai";
 import { GEMINI_CHAT_MODEL_FALLBACKS } from "@/lib/gemini-models";
 import { withTimeout } from "@/lib/with-timeout";
+import { usageFromMetadata, type UsageSink } from "@/lib/llm-usage";
 import type { RetrievedSnippet } from "./interfaces";
 
 /**
@@ -75,7 +76,8 @@ function parseIndices(raw: string, maxLen: number): number[] | null {
 export async function checkRelevance(
   query: string,
   snippets: RetrievedSnippet[],
-  timeoutMs: number = RELEVANCE_TIMEOUT_MS
+  timeoutMs: number = RELEVANCE_TIMEOUT_MS,
+  onUsage?: UsageSink
 ): Promise<RetrievedSnippet[]> {
   if (snippets.length === 0) return snippets;
 
@@ -89,6 +91,8 @@ export async function checkRelevance(
       }),
       timeoutMs
     );
+    const usage = usageFromMetadata("relevance", RELEVANCE_MODEL, response.usageMetadata);
+    if (usage) onUsage?.(usage);
     const text = response.text;
     if (!text) return snippets;
     const indices = parseIndices(text, snippets.length);
