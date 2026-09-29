@@ -19,7 +19,11 @@ import {
   scopeHintForPrompt,
 } from "@/lib/chat/scope-options";
 import { extractPrototypeSpec, hasPrototypeFence } from "@/lib/chat/prototype-extract";
-import { resolveRetrievalQuery, rewriteQuery } from "@/lib/chat/query-rewrite";
+import {
+  resolveRetrievalQuery,
+  reusableClientEmbedding,
+  rewriteQuery,
+} from "@/lib/chat/query-rewrite";
 
 const ChatAttachmentSchema = z.object({
   name: z.string(),
@@ -212,7 +216,14 @@ export async function POST(req: Request) {
     const responseStart = Date.now();
 
     const scopedRetrievalQuery = buildScopedQuery(retrievalQuery, safeScope);
-    const contextSnippets = await RetrievalService.getContext(scopedRetrievalQuery, embedding, safeScope);
+    // The client embedded query.trim() while typing; that vector is stale once the
+    // rewrite or scope prefix changed the text, so the server re-embeds instead.
+    const queryEmbedding = reusableClientEmbedding(embedding, query, scopedRetrievalQuery);
+    const contextSnippets = await RetrievalService.getContext(
+      scopedRetrievalQuery,
+      queryEmbedding,
+      safeScope
+    );
 
     console.log(
       `[ChatRoute] Query: "${query}". Found ${contextSnippets.length} relevant snippets.`

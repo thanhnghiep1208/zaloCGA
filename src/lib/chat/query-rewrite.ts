@@ -118,3 +118,18 @@ export function resolveRetrievalQuery(
     queryType: rewritten.intent ?? fallbackIntent,
   };
 }
+
+/**
+ * The browser pre-embeds the raw input while the user types (/api/embed). That
+ * vector matches only its own text, so reuse it only when vector search runs on
+ * exactly that text; otherwise return undefined and let the server embed the
+ * rewritten/scoped query.
+ */
+export function reusableClientEmbedding(
+  clientEmbedding: number[] | undefined,
+  embeddedText: string,
+  searchText: string
+): number[] | undefined {
+  if (!clientEmbedding || clientEmbedding.length === 0) return undefined;
+  return embeddedText.trim() === searchText.trim() ? clientEmbedding : undefined;
+}
