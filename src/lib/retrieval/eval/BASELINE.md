@@ -180,3 +180,21 @@ Vì cùng một lệnh gọi vừa lọc "không liên quan" (FR#21) vừa sắp
 | M5 (heading path) | 100.0% | 91.7% | 0.786 | Chất lượng embedding chunk ngắn tăng (không thấy qua metric này) |
 
 **Nhận xét trung thực:** recall@6/recall@3/MRR đứng yên suốt từ M0 vì corpus 17 tài liệu đã tách biệt đủ tốt để chạm trần metric ngay từ đầu — đây **không phải bằng chứng M1/M3/M5 vô dụng**, mà là giới hạn của chính golden set/metric ở quy mô corpus này (đã ghi rõ từ M0). Cải thiện đo được rõ ràng nhất, có số liệu thật, là **M4** (LLM relevance check: 15/15 negative đúng, so với 0 khả thi bằng ngưỡng số học).
+
+## Sửa stopword tiếng Việt (sau M5)
+
+**Bug:** `extractQueryTerms()` bỏ dấu token *trước* khi so với danh sách stopword, mà danh sách lại lưu có dấu (`"của"` vs token `"cua"`) — 11/13 stopword tiếng Việt không bao giờ khớp, chỉ `"cho"`/`"trong"` (vốn không dấu) còn lọc được. Test cũ không phát hiện vì nó kiểm tra `not.toContain("và")`, một dạng không thể xuất hiện trong output đã bỏ dấu.
+
+**Cách sửa:** so stopword trên token còn dấu (chuẩn hoá NFC), rồi mới bỏ dấu. Không chọn cách "bỏ dấu luôn danh sách stopword" vì khi đó `"có"`/`"đó"` sẽ xoá nhầm `"cỡ"` (cỡ chữ) và `"đỏ"` (màu đỏ) — có test chặn cách sửa đó.
+
+**Ảnh hưởng:** `extractQueryTerms` dùng cho cả chấm điểm lexical lẫn chọn đoạn đưa vào excerpt (`buildBudgetedExcerpt`, áp dụng cho mọi snippet gửi LLM).
+
+| lexical weight | trước sửa (recall@6 / @3 / MRR) | sau sửa |
+|---|---|---|
+| 0.3 | 79.2% / 70.8% / 0.628 | 83.3% / 70.8% / 0.656 |
+| 0.1 | 83.3% / 70.8% / 0.680 | 87.5% / 75.0% / 0.698 |
+| **0 (đang ship)** | 100% / 91.7% / 0.786 | 100% / 91.7% / 0.786 |
+
+`verify-relevance-check-e2e.mjs` sau sửa: **33/39** (positive 19/24, negative 14/15) — giống hệt lần chạy ngay trước khi sửa, cùng các câu miss.
+
+Lexical tốt hơn nhưng vẫn chưa đủ để bật hybrid — **giữ `RETRIEVAL_RRF_WEIGHT_LEXICAL=0`**. Nhiễu còn lại đến từ việc đếm chuỗi con không theo ranh giới từ (`"vi"` khớp trong `"vị"`, `"video"`) và tài liệu dài thắng nhờ độ dài. Muốn hybrid thật cần đổi sang so khớp theo từ + chuẩn hoá theo độ dài (kiểu BM25) — việc riêng, chưa làm.

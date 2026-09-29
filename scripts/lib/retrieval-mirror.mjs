@@ -28,8 +28,10 @@ function normalizeToken(t) {
 export function extractQueryTerms(query) {
   const raw = query
     .split(/[\s,.;:!?()[\]{}'"\/\\]+/u)
-    .map((s) => normalizeToken(s.trim()))
-    .filter((t) => t.length >= 2 && !STOP.has(t));
+    .map((s) => s.trim().toLowerCase().normalize("NFC"))
+    .filter((t) => !STOP.has(t))
+    .map(normalizeToken)
+    .filter((t) => t.length >= 2);
   return Array.from(new Set(raw));
 }
 
