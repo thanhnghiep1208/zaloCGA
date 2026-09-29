@@ -14,6 +14,7 @@ Trợ lý nội bộ **Zalo Content Guidelines** — tra cứu guideline nội d
 - Hướng dẫn lên live nhanh (VI): `docs/HUONG_DAN_LEN_LIVE.md`
 - Checklist deploy Firebase: `docs/FIREBASE_DEPLOY.md`
 - Checklist env pre-live: `docs/PRE_LIVE_ENV_CHECKLIST.md`
+- Chất lượng retrieval (kết quả đo, cách chạy eval): `src/lib/retrieval/eval/BASELINE.md` và mục 5.5 / 5.5b trong `PROJECT_OVERVIEW.md`
 
 **LLM:** Gemini API — mặc định `gemini-3.8-flash` (chat + ingest PDF), fallback `gemini-3.7-flash` → `gemini-3.5-flash` → `gemini-3-flash-preview` → `gemini-2.5-flash`. Chi tiết env: mục 9 trong `PROJECT_OVERVIEW.md`.
 

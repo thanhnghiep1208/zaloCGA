@@ -48,10 +48,15 @@ npm run build
 
 ## 5) Bien toi uu token/chat (tuy chon, nen dat ro)
 
-- `RETRIEVAL_MAX_SNIPPETS` (goi y: `8`-`10` neu can tong hop nhieu nguon)
-- `RETRIEVAL_MAX_CHARS_PER_SNIPPET` (goi y: `2500`-`4000`)
-- `RETRIEVAL_VECTOR_CANDIDATES` (goi y: `20`-`30` — so chunk lay tu vector search truoc khi dedup)
-- `RETRIEVAL_FIRESTORE_FETCH_LIMIT` (goi y: `80`-`150` — chi dung cho lexical fallback)
+De trong la dung mac dinh — cac mac dinh da duoc do bang `node scripts/eval-retrieval.mjs` (ket qua: `src/lib/retrieval/eval/BASELINE.md`). Chi dat khi da do lai bang script do. Danh sach day du: `docs/PROJECT_OVERVIEW.md` muc 9.
+
+- `RETRIEVAL_MAX_SNIPPETS` (mac dinh `10`)
+- `RETRIEVAL_MAX_CHARS_PER_SNIPPET` (mac dinh `2600`)
+- `RETRIEVAL_VECTOR_CANDIDATES` (mac dinh `30` — so chunk lay tu vector search truoc khi gop/cat)
+- `RETRIEVAL_MAX_SNIPPETS_PER_DOC` (mac dinh `3`)
+- `RETRIEVAL_FIRESTORE_FETCH_LIMIT` (mac dinh `120` — so doc lexical search doc moi lan)
+- `RETRIEVAL_RRF_WEIGHT_LEXICAL` (mac dinh `0` — **khong nang len > 0**, da do: lam giam chat luong)
+- `RETRIEVAL_RELEVANCE_CHECK_ENABLED` (mac dinh bat; `0` = tat, tiet kiem 1 lenh Gemini/luot nhung mat cau tra loi "chua co guideline")
 - `CHAT_CONVERSATION_MAX_CHARS_PER_TURN` (goi y: `1500`-`3000`)
 - `CHAT_QUERY_MAX_CHARS` (goi y: `6000`-`12000`)
 

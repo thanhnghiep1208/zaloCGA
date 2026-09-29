@@ -131,9 +131,14 @@ Chức năng:
    - `buildScopedQuery()`: prefix nhãn scope (vd. `[Lỗi · Snackbar]`) vào query trước khi gọi retrieval — chỉ là **soft ranking boost** (tăng điểm vector/lexical), không phải hard filter theo field trong Firestore (xem 5.5).
    - `scopeHintForPrompt()`: chèn câu hint vào đầu turn hiện tại trong `contents[]` (không nhúng vào system prompt) để model bám đúng phạm vi.
    - Query gốc (không prefix) vẫn dùng để lưu `chatSessions`/hiển thị UI và log analytics `query_sent` (kèm `scope_message_type`/`scope_ui_pattern`, xem 8.6).
-5. Retrieval tài liệu qua `RetrievalService.getContext` (vector search → lexical fallback, xem 5.5).
-6. Generate stream câu trả lời từ Gemini; conversation history được truyền đúng chuẩn multi-turn `contents[]` thay vì nhúng vào system prompt.
-7. Stream về client theo **định dạng NDJSON** — mỗi dòng là một JSON object:
+5. **Query rewrite** (`src/lib/chat/query-rewrite.ts`) — chỉ khi có lịch sử hội thoại:
+   - `rewriteQuery()` gọi model rẻ nhất trong chuỗi fallback (phần tử cuối của `GEMINI_CHAT_MODEL_FALLBACKS`, hiện `gemini-2.5-flash`) để viết câu follow-up thành câu độc lập (vd. "còn snackbar thì sao?" → "Snackbar nên dài tối đa bao nhiêu?") và phân loại intent `guideline | microcopy`. Timeout 4s.
+   - Lượt đầu (không có lịch sử) không gọi LLM, không tốn thêm latency.
+   - `resolveRetrievalQuery()` chọn câu dùng cho retrieval: câu đã rewrite nếu thành công; nếu lỗi/timeout thì fallback về cách cũ (ghép 2 lượt user gần nhất + câu hiện tại). `intent` từ rewrite thay heuristic `inferQueryType()` khi ghi `query_sent.type`.
+   - ⚠️ **Giới hạn hiện tại:** client tính sẵn embedding của **câu gốc** qua `/api/embed` (khi câu ≥ 10 ký tự) và gửi kèm `embedding`; vector search dùng thẳng embedding đó. Vì vậy với follow-up đủ dài, rewrite **chỉ tác động tới lexical search, excerpt và relevance check — không tới vector search**.
+6. Retrieval tài liệu qua `RetrievalService.getContext` (vector + lexical chạy song song, fuse bằng RRF, rồi LLM relevance check — xem 5.5). Nếu relevance check kết luận không có tài liệu nào liên quan, context rỗng và system prompt hướng model trả lời "chưa có guideline" thay vì bịa.
+7. Generate stream câu trả lời từ Gemini; conversation history được truyền đúng chuẩn multi-turn `contents[]` thay vì nhúng vào system prompt.
+8. Stream về client theo **định dạng NDJSON** — mỗi dòng là một JSON object:
    - Dòng 1: `{"t":"s","d":[...ChatSource[]]}` — danh sách nguồn tài liệu (gửi trước khi có text)
    - Dòng 2..N: `{"t":"x","d":"text delta"}` — từng đoạn text từ Gemini, relay nguyên vẹn (không buffer)
    - Dòng cuối (tuỳ chọn): `{"t":"p","d":PrototypeSpec}` — bản dựng minh hoạ, chỉ gửi sau khi text đã xong (xem 5.7)
@@ -153,10 +158,11 @@ Chức năng:
    - **PDF ≥ 4 MB**: upload lên **Gemini File API** → poll đến `state === ACTIVE` (timeout 90s) → dùng `fileData` URI → tự động xóa file sau khi extract xong. Nếu File API lỗi, fallback về inline.
    - **DOCX**: dùng `mammoth`.
    - **TXT/CSV**: decode text.
-5. **Chunking + Embedding**: nếu request chứa `docId`, tự động:
-   - Chunk text thành đoạn ~1800 ký tự với overlap 200 ký tự.
-   - Gọi Gemini `gemini-embedding-2` (1536 chiều) để embed từng chunk (5 concurrent).
+5. **Chunking + Embedding** (`writeDocumentChunks()`): nếu request chứa `docId`, tự động:
+   - Chunk text thành đoạn ~1800 ký tự với overlap 200 ký tự; mỗi chunk mang `headingPath` — chuỗi heading Markdown (`#`…`######`) đang có hiệu lực tại vị trí bắt đầu chunk, vd. `Snackbar > Behavior`; `null` nếu tài liệu không có heading.
+   - Gọi Gemini `gemini-embedding-2` (1536 chiều) để embed từng chunk (5 concurrent). Input embed là `[headingPath] text` khi có heading (để đoạn đứng lẻ vẫn mang ngữ cảnh mục), còn field `text` lưu trong DB giữ nguyên không prefix.
    - Ghi vào collection `document_chunks` qua Firestore batch write.
+   - Thực tế: PDF được Gemini extract ra thường có heading Markdown → có `headingPath`; DOCX qua mammoth thường không có → `null`.
 6. Trả về `{ textContent, chunkCount }` để client ghi `textContent + status: "indexed"` vào `documents`.
 
 ## 5.3 API quản lý user (admin)
@@ -188,14 +194,42 @@ Các event khác (`parse_success`, `parse_failed`, `query_sent`, `response_deliv
   - Conversation history được truyền vào `contents[]` chuẩn multi-turn (không nhúng vào system prompt).
   - Chat model: mặc định `gemini-3.8-flash`, fallback `gemini-3.7-flash` → `gemini-3.5-flash` → `gemini-3-flash-preview` → `gemini-2.5-flash` (override bằng `GEMINI_CHAT_MODELS`, comma-separated).
 - `src/lib/gemini-models.ts` — hằng số model Gemini dùng chung (chat + ingest PDF).
-- `src/lib/retrieval/FirebaseRetrievalProvider.ts` — **hai chế độ retrieval**:
-  1. **Vector search (ưu tiên):** embed query bằng `gemini-embedding-2` → `findNearest()` trên collection `document_chunks` (COSINE, lấy top `RETRIEVAL_VECTOR_CANDIDATES` = 20) → dedup theo `docId` → trả ≤ `RETRIEVAL_MAX_SNIPPETS` (mặc định 10). Yêu cầu Firestore vector index đã deploy (xem mục 10).
-  2. **Lexical fallback:** nếu vector search thất bại hoặc trả về 0 kết quả (tài liệu chưa được embed), fetch ≤ `RETRIEVAL_FIRESTORE_FETCH_LIMIT` (mặc định 120) docs từ collection `documents`, rank bằng keyword overlap (`countTermHits`), lấy top `RETRIEVAL_MAX_SNIPPETS`.
-- `src/lib/documents/chunking.ts` — chia text thành `TextChunk[]` (~1800 ký tự/chunk, overlap 200 ký tự, tôn trọng ranh giới đoạn văn).
-- `src/lib/documents/embeddings.ts` — wrapper `gemini-embedding-2`: `embedTexts()` (batch), `embedQuery()` (RETRIEVAL_QUERY task type), `writeDocumentChunks()`, `deleteDocumentChunks()`.
-- **Scope picker (chat, xem 5.1) không lọc cứng theo field:** cả `vectorSearch` lẫn `lexicalSearch` chỉ có một filter cứng duy nhất là `status == "indexed"`. Nhãn scope ảnh hưởng theo hai đường, đều là **soft boost**, không đảm bảo trúng đúng tài liệu:
+- `src/lib/retrieval/FirebaseRetrievalProvider.ts` — `search()` chạy **vector và lexical song song** mỗi lần (không phải "vector trước, lexical dự phòng"), rồi fuse và lọc qua LLM:
+  1. **Vector search:** embed query bằng `gemini-embedding-2` (hoặc dùng embedding client gửi kèm, xem 5.1) → `findNearest()` trên `document_chunks` (COSINE, top `RETRIEVAL_VECTOR_CANDIDATES` = 30, `distanceThreshold` 0.55). Yêu cầu Firestore vector index đã deploy (xem mục 10).
+     - `dedupeByContentHash()` bỏ chunk trùng nội dung; `mergeAdjacentChunksByDoc()` (`chunkMerge.ts`) gộp các chunk liền kề cùng tài liệu thành một đoạn và giữ tối đa `RETRIEVAL_MAX_SNIPPETS_PER_DOC` (3) đoạn mỗi tài liệu — một file dài có thể đóng góp nhiều đoạn liên quan, không còn bị giới hạn 1 đoạn/file.
+     - Thứ tự là **round-robin theo tài liệu**: mọi tài liệu có đoạn tốt nhất trước, rồi mới tới đoạn thứ 2 của từng tài liệu — tránh một file dài chiếm hết slot.
+  2. **Lexical search:** fetch ≤ `RETRIEVAL_FIRESTORE_FETCH_LIMIT` (120) docs từ `documents`, chấm điểm bằng số lần khớp từ khoá (`rankDocumentsForQuery`, tên file ×3), bỏ tài liệu dưới `RETRIEVAL_LEXICAL_MIN_SCORE` (1 = phải có ít nhất một từ khớp thật).
+  3. **Fusion (`rrf.ts`):** Reciprocal Rank Fusion `w_vector/(k+rank_v+1) + w_lexical/(k+rank_l+1)`, ghép kết quả cũng theo round-robin, cắt còn `RETRIEVAL_MAX_SNIPPETS` (10). **Trọng số mặc định vector 1.0 / lexical 0** — đã đo: mọi trọng số lexical > 0 đều làm giảm chất lượng trên corpus hiện tại vì chấm điểm lexical còn nhiễu (đếm chuỗi con, không theo ranh giới từ; tài liệu dài lợi thế). Chi tiết: `src/lib/retrieval/eval/BASELINE.md`.
+  4. **LLM relevance check (`llm-relevance-check.ts`):** một lệnh Gemini (model rẻ nhất) đọc câu hỏi + các đoạn đã fuse, trả về index các đoạn *thực sự* giúp trả lời, sắp theo độ liên quan — vừa lọc vừa rerank. Trả về rỗng khi câu hỏi ngoài phạm vi. Fail-open: lỗi/timeout 4s thì giữ nguyên danh sách. Tắt bằng `RETRIEVAL_RELEVANCE_CHECK_ENABLED=0`.
+     - Lý do dùng LLM thay vì ngưỡng số: đã đo trên 24 câu đúng phạm vi + 15 câu ngoài phạm vi, khoảng cách vector và điểm lexical của hai nhóm **chồng lấn hoàn toàn** — không có ngưỡng nào tách được.
+- Mỗi lượt chat tốn khoảng **4 lệnh Gemini**: embed câu hỏi (qua `/api/embed` lúc người dùng đang gõ, hoặc trong route nếu client chưa gửi), rewrite (chỉ khi có lịch sử), relevance check (chỉ khi có kết quả), và sinh câu trả lời (thêm lệnh nếu phải fallback sang model khác). Firestore: đúng 1 truy vấn `document_chunks` + 1 truy vấn `documents` mỗi lần (+1 `getAll` khi có scope).
+- `src/lib/retrieval/queryTerms.ts` — `extractQueryTerms()`: tách từ khoá, bỏ stopword (so **trước** khi bỏ dấu, để `"có"` không xoá nhầm `"cỡ"`), rồi bỏ dấu. Dùng cho chấm điểm lexical và cho `buildBudgetedExcerpt()` (chọn đoạn nào của tài liệu đưa vào excerpt).
+- `src/lib/documents/chunking.ts` — chia text thành `TextChunk[]` (~1800 ký tự/chunk, overlap 200 ký tự, tôn trọng ranh giới đoạn văn), kèm `headingPath`.
+- `src/lib/documents/embeddings.ts` — wrapper `gemini-embedding-2`: `embedTexts()` (batch), `embedQuery()` (RETRIEVAL_QUERY task type), `embeddingInputFor()`, `writeDocumentChunks()`, `deleteDocumentChunks()`.
+- **Scope picker (chat, xem 5.1) không lọc cứng theo field:** filter cứng chỉ có `status == "indexed"` (và ngưỡng điểm lexical ở trên, không liên quan scope). Nhãn scope ảnh hưởng theo hai đường, đều là **soft boost**, không đảm bảo trúng đúng tài liệu:
   1. Gián tiếp qua embedding và keyword-overlap score (`buildScopedQuery()` prefix nhãn vào query).
   2. Trực tiếp qua tag tài liệu: khi có scope, `fetchDocScopeMeta()` batch-load `messageType`/`uiPattern` từ collection `documents` (vì `document_chunks` không mang các field này) rồi `applyScopeBoost()` sort ổn định theo `scopeMatchScore` (2 = khớp cả hai facet hoặc doc gắn `"all"`, 1 = khớp một, 0 = chưa gắn tag / xung đột). Không loại bỏ tài liệu nào.
+
+## 5.5b Đánh giá chất lượng retrieval & script vận hành
+
+Kết quả đo qua từng đợt cải tiến (M0→M5 và các lần sửa sau) ghi trong **`src/lib/retrieval/eval/BASELINE.md`** — đọc file này trước khi đổi bất kỳ tham số `RETRIEVAL_*` nào.
+
+- **Golden set:** `src/lib/retrieval/eval/golden-set.json` (24 câu: 15 lấy từ log thật `query_sent`, 9 tự viết; 5 câu có `notes` ghi `expectedDocId` chưa được người biết corpus xác nhận) và `negative-golden-set.json` (15 câu ngoài phạm vi, gồm 3 câu "khó" về Zalo nhưng không phải UX writing).
+- **Metric chính:** recall@3 và MRR. recall@6 đã chạm trần 100% vì corpus chỉ có 17 tài liệu.
+
+Script (đều **chỉ đọc**, trừ khi ghi chú khác; đọc `GEMINI_API_KEY`/`FIREBASE_SERVICE_ACCOUNT_KEY` từ `.env.local`; tôn trọng các biến `RETRIEVAL_*` giống app):
+
+| Script | Việc |
+|---|---|
+| `node scripts/eval-retrieval.mjs` | recall@6 / recall@3 / MRR trên golden set (không gồm relevance check) |
+| `node scripts/verify-relevance-check-e2e.mjs` | Pipeline đầy đủ + relevance check thật: đoạn đúng phải sống sót (positive) / phải rỗng (negative). ~10 phút |
+| `node scripts/calibrate-not-found-threshold.mjs` | Khoảng cách vector / điểm lexical tốt nhất của từng câu positive/negative |
+| `node scripts/migrate-heading-path.mjs [--dry-run]` | **Ghi production.** Backfill `headingPath` cho chunk cũ; idempotent (bỏ qua doc đã có field, kể cả `null`). Đã chạy trên production 2026-09-29: 17/17 doc |
+| `node scripts/reindex-embeddings.mjs` | **Ghi production.** Re-chunk + re-embed toàn bộ tài liệu indexed (giữ `headingPath`) |
+
+Thử nghiệm tham số không cần deploy: `RETRIEVAL_RRF_WEIGHT_LEXICAL=0.3 RETRIEVAL_RRF_WEIGHT_VECTOR=0.7 node scripts/eval-retrieval.mjs`.
+
+**Script dùng bản JS của logic retrieval** (`scripts/lib/`), vì file `.mjs` chạy độc lập không import được module TS của app. Hai bên được giữ khớp bằng test: `src/lib/retrieval/eval/mirror-drift.test.ts` và test pipeline trong `FirebaseRetrievalProvider.search.test.ts` đưa cùng input qua cả hai và báo lỗi khi lệch. **Sửa logic retrieval trong `src/lib/` thì phải sửa bản tương ứng trong `scripts/lib/`**, nếu không `npm test` sẽ fail.
 
 ## 5.7 Bản dựng minh hoạ (visual prototype)
 
@@ -270,7 +304,7 @@ Dữ liệu tri thức đã upload/index:
 - `fileName`, `fileUrl`, `storagePath`, `mimeType`, `sizeBytes`
 - `status`: `processing | indexed | failed | inactive | ...`
 - `description`, `tags`
-- `textContent` (nội dung đã extract — dùng cho lexical fallback và hiển thị)
+- `textContent` (nội dung đã extract — dùng cho lexical search, relevance check và hiển thị)
 - `uploadedBy`, `uploadedEmail`, `uploadedAt`, `updatedAt`
 
 ## 6.2b Collection `document_chunks`
@@ -280,8 +314,9 @@ Chunks nhỏ của tài liệu — backbone của vector search:
 - `docId` (ref tới `documents/{id}`)
 - `fileName` (copy từ document cha để tra cứu nhanh)
 - `chunkIndex` (vị trí trong document)
-- `text` (nội dung đoạn, ~1800 ký tự)
-- `embedding` (Firestore `VectorValue`, 1536 chiều — `gemini-embedding-2`)
+- `text` (nội dung đoạn, ~1800 ký tự, không prefix)
+- `headingPath` (`string | null` — vd. `Snackbar > Behavior`; `null` = tài liệu không có heading. Field **có mặt với giá trị `null`** nghĩa là đã migrate; **thiếu field** nghĩa là chunk cũ chưa migrate — `scripts/migrate-heading-path.mjs` dựa vào khác biệt này)
+- `embedding` (Firestore `VectorValue`, 1536 chiều — `gemini-embedding-2`, embed từ `[headingPath] text`)
 - `status`: `"indexed"`
 - `createdAt`
 
@@ -489,10 +524,20 @@ Tùy chọn (Gemini & chat):
 
 Tùy chọn (retrieval):
 
-- `RETRIEVAL_VECTOR_CANDIDATES` — số chunk candidates lấy từ `findNearest()` trước khi dedup theo docId. Mặc định: `20`.
+Mọi giá trị dưới đây đã được đo bằng `scripts/eval-retrieval.mjs` — thử bằng env trên script trước khi đổi trên production (xem 5.5b và `BASELINE.md`).
+
+- `RETRIEVAL_VECTOR_CANDIDATES` — số chunk lấy từ `findNearest()` trước khi gộp/cắt. Mặc định: `30`.
+- `RETRIEVAL_VECTOR_DISTANCE_THRESHOLD` — ngưỡng cosine distance của `findNearest()`. Mặc định: `0.55`. Chỉ để giới hạn số ứng viên — **không** dùng được làm ngưỡng "không tìm thấy" (đã đo, xem 5.5).
 - `RETRIEVAL_MAX_SNIPPETS` — số snippet tối đa truyền vào context Gemini. Mặc định: `10`.
+- `RETRIEVAL_MAX_SNIPPETS_PER_DOC` — số đoạn tối đa một tài liệu được đóng góp. Mặc định: `3`.
 - `RETRIEVAL_MAX_CHARS_PER_SNIPPET` — ký tự tối đa mỗi snippet. Mặc định: `2600`.
-- `RETRIEVAL_FIRESTORE_FETCH_LIMIT` — giới hạn doc khi dùng lexical fallback. Mặc định: `120`.
+- `RETRIEVAL_FIRESTORE_FETCH_LIMIT` — số doc lexical search đọc từ `documents`. Mặc định: `120`.
+- `RETRIEVAL_LEXICAL_MIN_SCORE` — điểm lexical tối thiểu để tài liệu được giữ. Mặc định: `1`.
+- `RETRIEVAL_LEXICAL_RERANK_POOL` — số doc lexical xếp hạng trước khi boost theo scope (chỉ khi có scope). Mặc định: `20`.
+- `RETRIEVAL_RRF_WEIGHT_VECTOR` / `RETRIEVAL_RRF_WEIGHT_LEXICAL` / `RETRIEVAL_RRF_K` — trọng số fusion. Mặc định: `1.0` / `0` / `60`. **Đừng nâng lexical > 0** khi chưa cải thiện cách chấm điểm lexical — đã đo, mọi giá trị > 0 đều làm giảm recall/MRR.
+- `RETRIEVAL_RELEVANCE_CHECK_ENABLED` — đặt `0` để tắt LLM relevance check (tiết kiệm 1 lệnh Gemini/lượt, nhưng mất khả năng trả lời "chưa có guideline"). Mặc định: bật.
+
+Các biến số nguyên (`RETRIEVAL_*` dùng `envInt`) bỏ qua giá trị `0` hoặc âm và quay về mặc định.
 
 Khuyến nghị:
 
@@ -550,13 +595,16 @@ Sau deploy lần đầu, bật TTL để tự dọn `rate_limits` docs cũ:
 
 ## 10.2c Re-index tài liệu hiện có (một lần sau khi deploy vector search)
 
-Tài liệu upload trước khi có vector search **chưa có chunks** — sẽ chỉ được tìm bằng lexical fallback. Để re-index toàn bộ, upload lại từng tài liệu trong `/admin/library` hoặc chạy migration script riêng.
+Tài liệu upload trước khi có vector search **chưa có chunks** — chỉ được tìm qua lexical search. Để re-index toàn bộ: `node scripts/reindex-embeddings.mjs` (**ghi production**, xoá rồi ghi lại chunk của từng tài liệu), hoặc upload lại từng tài liệu trong `/admin/library`.
+
+Chunk tạo trước khi có `headingPath` (M5) được backfill bằng `node scripts/migrate-heading-path.mjs` — chạy `--dry-run` trước; script idempotent nên chạy lại an toàn. Đã chạy trên production ngày 2026-09-29 (17/17 tài liệu). Tài liệu upload sau đó tự có `headingPath` qua `/api/ingest`.
 
 ## 10.3 Checklist release ngắn
 
 1. `npm install` (khi có đổi dependency)
 2. `npm run validate:env` (kiểm tra cặp domain auth, tùy chọn trước deploy)
-3. `npm test` (Vitest — reports, chat stream, env, retrieval)
+3. `npm test` (Vitest — reports, chat stream, env, retrieval, đồng bộ script ↔ app)
+   - Nếu đổi logic/tham số retrieval: chạy `node scripts/eval-retrieval.mjs` (và `verify-relevance-check-e2e.mjs` nếu đụng tới excerpt/relevance check), so với `BASELINE.md`, ghi kết quả mới vào đó.
 4. `npm run build`
 5. Smoke test local các flow chính
 6. Commit + push
@@ -589,9 +637,11 @@ Nếu không đặt `CHAT_ATTACHMENTS_CRON_SECRET`, route cron trả `503` (chư
 - **Chat/ingest Gemini lỗi model:** kiểm tra `GEMINI_API_KEY` và quyền model `gemini-3.8-flash`; fallback tự thử model trong `GEMINI_CHAT_MODELS`.
 - **Gemini trả `API_KEY_INVALID` dù key vừa tạo còn hạn:** Google đang migrate key Gemini từ Standard (`AIza...`) sang Auth key gắn service account (`AQ.Ab...`); Standard key **unrestricted** đã bị từ chối từ 19/06/2026, và **toàn bộ** Standard key ngừng hoạt động từ 09/2026. Key tạo mới qua AI Studio giờ luôn là Auth key. Cần `@google/genai` ≥ 2.x (project hiện dùng `^2.11.0`) để tương thích Auth key — bản 1.x sẽ báo `API_KEY_INVALID`.
 - **Rotate `GEMINI_API_KEY`/`FIREBASE_SERVICE_ACCOUNT_KEY` xong vẫn lỗi `500`/`16 UNAUTHENTICATED`:** rất có thể do **Console override** đè lên `secret:` trong `apphosting.yaml` — xem mục 9.1 để biết cách kiểm tra và fix đúng quy trình.
-- **Vector search lỗi `index not ready`:** index `document_chunks.embedding` chưa deploy hoặc đang tạo → retrieval tự fallback lexical, deploy index bằng `firebase deploy --only firestore:indexes`.
+- **Vector search lỗi `index not ready`:** index `document_chunks.embedding` chưa deploy hoặc đang tạo → vector search trả rỗng, kết quả chỉ còn từ lexical search; deploy index bằng `firebase deploy --only firestore:indexes`.
 - **Chat trả `429 Rate limit exceeded`:** user gửi quá `CHAT_RATE_LIMIT_PER_MINUTE` (mặc định 20) req/phút. Tăng giới hạn qua env nếu cần.
-- **Tài liệu cũ không xuất hiện qua vector search:** chưa được re-index sau khi deploy embedding — upload lại hoặc chạy migration. Tài liệu vẫn được tìm qua lexical fallback.
+- **Tài liệu cũ không xuất hiện qua vector search:** chưa được re-index sau khi deploy embedding — upload lại hoặc chạy `scripts/reindex-embeddings.mjs` (xem 10.2c). Tài liệu vẫn được tìm qua lexical search.
+- **Bot trả lời "chưa có guideline" cho câu lẽ ra có trong tài liệu:** LLM relevance check (5.5) đã loại hết ứng viên. Kiểm tra bằng `node scripts/verify-relevance-check-e2e.mjs`; tạm tắt bằng `RETRIEVAL_RELEVANCE_CHECK_ENABLED=0` để so sánh. Relevance check không đạt 100% (lần đo gần nhất: 19/24 câu đúng phạm vi giữ được tài liệu đúng, 14/15 câu ngoài phạm vi bị loại đúng).
+- **Sau khi bấm New Chat, chuyển sang tab khác không được, console báo `Minified React error #185`, URL kẹt ở `/chat?new=1`:** vòng lặp render trong effect xử lý `?new=1` của `useChatPage` — đã sửa ở PR #4 (effect giờ chỉ phụ thuộc cờ `?new=1` và các callback ổn định, và không kéo người dùng về `/chat` nếu họ đã chuyển tab). Nếu còn gặp sau deploy: hard refresh và đóng tab cũ (bản JS cũ trong tab vẫn lặp). Test giữ lỗi này: `src/hooks/useChatPage.test.ts`.
 - **PDF lớn bị timeout khi ingest:** File API đang poll `state === ACTIVE`; timeout 90s. Kiểm tra kích thước PDF và log App Hosting.
 - **storage/unauthorized** khi upload: kiểm tra role user doc và deploy `storage.rules` mới nhất.
 - **File viewer báo lỗi CSP (inline style / img blocked):** route `/references/file/[id]` có CSP header riêng — nếu thêm `<style>` inline mới hoặc nguồn ảnh mới vào template, cập nhật directive `style-src` / `img-src` trong `src/app/references/file/[id]/route.ts` (xem mục 7.4).
@@ -612,4 +662,11 @@ Nếu không đặt `CHAT_ATTACHMENTS_CRON_SECRET`, route cron trả `503` (chư
 - `docs/RELEASE_PROCESS.md` - quy trình release tổng quát
 - `docs/FIREBASE_DEPLOY.md` - checklist Firebase deploy/env
 - `docs/PRE_LIVE_ENV_CHECKLIST.md` - audit env trước production
+- `src/lib/retrieval/eval/BASELINE.md` - kết quả đo retrieval qua từng lần thay đổi (recall/MRR, relevance check, sweep trọng số RRF, các bug đã tìm)
+- `tasks/prd-retrieval-quality-upgrade.md`, `tasks/tasks-retrieval-quality-upgrade.md` - PRD + task list đợt nâng cấp retrieval (M0–M5), kèm việc còn mở
+
+## 13) Test
+
+- `npm test` — Vitest. Mặc định môi trường `node`; file cần DOM khai báo `// @vitest-environment jsdom` ở đầu (vd. `src/hooks/useChatPage.test.ts`, dùng `@testing-library/react`).
+- `e2e/*.spec.ts` — Playwright, cần app đang chạy và tài khoản test: `E2E_USER_USERNAME`/`E2E_USER_PASSWORD` (+ `E2E_ADMIN_*`). **Thiếu các biến này thì test cần đăng nhập bị skip** — ví dụ test "new chat link resets the conversation" lẽ ra đã bắt được lỗi React #185 ở mục 11 nhưng chưa từng chạy vì thiếu tài khoản test.
 

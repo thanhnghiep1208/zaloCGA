@@ -84,7 +84,7 @@ Chi tiết kiến trúc: [PROJECT_OVERVIEW.md](./PROJECT_OVERVIEW.md) mục 8.5.
 firebase deploy --only firestore:rules,firestore:indexes,storage
 ```
 
-> `firestore:indexes` deploy cả vector index cho collection `document_chunks` (field `embedding`, 1536 chiều). Index ở trạng thái `CREATING` vài phút — trong thời gian đó retrieval tự fallback về lexical search.
+> `firestore:indexes` deploy cả vector index cho collection `document_chunks` (field `embedding`, 1536 chiều). Index ở trạng thái `CREATING` vài phút — trong thời gian đó vector search trả rỗng, kết quả chỉ còn từ lexical search.
 
 ## 4b) Bật Firestore TTL policy (một lần)
 
