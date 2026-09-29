@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireContributorOrAdmin, requireUidFromRequest } from "@/lib/api-request-auth";
 import { fetchAnalyticsReportsServer } from "@/lib/reports/fetch-analytics-reports-server";
 import { nextJsonFriendlyApiError } from "@/lib/server-json-response";
+import { configuredChatModels } from "@/lib/gemini-models";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -12,7 +13,7 @@ export async function GET(req: Request) {
     await requireContributorOrAdmin(uid);
 
     const data = await fetchAnalyticsReportsServer();
-    return NextResponse.json({ success: true, ...data });
+    return NextResponse.json({ success: true, ...data, chatModels: configuredChatModels() });
   } catch (error: unknown) {
     return nextJsonFriendlyApiError(error, {
       logLabel: "Analytics reports API error:",

@@ -103,7 +103,7 @@ export class FirebaseRetrievalProvider implements RetrievalProvider {
     if (!adminDb) {
       throw new Error("Firebase Admin SDK not initialized.");
     }
-    const { precomputedEmbedding, scope } = options ?? {};
+    const { precomputedEmbedding, scope, onUsage } = options ?? {};
 
     const [vectorResults, lexicalResults] = await Promise.all([
       this.vectorSearch(queryText, precomputedEmbedding, scope).catch((e) => {
@@ -119,7 +119,7 @@ export class FirebaseRetrievalProvider implements RetrievalProvider {
     const merged = this.mergeResults(vectorResults, lexicalResults);
     if (!RELEVANCE_CHECK_ENABLED || merged.length === 0) return merged;
 
-    const checked = await checkRelevance(queryText, merged);
+    const checked = await checkRelevance(queryText, merged, undefined, onUsage);
     if (checked.length !== merged.length || checked.some((s, i) => s !== merged[i])) {
       console.log(
         `[Retrieval] Relevance check: ${merged.length} candidates -> ${checked.length} kept/reordered`

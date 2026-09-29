@@ -106,3 +106,20 @@ describe("checkRelevance", () => {
     expect(result).toEqual(snippets);
   });
 });
+
+describe("checkRelevance — token usage", () => {
+  it("reports the call's token usage to the sink", async () => {
+    mockGenerateContent.mockResolvedValue({
+      text: '{"relevant_indices": [0]}',
+      usageMetadata: { promptTokenCount: 2500, candidatesTokenCount: 8, thoughtsTokenCount: 2 },
+    });
+    const onUsage = vi.fn();
+    await checkRelevance("toast dài bao nhiêu", snippets, undefined, onUsage);
+    expect(onUsage).toHaveBeenCalledWith({
+      step: "relevance",
+      model: "gemini-2.5-flash",
+      input_tokens: 2500,
+      output_tokens: 10,
+    });
+  });
+});

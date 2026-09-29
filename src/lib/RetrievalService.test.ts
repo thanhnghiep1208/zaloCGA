@@ -66,6 +66,17 @@ describe("RetrievalService.getContext", () => {
       scope,
     });
   });
+
+  it("forwards the usage sink to the provider's search method", async () => {
+    mockSearch.mockResolvedValue([]);
+    const onUsage = vi.fn();
+    await RetrievalService.getContext("query", undefined, null, onUsage);
+    expect(mockSearch).toHaveBeenCalledWith("query", {
+      precomputedEmbedding: undefined,
+      scope: null,
+      onUsage,
+    });
+  });
 });
 
 describe("RetrievalService.generateChatResponse", () => {
@@ -74,9 +85,9 @@ describe("RetrievalService.generateChatResponse", () => {
     mockGenerateContentStream.mockResolvedValue(fakeStream);
   });
 
-  it("returns the stream from generateContentStream", async () => {
-    const stream = await RetrievalService.generateChatResponse("hi", []);
-    expect(stream).toBe(fakeStream);
+  it("returns the stream and the model that produced it", async () => {
+    const result = await RetrievalService.generateChatResponse("hi", []);
+    expect(result).toEqual({ stream: fakeStream, model: "gemini-3.8-flash" });
   });
 
   it("calls the first model in CHAT_MODELS list", async () => {
@@ -175,7 +186,7 @@ describe("RetrievalService.generateChatResponse", () => {
       .mockResolvedValueOnce(fakeStream);
 
     const result = await RetrievalService.generateChatResponse("q", []);
-    expect(result).toBe(fakeStream);
+    expect(result).toEqual({ stream: fakeStream, model: "gemini-3.7-flash" });
     expect(mockGenerateContentStream).toHaveBeenCalledTimes(2);
   });
 

@@ -96,6 +96,15 @@ describe("FirebaseRetrievalProvider.search — relevance check wiring (FR#21)", 
     expect(mockCheckRelevance).not.toHaveBeenCalled();
     expect(result.map((s) => s.docId)).toEqual(["d1"]);
   });
+
+  it("passes the caller's usage sink through to the relevance check", async () => {
+    state.chunks = [{ docId: "d1", fileName: "a.pdf", text: "nội dung A", chunkIndex: 0, _dist: 0.3 }];
+    const onUsage = vi.fn();
+
+    const provider = await loadProvider();
+    await provider.search("snackbar", { onUsage });
+    expect(mockCheckRelevance).toHaveBeenCalledWith("snackbar", expect.any(Array), undefined, onUsage);
+  });
 });
 
 describe("FirebaseRetrievalProvider.search — lexical minimum score (FR#20)", () => {

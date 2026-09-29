@@ -19,7 +19,12 @@ import {
   scopeHintForPrompt,
 } from "@/lib/chat/scope-options";
 import { extractPrototypeSpec, hasPrototypeFence } from "@/lib/chat/prototype-extract";
-import { resolveRetrievalQuery, rewriteQuery } from "@/lib/chat/query-rewrite";
+import {
+  resolveRetrievalQuery,
+  reusableClientEmbedding,
+  rewriteQuery,
+} from "@/lib/chat/query-rewrite";
+import { usageFromMetadata, type LlmUsage } from "@/lib/llm-usage";
 
 const ChatAttachmentSchema = z.object({
   name: z.string(),
@@ -194,7 +199,12 @@ export async function POST(req: Request) {
 
     // M2 (query rewrite): only worth calling once there's history to disambiguate —
     // rewriteQuery() itself no-ops (and returns ok:false) when history is empty.
-    const rewritten = await rewriteQuery(boundedQuery, boundedConversation);
+    // Token usage of every Gemini call in this turn, logged with response_delivered
+    // so /admin/reports can price it per session.
+    const llmUsage: LlmUsage[] = [];
+    const recordUsage = (usage: LlmUsage) => llmUsage.push(usage);
+
+    const rewritten = await rewriteQuery(boundedQuery, boundedConversation, undefined, recordUsage);
     const { retrievalQuery, queryType } = resolveRetrievalQuery(
       rewritten,
       naiveRetrievalQuery,
@@ -212,7 +222,15 @@ export async function POST(req: Request) {
     const responseStart = Date.now();
 
     const scopedRetrievalQuery = buildScopedQuery(retrievalQuery, safeScope);
-    const contextSnippets = await RetrievalService.getContext(scopedRetrievalQuery, embedding, safeScope);
+    // The client embedded query.trim() while typing; that vector is stale once the
+    // rewrite or scope prefix changed the text, so the server re-embeds instead.
+    const queryEmbedding = reusableClientEmbedding(embedding, query, scopedRetrievalQuery);
+    const contextSnippets = await RetrievalService.getContext(
+      scopedRetrievalQuery,
+      queryEmbedding,
+      safeScope,
+      recordUsage
+    );
 
     console.log(
       `[ChatRoute] Query: "${query}". Found ${contextSnippets.length} relevant snippets.`
@@ -224,7 +242,7 @@ export async function POST(req: Request) {
     // Get strictly-prompted stream from our isolated service
     const scopeHint = scopeHintForPrompt(safeScope);
     const promptQuery = scopeHint ? `${scopeHint}\n\n${boundedQuery}` : boundedQuery;
-    const stream = await RetrievalService.generateChatResponse(
+    const { stream, model: chatModel } = await RetrievalService.generateChatResponse(
       promptQuery,
       contextSnippets,
       boundedConversation,
@@ -246,6 +264,7 @@ export async function POST(req: Request) {
       async start(controller) {
         try {
           let fullResponse = "";
+          let chatUsageMetadata: Parameters<typeof usageFromMetadata>[2];
           controller.enqueue(ndjsonLine({ t: "s", d: contextSnippets }));
 
           for await (const chunk of stream) {
@@ -253,7 +272,11 @@ export async function POST(req: Request) {
               fullResponse += chunk.text;
               controller.enqueue(ndjsonLine({ t: "x", d: chunk.text }));
             }
+            // Gemini reports cumulative usage; the last chunk that carries it is the total.
+            if (chunk.usageMetadata) chatUsageMetadata = chunk.usageMetadata;
           }
+          const chatUsage = usageFromMetadata("chat", chatModel, chatUsageMetadata);
+          if (chatUsage) recordUsage(chatUsage);
 
           const prototype = extractPrototypeSpec(fullResponse);
           if (prototype) {
@@ -271,6 +294,9 @@ export async function POST(req: Request) {
           );
           void logAnalyticsEvent("response_delivered", {
             user_id: uid,
+            session_id: safeSessionId,
+            model: chatModel,
+            llm_usage: llmUsage,
             response_type: queryType,
             relevance_score: estimateRelevanceScore(query, fullResponse),
             latency_ms: latencyMs,

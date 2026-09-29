@@ -1,8 +1,9 @@
 import { GoogleGenAI } from "@google/genai";
-import { DEFAULT_GEMINI_CHAT_MODELS } from "@/lib/gemini-models";
+import { configuredChatModels } from "@/lib/gemini-models";
 import { RetrievalProvider, RetrievedSnippet } from "./retrieval/interfaces";
 import { FirebaseRetrievalProvider } from "./retrieval/FirebaseRetrievalProvider";
 import type { ChatScope } from "./chat/scope-options";
+import type { UsageSink } from "./llm-usage";
 import { PROTOTYPE_PROMPT_SECTION } from "./chat/prototype-spec";
 
 let _chatAi: GoogleGenAI | null = null;
@@ -15,13 +16,7 @@ function getChatAi(): GoogleGenAI {
   return _chatAi;
 }
 
-function envList(name: string, fallback: string[]): string[] {
-  const raw = process.env[name];
-  if (!raw) return fallback;
-  return raw.split(",").map((s) => s.trim()).filter(Boolean);
-}
-
-const CHAT_MODELS = envList("GEMINI_CHAT_MODELS", DEFAULT_GEMINI_CHAT_MODELS);
+const CHAT_MODELS = configuredChatModels();
 
 function extractErrorMessage(error: unknown): string {
   if (error instanceof Error) return error.message;
@@ -44,9 +39,10 @@ export class RetrievalService {
   static async getContext(
     query: string,
     precomputedEmbedding?: number[],
-    scope?: ChatScope | null
+    scope?: ChatScope | null,
+    onUsage?: UsageSink
   ): Promise<RetrievedSnippet[]> {
-    return currentProvider.search(query, { precomputedEmbedding, scope });
+    return currentProvider.search(query, { precomputedEmbedding, scope, onUsage });
   }
 
   static async generateChatResponse(
@@ -160,7 +156,7 @@ THỨ TỰ PHẦN ĐUÔI CỦA MỌI CÂU TRẢ LỜI:
               temperature: 0.1,
             },
           });
-          return responseStream;
+          return { stream: responseStream, model };
         } catch (err) {
           lastErr = err;
           console.warn(`[ChatService] Model ${model} failed: ${extractErrorMessage(err)}`);

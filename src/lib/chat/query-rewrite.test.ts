@@ -10,7 +10,7 @@ vi.mock("@google/genai", () => ({
 
 process.env.GEMINI_API_KEY = "test-key";
 
-import { resolveRetrievalQuery, rewriteQuery } from "@/lib/chat/query-rewrite";
+import { resolveRetrievalQuery, reusableClientEmbedding, rewriteQuery } from "@/lib/chat/query-rewrite";
 
 const history = [
   { role: "user" as const, content: "Toast nên dài tối đa bao nhiêu?" },
@@ -133,5 +133,61 @@ describe("resolveRetrievalQuery", () => {
       "guideline"
     );
     expect(result.queryType).toBe("guideline");
+  });
+});
+
+// Task 7.10: the browser embeds the raw input while the user types. That vector
+// is only valid when vector search runs on that exact text — otherwise the
+// rewrite (or scope prefix) never reaches findNearest.
+describe("reusableClientEmbedding", () => {
+  const vec = [0.1, 0.2, 0.3];
+
+  it("reuses the client vector when the search text is the text it embedded", () => {
+    expect(reusableClientEmbedding(vec, "  toast dài bao nhiêu ", "toast dài bao nhiêu")).toBe(vec);
+  });
+
+  it("drops the client vector when the rewrite changed the search text", () => {
+    expect(
+      reusableClientEmbedding(vec, "còn nút thì sao?", "độ dài tối đa của label nút")
+    ).toBeUndefined();
+  });
+
+  it("drops the client vector when a scope prefix changed the search text", () => {
+    expect(
+      reusableClientEmbedding(vec, "toast dài bao nhiêu", "Loại: toast\ntoast dài bao nhiêu")
+    ).toBeUndefined();
+  });
+
+  it("returns undefined when the client sent no vector", () => {
+    expect(reusableClientEmbedding(undefined, "a", "a")).toBeUndefined();
+    expect(reusableClientEmbedding([], "a", "a")).toBeUndefined();
+  });
+});
+
+describe("rewriteQuery — token usage", () => {
+  it("reports the call's token usage to the sink", async () => {
+    mockGenerateContent.mockResolvedValue({
+      text: '{"rewrite_query": "Snackbar dài tối đa bao nhiêu?", "intent": "guideline"}',
+      usageMetadata: { promptTokenCount: 180, candidatesTokenCount: 20 },
+    });
+    const onUsage = vi.fn();
+    await rewriteQuery("còn snackbar thì sao?", history, undefined, onUsage);
+    expect(onUsage).toHaveBeenCalledWith({
+      step: "rewrite",
+      model: "gemini-2.5-flash",
+      input_tokens: 180,
+      output_tokens: 20,
+    });
+  });
+
+  it("still reports usage when the response is unparseable (tokens were billed)", async () => {
+    mockGenerateContent.mockResolvedValue({
+      text: "not json",
+      usageMetadata: { promptTokenCount: 180, candidatesTokenCount: 5 },
+    });
+    const onUsage = vi.fn();
+    const result = await rewriteQuery("còn snackbar thì sao?", history, undefined, onUsage);
+    expect(result.ok).toBe(false);
+    expect(onUsage).toHaveBeenCalledTimes(1);
   });
 });
