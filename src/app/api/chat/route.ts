@@ -19,7 +19,7 @@ import {
   scopeHintForPrompt,
 } from "@/lib/chat/scope-options";
 import { extractPrototypeSpec, hasPrototypeFence } from "@/lib/chat/prototype-extract";
-import { rewriteQuery } from "@/lib/chat/query-rewrite";
+import { resolveRetrievalQuery, rewriteQuery } from "@/lib/chat/query-rewrite";
 
 const ChatAttachmentSchema = z.object({
   name: z.string(),
@@ -195,10 +195,11 @@ export async function POST(req: Request) {
     // M2 (query rewrite): only worth calling once there's history to disambiguate —
     // rewriteQuery() itself no-ops (and returns ok:false) when history is empty.
     const rewritten = await rewriteQuery(boundedQuery, boundedConversation);
-    const retrievalQuery = rewritten.ok ? rewritten.rewriteQuery : naiveRetrievalQuery;
-    // Prefer the rewrite's intent classification (more accurate for follow-ups);
-    // fall back to the keyword heuristic when the rewrite didn't run or failed.
-    const queryType = rewritten.ok && rewritten.intent ? rewritten.intent : inferQueryType(query);
+    const { retrievalQuery, queryType } = resolveRetrievalQuery(
+      rewritten,
+      naiveRetrievalQuery,
+      inferQueryType(query)
+    );
 
     void logAnalyticsEvent("query_sent", {
       user_id: uid,

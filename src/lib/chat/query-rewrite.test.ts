@@ -10,7 +10,7 @@ vi.mock("@google/genai", () => ({
 
 process.env.GEMINI_API_KEY = "test-key";
 
-import { rewriteQuery } from "@/lib/chat/query-rewrite";
+import { resolveRetrievalQuery, rewriteQuery } from "@/lib/chat/query-rewrite";
 
 const history = [
   { role: "user" as const, content: "Toast nên dài tối đa bao nhiêu?" },
@@ -84,5 +84,54 @@ describe("rewriteQuery", () => {
     mockGenerateContent.mockImplementation(() => new Promise(() => {}));
     const result = await rewriteQuery("còn snackbar thì sao?", history, 50);
     expect(result).toEqual({ rewriteQuery: "còn snackbar thì sao?", intent: null, ok: false });
+  });
+});
+
+describe("resolveRetrievalQuery", () => {
+  const naive = "Toast nên dài tối đa bao nhiêu?\ncòn snackbar thì sao?";
+
+  it("searches with the rewritten query when the rewrite succeeded", () => {
+    const result = resolveRetrievalQuery(
+      { rewriteQuery: "Snackbar nên dài tối đa bao nhiêu?", intent: "guideline", ok: true },
+      naive,
+      "microcopy"
+    );
+    expect(result.retrievalQuery).toBe("Snackbar nên dài tối đa bao nhiêu?");
+  });
+
+  it("falls back to the naive history-prefixed query when the rewrite failed", () => {
+    const result = resolveRetrievalQuery(
+      { rewriteQuery: "còn snackbar thì sao?", intent: null, ok: false },
+      naive,
+      "guideline"
+    );
+    expect(result.retrievalQuery).toBe(naive);
+  });
+
+  it("uses the rewrite's intent as the analytics query type when present", () => {
+    const result = resolveRetrievalQuery(
+      { rewriteQuery: "x", intent: "microcopy", ok: true },
+      naive,
+      "guideline"
+    );
+    expect(result.queryType).toBe("microcopy");
+  });
+
+  it("uses the heuristic query type when the rewrite succeeded but gave no intent", () => {
+    const result = resolveRetrievalQuery(
+      { rewriteQuery: "x", intent: null, ok: true },
+      naive,
+      "guideline"
+    );
+    expect(result.queryType).toBe("guideline");
+  });
+
+  it("ignores any intent from a failed rewrite and uses the heuristic", () => {
+    const result = resolveRetrievalQuery(
+      { rewriteQuery: "x", intent: "microcopy", ok: false },
+      naive,
+      "guideline"
+    );
+    expect(result.queryType).toBe("guideline");
   });
 });
