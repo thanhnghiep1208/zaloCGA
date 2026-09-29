@@ -19,6 +19,7 @@ import {
   scopeHintForPrompt,
 } from "@/lib/chat/scope-options";
 import { extractPrototypeSpec, hasPrototypeFence } from "@/lib/chat/prototype-extract";
+import { rewriteQuery } from "@/lib/chat/query-rewrite";
 
 const ChatAttachmentSchema = z.object({
   name: z.string(),
@@ -179,7 +180,10 @@ export async function POST(req: Request) {
       content: truncateText(t.content, MAX_CONVERSATION_CHARS_PER_TURN),
     }));
 
-    const retrievalQuery =
+    // Naive fallback context (existing behavior): prefix the last 2 user turns.
+    // Used as-is on the first turn, and as a safety net if the rewrite below
+    // fails/times out on later turns.
+    const naiveRetrievalQuery =
       boundedConversation.length > 0
         ? `${boundedConversation
             .filter((t) => t.role === "user")
@@ -188,7 +192,14 @@ export async function POST(req: Request) {
             .join("\n")}\n${boundedQuery}`.trim()
         : boundedQuery;
 
-    const queryType = inferQueryType(query);
+    // M2 (query rewrite): only worth calling once there's history to disambiguate —
+    // rewriteQuery() itself no-ops (and returns ok:false) when history is empty.
+    const rewritten = await rewriteQuery(boundedQuery, boundedConversation);
+    const retrievalQuery = rewritten.ok ? rewritten.rewriteQuery : naiveRetrievalQuery;
+    // Prefer the rewrite's intent classification (more accurate for follow-ups);
+    // fall back to the keyword heuristic when the rewrite didn't run or failed.
+    const queryType = rewritten.ok && rewritten.intent ? rewritten.intent : inferQueryType(query);
+
     void logAnalyticsEvent("query_sent", {
       user_id: uid,
       query_text: query,

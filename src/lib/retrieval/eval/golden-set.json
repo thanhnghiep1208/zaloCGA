@@ -1,0 +1,146 @@
+[
+  {
+    "query": "dấu hai chấm dùng thế nào",
+    "expectedDocId": "2vxNdHK4rGEX9zCkAnM8",
+    "source": "real",
+    "notes": "Dấu câu.pdf — medium confidence: preview chỉ thấy phần dấu chấm/ba chấm, cần xác nhận tài liệu có mục dấu hai chấm (colon)."
+  },
+  {
+    "query": "Theo quy tắc, 2 câu có chấm. thì ở trên, cuối câu thứ 2 phải có chấm.",
+    "expectedDocId": "2vxNdHK4rGEX9zCkAnM8",
+    "source": "real",
+    "notes": "Dấu câu.pdf — khớp trực tiếp bảng quy tắc dùng dấu chấm khi có 2 câu văn trở lên."
+  },
+  {
+    "query": "2 câu phải có dấu chấm",
+    "expectedDocId": "2vxNdHK4rGEX9zCkAnM8",
+    "source": "real",
+    "notes": "Dấu câu.pdf — cùng chủ đề với câu trên."
+  },
+  {
+    "query": "tooltip được dùng màu gì",
+    "expectedDocId": "o0DYLymC6iCod0cCc1y8",
+    "source": "real",
+    "notes": "006 Tooltip.pdf — khớp theo chủ đề (tooltip), chi tiết màu sắc nằm ngoài đoạn preview 1200 ký tự đã xem."
+  },
+  {
+    "query": "term chuẩn cho tải dữ liệu về local",
+    "expectedDocId": "muvTjQQbLtXMey9PYdDT",
+    "source": "real",
+    "notes": "Glossary.csv — câu hỏi thuật ngữ chuẩn, đúng mục đích của Glossary."
+  },
+  {
+    "query": "có được dùng từ \"media\" để chỉ ảnh và video?",
+    "expectedDocId": "muvTjQQbLtXMey9PYdDT",
+    "source": "real",
+    "notes": "Glossary.csv — medium confidence, câu hỏi thuật ngữ chọn từ, có thể cũng liên quan Quy tắc chọn từ.docx."
+  },
+  {
+    "query": "có quy định viết tắt không?",
+    "expectedDocId": "2lHajq1eRQmg2vGXTM8J",
+    "source": "real",
+    "notes": "Quy tắc chọn từ.docx — medium confidence, cần xác nhận với contributor vì có thể nằm ở tài liệu khác."
+  },
+  {
+    "query": "kiểm tra rule viết tắt",
+    "expectedDocId": "2lHajq1eRQmg2vGXTM8J",
+    "source": "real",
+    "notes": "Quy tắc chọn từ.docx — cùng chủ đề câu trên."
+  },
+  {
+    "query": "nên dùng \"xoá\" hay \"gỡ\"",
+    "expectedDocId": "2lHajq1eRQmg2vGXTM8J",
+    "source": "real",
+    "notes": "Quy tắc chọn từ.docx — khớp trực tiếp ví dụ 'chính xác - rõ ràng - dễ hiểu' trong tài liệu."
+  },
+  {
+    "query": "dùng ban thay vì lock được không",
+    "expectedDocId": "2lHajq1eRQmg2vGXTM8J",
+    "source": "real",
+    "notes": "Quy tắc chọn từ.docx — câu hỏi chọn từ tương tự."
+  },
+  {
+    "query": "viết tự nhiên là gì",
+    "expectedDocId": "6UfZUkTspu219hV24ypt",
+    "source": "real",
+    "notes": "Nguyên tắc viết UXW.docx — khớp trực tiếp nguyên tắc 'Tự nhiên' trong 4 nguyên tắc viết UXW."
+  },
+  {
+    "query": "tự nhiên là gì",
+    "expectedDocId": "6UfZUkTspu219hV24ypt",
+    "source": "real",
+    "notes": "Nguyên tắc viết UXW.docx — cùng chủ đề câu trên, câu hỏi rút gọn hơn."
+  },
+  {
+    "query": "sao bạn chấp niệm 3g/4g/5g vậy?",
+    "expectedDocId": "muvTjQQbLtXMey9PYdDT",
+    "source": "real",
+    "notes": "Glossary.csv — khớp trực tiếp dòng '3G/4G/5G,cellular data,,dữ liệu,Misc' (không dùng 'dữ liệu' để dịch)."
+  },
+  {
+    "query": "viết cho banner system thì thế nào",
+    "expectedDocId": "PG1w01Ut5GAA7Bz8BBdS",
+    "source": "real",
+    "notes": "005 System Banner.pdf — khớp trực tiếp tên tài liệu/chủ đề."
+  },
+  {
+    "query": "không giới hạn 11 từ",
+    "expectedDocId": "lGsZi7Ke6cAgGPB02z4V",
+    "source": "real",
+    "notes": "Viết theo component.docx — khớp trực tiếp quy tắc 'Miêu tả: một câu không dài quá 11 từ'."
+  },
+  {
+    "query": "Bottom sheet có mấy mức hiển thị?",
+    "expectedDocId": "1q7xiUYEBWj5bivqIt4p",
+    "source": "synthetic",
+    "notes": "001 Bottom Sheet.pdf — khớp mục Behavior/Display: Initial, Expanded, Collapsed."
+  },
+  {
+    "query": "Information Dialog có tối đa bao nhiêu button?",
+    "expectedDocId": "BHSmjsd8T0Vh9tYANOsM",
+    "source": "synthetic",
+    "notes": "003 Information Dialog.pdf — khớp mục Button group: default 1 highlight + tối đa 2 neutral tertiary button."
+  },
+  {
+    "query": "Promotion popup dùng để làm gì?",
+    "expectedDocId": "SaGpTnIHmYLbts7KziBV",
+    "source": "synthetic",
+    "notes": "004 Promotion Popup.pdf — khớp định nghĩa mở đầu tài liệu (promote/introduce/onboarding tính năng mới)."
+  },
+  {
+    "query": "Card có những trạng thái (state) nào?",
+    "expectedDocId": "vg2AYfPL5ukHDya8gsr1",
+    "source": "synthetic",
+    "notes": "008 Card.pdf — khớp mục Properties/States: Default, Pressed, Selected, Selected Disabled, Disabled."
+  },
+  {
+    "query": "ZInstant card gồm những phần nào?",
+    "expectedDocId": "vCf3jU0ldPFeXaduobUe",
+    "source": "synthetic",
+    "notes": "007 OA ZInstant Card.pdf — khớp mục Anatomy: Container, Image, Content, Actions."
+  },
+  {
+    "query": "khi nào cần dùng confirmation dialog?",
+    "expectedDocId": "RNnk7lFCqedpmGpEpkYj",
+    "source": "synthetic",
+    "notes": "Quy tắc viết viết theo loại thông điệp.docx — khớp mục 'Khi nào cần xác nhận?' (2/3 điều kiện)."
+  },
+  {
+    "query": "Zalo có dùng chữ in nghiêng không?",
+    "expectedDocId": "iQ4kSup6sQMBCZNOyYcD",
+    "source": "synthetic",
+    "notes": "Định dạng chữ.docx — khớp trực tiếp mục 'In nghiêng (Italics): Không sử dụng'."
+  },
+  {
+    "query": "Tiêu đề (title) có cần dấu chấm cuối câu không?",
+    "expectedDocId": "lGsZi7Ke6cAgGPB02z4V",
+    "source": "synthetic",
+    "notes": "Viết theo component.docx — khớp mục Tiêu đề: 'chỉ nên gói gọn trong 1 câu, vì vậy cũng không cần chấm câu'."
+  },
+  {
+    "query": "Snackbar hiển thị tối đa mấy dòng nội dung?",
+    "expectedDocId": "JPavRvbEBvf2GVv8fD8Q",
+    "source": "synthetic",
+    "notes": "002 Snackbar.pdf — khớp mục Behavior: 'Nội dung tối đa nên trong khoảng 2 dòng'."
+  }
+]

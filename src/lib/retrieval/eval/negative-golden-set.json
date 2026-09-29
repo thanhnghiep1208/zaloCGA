@@ -1,0 +1,17 @@
+[
+  { "query": "giá cổ phiếu Bitcoin hôm nay là bao nhiêu", "category": "easy", "reason": "tài chính/tiền số, không liên quan UX writing" },
+  { "query": "công thức nấu phở bò truyền thống", "category": "easy", "reason": "ẩm thực" },
+  { "query": "luật việt vị trong bóng đá là gì", "category": "easy", "reason": "thể thao" },
+  { "query": "thủ đô của nước Pháp là gì", "category": "easy", "reason": "địa lý phổ thông" },
+  { "query": "dự báo thời tiết ngày mai ở Hà Nội thế nào", "category": "easy", "reason": "thời tiết" },
+  { "query": "cách giảm cân hiệu quả trong 1 tháng", "category": "easy", "reason": "sức khoẻ/lifestyle" },
+  { "query": "chiến tranh thế giới thứ hai kết thúc năm nào", "category": "easy", "reason": "lịch sử" },
+  { "query": "cách cài đặt Python trên Windows 11", "category": "easy", "reason": "kỹ thuật không liên quan Zalo/UX" },
+  { "query": "tôi nên mặc gì khi đi phỏng vấn xin việc", "category": "easy", "reason": "đời sống cá nhân" },
+  { "query": "công thức hoá học của nước là gì", "category": "easy", "reason": "khoa học phổ thông" },
+  { "query": "thủ tục đăng ký kết hôn cần giấy tờ gì", "category": "easy", "reason": "pháp lý/hành chính" },
+  { "query": "giá gói cước 4G Viettel bao nhiêu một tháng", "category": "easy", "reason": "viễn thông, không liên quan content guideline" },
+  { "query": "Zalo có bao nhiêu người dùng ở Việt Nam", "category": "hard", "reason": "về Zalo nhưng là số liệu kinh doanh, không phải quy tắc viết UX" },
+  { "query": "cách tạo nhóm chat trên Zalo cho người mới dùng", "category": "hard", "reason": "hướng dẫn sử dụng tính năng app, không phải quy tắc viết nội dung/UX" },
+  { "query": "Zalo Pay có an toàn không", "category": "hard", "reason": "về sản phẩm Zalo nhưng là câu hỏi bảo mật/tin cậy, không phải UX writing" }
+]
