@@ -15,6 +15,8 @@ import {
   setDoc,
 } from "firebase/firestore";
 import { AuthSessionsPanel } from "@/components/AuthSessionsPanel";
+import { ChangePasswordPanel } from "@/components/ChangePasswordPanel";
+import { PasswordField } from "@/components/PasswordField";
 import { FormEvent, useEffect, useState } from "react";
 
 type FirestoreTimestampLike = { seconds: number; nanoseconds?: number };
@@ -49,6 +51,7 @@ export default function AdminUsersPage() {
 
   const [resetUid, setResetUid] = useState<string | null>(null);
   const [resetPassword, setResetPassword] = useState("");
+  const [changeOwnPasswordOpen, setChangeOwnPasswordOpen] = useState(false);
   const [resetting, setResetting] = useState(false);
   const [sessionsUserId, setSessionsUserId] = useState<string | null>(null);
   const [sessionsUsername, setSessionsUsername] = useState("");
@@ -192,6 +195,13 @@ export default function AdminUsersPage() {
     }
   };
 
+  /** Own account → change-password form (needs current password); others → admin reset. */
+  const openPasswordForm = (otherProfileUid: string | null) => {
+    setChangeOwnPasswordOpen(otherProfileUid === null);
+    setResetUid(otherProfileUid);
+    setResetPassword("");
+  };
+
   const handleDelete = async (profileUid: string) => {
     if (profileUid === currentUser?.uid) {
       alert("You cannot delete your own active administrator account.");
@@ -322,6 +332,10 @@ export default function AdminUsersPage() {
           </div>
         )}
 
+        {changeOwnPasswordOpen && currentUser && (
+          <ChangePasswordPanel user={currentUser} onClose={() => setChangeOwnPasswordOpen(false)} />
+        )}
+
         {resetUid && (
           <div className="clay-card p-6 space-y-3 border border-accent/30">
             <h2 className="text-lg font-semibold">Đặt lại mật khẩu</h2>
@@ -415,11 +429,7 @@ export default function AdminUsersPage() {
                         </button>
                         <button
                           type="button"
-                          onClick={() => {
-                            setResetUid(u.profileUid);
-                            setResetPassword("");
-                          }}
-                          disabled={u.uid === currentUser?.uid}
+                          onClick={() => openPasswordForm(u.uid === currentUser?.uid ? null : u.profileUid)}
                           className="text-muted hover:text-foreground font-medium px-2 py-1.5 rounded-[8px] hover:bg-accent/12 transition-colors disabled:opacity-30"
                         >
                           Reset MK
@@ -452,37 +462,5 @@ export default function AdminUsersPage() {
         )}
       </div>
     </ProtectedRoute>
-  );
-}
-
-function PasswordField({
-  id,
-  label,
-  value,
-  onChange,
-  disabled,
-}: {
-  id: string;
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-  disabled?: boolean;
-}) {
-  return (
-    <div className="space-y-1.5 min-w-[200px] flex-1">
-      <label htmlFor={id} className="text-sm font-medium">
-        {label}
-      </label>
-      <input
-        id={id}
-        type="password"
-        required
-        minLength={MIN_PASSWORD_LENGTH}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        disabled={disabled}
-        className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm"
-      />
-    </div>
   );
 }
