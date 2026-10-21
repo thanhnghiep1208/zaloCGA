@@ -29,7 +29,7 @@ Dat trong **Firebase Console -> App Hosting -> Backend -> Environment variables*
 
 - `NEXT_PUBLIC_SITE_URL` (canonical/OG URL; khong dat thi OG tro ve `http://localhost:3000`)
 - `NEXT_PUBLIC_GA_ID` (neu bat Google Analytics)
-- `NEXT_PUBLIC_CONTACT_EMAIL`, `NEXT_PUBLIC_CONTACT_ZALO` (lien he xin tai khoan o `/login`)
+- `NEXT_PUBLIC_CONTACT_EMAIL`, `NEXT_PUBLIC_CONTACT_ZALO` (lien he xin tai khoan o `/login`; du phong khi admin chua luu o `/admin/users`)
 
 ## 3) Khuyen nghi bao mat
 

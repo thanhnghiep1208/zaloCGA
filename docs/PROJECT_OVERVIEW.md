@@ -543,7 +543,7 @@ Khuyến nghị:
 
 - `NEXT_PUBLIC_SITE_URL` (metadata canonical + OG absolute URL; không đặt thì dùng `http://localhost:3000`)
 - `NEXT_PUBLIC_GA_ID` (nếu bật Google Analytics)
-- `NEXT_PUBLIC_CONTACT_EMAIL`, `NEXT_PUBLIC_CONTACT_ZALO` (liên hệ xin tài khoản ở `/login`; ẩn khi cả hai trống)
+- `NEXT_PUBLIC_CONTACT_EMAIL`, `NEXT_PUBLIC_CONTACT_ZALO` (liên hệ xin tài khoản ở `/login`, chỉ dùng khi admin chưa lưu liên hệ ở `/admin/users` → Firestore `settings/accountContact`)
 - `CHAT_ATTACHMENTS_CRON_SECRET` (bí mật gọi cron xóa ảnh chat hết TTL trong Storage; xem mục 10.4)
 
 Lưu ý:

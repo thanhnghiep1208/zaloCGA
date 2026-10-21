@@ -14,6 +14,7 @@ import {
   query,
   setDoc,
 } from "firebase/firestore";
+import { AccountContactPanel } from "@/components/AccountContactPanel";
 import { AuthSessionsPanel } from "@/components/AuthSessionsPanel";
 import { ChangePasswordPanel } from "@/components/ChangePasswordPanel";
 import { PasswordField } from "@/components/PasswordField";
@@ -305,6 +306,8 @@ export default function AdminUsersPage() {
             </div>
           </form>
         </div>
+
+        {currentUser && <AccountContactPanel user={currentUser} />}
 
         {sessionsUserId && (
           <div className="space-y-2">

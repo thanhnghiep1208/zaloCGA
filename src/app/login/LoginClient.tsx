@@ -12,26 +12,25 @@ import {
 } from "@/lib/auth-username";
 import { useAuth } from "@/context/AuthContext";
 import { sanitizeNextPath } from "@/lib/next-path";
+import type { AccountContact } from "@/lib/account-contact";
 
-const CONTACT_EMAIL = process.env.NEXT_PUBLIC_CONTACT_EMAIL?.trim();
-const CONTACT_ZALO = process.env.NEXT_PUBLIC_CONTACT_ZALO?.trim();
-
-function AccountContact() {
-  if (!CONTACT_EMAIL && !CONTACT_ZALO) return null;
+function AccountContactLine({ contact }: { contact: AccountContact }) {
+  const { email, zalo } = contact;
+  if (!email && !zalo) return null;
   return (
     <p className="text-center text-[13px] text-muted leading-relaxed pt-4 border-t border-border/60">
       Để được cấp tài khoản vui lòng liên hệ:{" "}
-      {CONTACT_EMAIL && (
-        <a href={`mailto:${CONTACT_EMAIL}`} className="text-link font-medium hover:underline">
-          {CONTACT_EMAIL}
+      {email && (
+        <a href={`mailto:${email}`} className="text-link font-medium hover:underline">
+          {email}
         </a>
       )}
-      {CONTACT_EMAIL && CONTACT_ZALO && " — "}
-      {CONTACT_ZALO && (
+      {email && zalo && " — "}
+      {zalo && (
         <>
           Zalo:{" "}
-          <a href={`tel:${CONTACT_ZALO}`} className="text-link font-medium hover:underline">
-            {CONTACT_ZALO}
+          <a href={`tel:${zalo.replace(/\s/g, "")}`} className="text-link font-medium hover:underline">
+            {zalo}
           </a>
         </>
       )}
@@ -54,7 +53,7 @@ function toFriendlyLoginError(err: unknown): string {
   return "Đăng nhập thất bại. Vui lòng thử lại.";
 }
 
-export default function LoginClient() {
+export default function LoginClient({ contact }: { contact: AccountContact }) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -218,7 +217,7 @@ export default function LoginClient() {
           </button>
         </form>
 
-        <AccountContact />
+        <AccountContactLine contact={contact} />
       </div>
     </main>
   );
