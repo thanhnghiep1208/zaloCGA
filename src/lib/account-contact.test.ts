@@ -3,9 +3,9 @@ import { validateAccountContactBody } from "@/lib/account-contact";
 
 describe("validateAccountContactBody", () => {
   it("accepts and trims a valid email and Zalo number", () => {
-    expect(validateAccountContactBody({ email: " a.b@vng.com.vn ", zalo: " 0933312887 " })).toEqual({
+    expect(validateAccountContactBody({ email: " a.b@example.com ", zalo: " 0901234567 " })).toEqual({
       ok: true,
-      data: { email: "a.b@vng.com.vn", zalo: "0933312887" },
+      data: { email: "a.b@example.com", zalo: "0901234567" },
     });
   });
 
@@ -18,11 +18,11 @@ describe("validateAccountContactBody", () => {
   });
 
   it("accepts an international Zalo number with spaces", () => {
-    expect(validateAccountContactBody({ zalo: "+84 933 312 887" }).ok).toBe(true);
+    expect(validateAccountContactBody({ zalo: "+84 901 234 567" }).ok).toBe(true);
   });
 
   it("rejects an email without a domain", () => {
-    expect(validateAccountContactBody({ email: "nghiepnt" }).ok).toBe(false);
+    expect(validateAccountContactBody({ email: "someone" }).ok).toBe(false);
   });
 
   it("rejects a Zalo number with letters or too few digits", () => {
