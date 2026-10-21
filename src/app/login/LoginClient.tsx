@@ -13,6 +13,32 @@ import {
 import { useAuth } from "@/context/AuthContext";
 import { sanitizeNextPath } from "@/lib/next-path";
 
+const CONTACT_EMAIL = process.env.NEXT_PUBLIC_CONTACT_EMAIL?.trim();
+const CONTACT_ZALO = process.env.NEXT_PUBLIC_CONTACT_ZALO?.trim();
+
+function AccountContact() {
+  if (!CONTACT_EMAIL && !CONTACT_ZALO) return null;
+  return (
+    <p className="text-center text-[13px] text-muted leading-relaxed pt-4 border-t border-border/60">
+      Để được cấp tài khoản vui lòng liên hệ:{" "}
+      {CONTACT_EMAIL && (
+        <a href={`mailto:${CONTACT_EMAIL}`} className="text-link font-medium hover:underline">
+          {CONTACT_EMAIL}
+        </a>
+      )}
+      {CONTACT_EMAIL && CONTACT_ZALO && " — "}
+      {CONTACT_ZALO && (
+        <>
+          Zalo:{" "}
+          <a href={`tel:${CONTACT_ZALO}`} className="text-link font-medium hover:underline">
+            {CONTACT_ZALO}
+          </a>
+        </>
+      )}
+    </p>
+  );
+}
+
 function toFriendlyLoginError(err: unknown): string {
   const code = (err as { code?: string })?.code;
   if (code === "auth/invalid-credential" || code === "auth/wrong-password") {
@@ -192,20 +218,7 @@ export default function LoginClient() {
           </button>
         </form>
 
-        <p className="text-center text-[13px] text-muted leading-relaxed pt-4 border-t border-border/60">
-          Để được cấp tài khoản vui lòng liên hệ:{" "}
-          <a
-            href="mailto:Nghiepnt@vng.com.vn"
-            className="text-link font-medium hover:underline"
-          >
-            Nghiepnt@vng.com.vn
-          </a>
-          {" — "}
-          Zalo:{" "}
-          <a href="tel:0933312887" className="text-link font-medium hover:underline">
-            0933312887
-          </a>
-        </p>
+        <AccountContact />
       </div>
     </main>
   );
