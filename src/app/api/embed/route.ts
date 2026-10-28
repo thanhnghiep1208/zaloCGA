@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { ApiAuthError, requireUidFromRequest } from "@/lib/api-request-auth";
+import { checkRateLimit } from "@/lib/rate-limit";
 import { nextJsonChatAuthError } from "@/lib/server-json-response";
 import { embedQuery } from "@/lib/documents/embeddings";
 
@@ -10,7 +11,9 @@ const EmbedRequestSchema = z.object({
 
 export async function POST(req: Request) {
   try {
-    await requireUidFromRequest(req);
+    const uid = await requireUidFromRequest(req);
+    // Embedding calls hit a paid model; cap per-user volume to prevent cost abuse / DoS.
+    await checkRateLimit(uid, "embed", 60);
 
     let rawBody: unknown;
     try {

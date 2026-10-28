@@ -22,6 +22,12 @@ function sanitizeFileName(name: string): string {
     .slice(0, 120);
 }
 
+/** Restrict a client-supplied id to a single safe storage-path segment. */
+function sanitizePathSegment(raw: string, fallback: string): string {
+  const cleaned = raw.replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 120);
+  return cleaned || fallback;
+}
+
 function buildFirebaseDownloadUrl(bucketName: string, objectPath: string, token: string): string {
   const encodedPath = encodeURIComponent(objectPath);
   return `https://firebasestorage.googleapis.com/v0/b/${bucketName}/o/${encodedPath}?alt=media&token=${token}`;
@@ -43,7 +49,10 @@ export async function POST(req: Request) {
     const form = await req.formData();
     const file = form.get("file");
     const docIdRaw = form.get("docId");
-    const docId = typeof docIdRaw === "string" && docIdRaw.trim() ? docIdRaw.trim() : "draft";
+    const docId =
+      typeof docIdRaw === "string" && docIdRaw.trim()
+        ? sanitizePathSegment(docIdRaw.trim(), "draft")
+        : "draft";
 
     if (!(file instanceof File)) {
       return NextResponse.json({ error: "Missing image file" }, { status: 400 });
