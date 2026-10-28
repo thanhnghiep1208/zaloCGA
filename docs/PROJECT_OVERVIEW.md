@@ -26,6 +26,7 @@ Tài liệu này là bản tổng hợp end-to-end cho dự án: kiến trúc t�
 - **LLM:** Google GenAI (`gemini-3.8-flash`, fallback `gemini-3.7-flash` → `gemini-3.5-flash` → `gemini-3-flash-preview` → `gemini-2.5-flash`)
 - **Embedding:** `gemini-embedding-2` (1536 chiều) — dùng cho vector search
 - **DOCX parsing:** `mammoth`
+- **Icon:** `@phosphor-icons/react`
 - **Deploy runtime:** Firebase App Hosting (Cloud Run managed)
 
 ---
@@ -90,7 +91,7 @@ Tóm tắt kỹ thuật:
 
 ### 4.2 Các trang chính
 
-- `src/app/page.tsx`: landing page.
+- `src/app/page.tsx`: landing page (server component). Bố cục SaaS: nav sticky (`LandingNav` — toggle theme + CTA), hero chia đôi với minh hoạ `HeroIllustration`, danh sách lợi ích, bento 4 ô phạm vi (chip pattern lấy từ `UI_PATTERN_OPTIONS`), dải CTA cuối + footer. Mọi CTA "Bắt đầu ngay" dùng chung `StartChatLink` (bắn `start_chat_click` kèm `location`). Component nằm ở `src/components/landing/`.
 - `src/app/login/page.tsx`: đăng nhập username/password (map sang email nội bộ cho Firebase); copy *Zalo Content Guidelines*; footer liên hệ cấp tài khoản (email + Zalo).
 - `src/app/chat/page.tsx`: chat realtime + streaming + lưu session.
 - `src/app/chat/[id]/page.tsx`: xem lại cuộc hội thoại đã lưu.
@@ -664,7 +665,7 @@ Nếu không đặt `CHAT_ATTACHMENTS_CRON_SECRET`, route cron trả `503` (chư
 - `docs/FIREBASE_DEPLOY.md` - checklist Firebase deploy/env
 - `docs/PRE_LIVE_ENV_CHECKLIST.md` - audit env trước production
 - `src/lib/retrieval/eval/BASELINE.md` - kết quả đo retrieval qua từng lần thay đổi (recall/MRR, relevance check, sweep trọng số RRF, các bug đã tìm)
-- `tasks/prd-retrieval-quality-upgrade.md`, `tasks/tasks-retrieval-quality-upgrade.md` - PRD + task list đợt nâng cấp retrieval (M0–M5), kèm việc còn mở
+- `docs/tasks/prd-retrieval-quality-upgrade.md`, `docs/tasks/tasks-retrieval-quality-upgrade.md` - PRD + task list đợt nâng cấp retrieval (M0–M5), kèm việc còn mở
 
 ## 13) Test
 
