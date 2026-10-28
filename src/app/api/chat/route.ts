@@ -150,8 +150,12 @@ export async function POST(req: Request) {
 
     const { query, conversation, attachments, sessionId, embedding, scope } = parsed.data;
     const safeScope = sanitizeScope(scope);
+    // Must match the sanitization used when attachments are uploaded (chat/attachments
+    // route) so the ownership prefix check below lines up with the stored object path.
     const safeSessionId =
-      typeof sessionId === "string" && sessionId.trim() ? sessionId.trim() : "draft";
+      typeof sessionId === "string" && sessionId.trim()
+        ? sessionId.trim().replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 120) || "draft"
+        : "draft";
 
     const safeAttachments = (attachments ?? []).slice(0, MAX_ATTACHMENTS_PER_TURN);
 
