@@ -30,7 +30,7 @@ Cách tôi tạo golden set: đọc **1200 ký tự đầu tiên** (`textContent
 
 **Vấn đề cốt lõi:** tôi chỉ đọc được 1200 ký tự đầu của mỗi file (không đọc toàn bộ), và tôi không phải người biết nội dung guideline thật — tôi suy luận `expectedDocId` từ tên file + đoạn trích, không phải từ việc đọc toàn văn rồi xác nhận câu trả lời đúng nằm ở đâu. Với phần lớn câu thì suy luận này khá chắc (nội dung nằm ngay trong đoạn trích), nhưng với 5 câu trên thì không.
 
-**Cách xác nhận (dành cho admin/contributor):** mở `/admin/library`, tìm đúng tài liệu, Ctrl+F câu hỏi hoặc từ khóa liên quan (vd "dấu hai chấm", "màu", "viết tắt") để xem tài liệu có thật sự chứa câu trả lời không. Nếu đúng → xoá field `notes` trong `golden-set.json` (coi như đã confirm). Nếu sai → sửa `expectedDocId` sang tài liệu đúng, hoặc xoá hẳn câu đó khỏi golden set nếu không tài liệu nào trả lời được.
+**Cách xác nhận (dành cho admin/contributor):** mở `/admin/library`, tìm đúng tài liệu, Ctrl+F câu hỏi hoặc từ khóa liên quan (vd "dấu hai chấm", "màu", "viết tắt") để xem tài liệu có thật sự chứa câu trả lời không. Nếu đúng → bỏ cụm "medium confidence"/"cần xác nhận" khỏi `notes` của câu đó trong `golden-set.json` (mọi câu đều có `notes`, nên có `notes` **không** có nghĩa là chưa xác nhận). Nếu sai → sửa `expectedDocId` sang tài liệu đúng, hoặc xoá hẳn câu đó khỏi golden set nếu không tài liệu nào trả lời được.
 
 **Vì sao vẫn giữ 5 câu này trong golden set thay vì xoá luôn:** golden set 24 câu đã ở mức tối thiểu theo PRD (15–30); xoá 5 câu sẽ còn 19, vẫn trong khoảng nhưng mất đi phần dữ liệu thật đa dạng. Giữ lại kèm cảnh báo rõ ràng an toàn hơn là tự ý xoá hoặc tự ý "đoán cho chắc" một đáp án mà tôi không kiểm chứng được.
 

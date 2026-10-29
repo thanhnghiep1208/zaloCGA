@@ -35,7 +35,7 @@ Mỗi document:
 | `parse_success` | Server → `/api/ingest` | `rule_count_extracted`, `latency_ms`, `user_id` |
 | `parse_failed` | Server → `/api/ingest` (extraction lỗi) | `error_type` (`ai_extraction` \| `docx_parse`), `latency_ms`, `user_id` |
 | `query_sent` | Server → `/api/chat` | `query_text`, `type` (`guideline` \| `microcopy`), `scope_message_type` (nullable, xem `MessageType` trong `src/lib/chat/scope-options.ts`), `scope_ui_pattern` (nullable, `UiPattern`), `user_id` |
-| `response_delivered` | Server → `/api/chat` (sau stream xong) | `response_type`, `relevance_score`, `latency_ms`, `referenced_sources[]`, `session_id`, `model` (model chat thực sự trả lời, sau fallback), `llm_usage[]` (`{step, model, input_tokens, output_tokens}` cho từng lần gọi Gemini: `chat`, `rewrite`, `relevance`), `user_id` |
+| `response_delivered` | Server → `/api/chat` (sau stream xong) | `response_type`, `relevance_score`, `latency_ms`, `referenced_sources[]`, `session_id`, `model` (model chat thực sự trả lời, sau fallback), `llm_usage[]` (`{step, model, input_tokens, output_tokens}` cho từng lần gọi Gemini: `chat`, `rewrite`, `relevance`), `prototype_pattern` (`UiPattern` hoặc `null` khi không có bản dựng minh hoạ), `user_id` |
 | `user_feedback` | Client → `POST /api/events` (nút 👍/👎 trên `/chat`) | `feedback` (`thumbs_up` \| `thumbs_down`), `session_id`, `message_id`, `user_id` |
 | `session_started` | Client → `POST /api/events` (tin chat đầu tạo session) | `session_id`, `user_id` |
 | `session_ended` | Client → `POST /api/events` (unmount `/chat` hoặc idle 10 phút) | `session_id`, `duration_ms`, `query_count`, `user_id` |
@@ -72,14 +72,14 @@ flowchart LR
 3. Chat → `query_sent`, sau stream → `response_delivered`.
 4. 👍/👎 → `user_feedback`; copy câu trả lời → `response_copied`.
 5. Phiên chat: tin đầu → `session_started`; rời trang / idle 10 phút → `session_ended`.
-6. Trang reports **tải dữ liệu** qua `GET /api/admin/reports` (polling, **không** dùng `onSnapshot`); route server dùng Admin SDK để đọc `analyticsEvents` (500 mới nhất), `users` (toàn bộ), `chatSessions` (300 mới nhất):
+6. Trang reports **tải dữ liệu** qua `GET /api/admin/reports` (polling, **không** dùng `onSnapshot`); route server dùng Admin SDK để đọc `analyticsEvents` (500 mới nhất), `users` (mọi doc có `createdAt`), `chatSessions` (300 mới nhất):
    - Khi admin/contributor mở trang: gọi hook `useAnalyticsReportsData` → fetch API trên.
    - **Tự động mỗi 6 giờ** (`REPORTS_AUTO_REFRESH_MS` trong hook).
    - Nút **Cập nhật** gọi cùng hàm fetch; hiển thị `Cập nhật lúc: …` (locale `vi-VN`).
 7. **Bộ lọc thời gian** (client-side, **UTC**):
    - **Hôm nay** — từ 00:00 UTC ngày hiện tại.
    - **7 ngày** / **30 ngày** — rolling window từ thời điểm hiện tại.
-   - Event: lọc theo `createdAt`. Session: lọc theo `updatedAt` (fallback max timestamp tin user nếu thiếu `updatedAt`).
+   - Event: lọc theo `createdAt`. Session: lọc theo `updatedAt` (fallback max timestamp của mọi tin nhắn nếu thiếu `updatedAt`).
 8. **Chi tiết user:** nhấn dòng trong Top users → `UserAnalyticsDetailModal` dùng **cùng** tập event đã lọc.
 
 ### Giới hạn mẫu
@@ -88,7 +88,7 @@ flowchart LR
 | --- | --- | --- |
 | `analyticsEvents` | 500 | `orderBy createdAt desc` |
 | `chatSessions` | 300 | `orderBy updatedAt desc` |
-| `users` | (không giới hạn) | Toàn bộ, dùng để map `uid` → `username` |
+| `users` | (không giới hạn) | `orderBy createdAt desc` — doc thiếu `createdAt` bị Firestore bỏ qua nên user đó không có username trong báo cáo; dùng để map `uid` → `username` |
 
 Filter 30 ngày chỉ áp trên mẫu đã tải — **không** query Firestore theo khoảng ngày. Traffic cao có thể khiến 500 event mới nhất không phủ đủ 30 ngày lịch sử.
 
@@ -169,7 +169,7 @@ Khi chọn filter **Hôm nay**, retention D1/D7 phản ánh cohort trong mẫu n
 | Thành phần | Vai trò |
 | --- | --- |
 | `src/app/admin/reports/page.tsx` | UI sections, `useMemo` filter + compute |
-| `src/hooks/useAnalyticsReportsData.ts` | `getDocs`, `refresh()`, interval 6h |
+| `src/hooks/useAnalyticsReportsData.ts` | `fetch("/api/admin/reports")` kèm Bearer token, `refresh()`, interval 6h |
 | `src/components/reports/ReportsToolbar.tsx` | Filter Hôm nay / 7 ngày / 30 ngày + Cập nhật |
 | `src/components/UserAnalyticsDetailModal.tsx` | Timeline / query / feedback theo user |
 | `src/lib/reports/date-utils.ts` | `ReportsTimeRange`, `eventInRange`, `sessionInRange` |

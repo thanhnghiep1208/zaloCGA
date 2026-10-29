@@ -4,7 +4,7 @@ Checklist nay dung de xac nhan env truoc khi rollout production.
 
 ## 1) Bat buoc phai co (khong co se loi)
 
-Dat trong **Firebase Console -> App Hosting -> Backend -> Environment variables**:
+Bien thuong dat trong **Firebase Console -> App Hosting -> Backend -> Environment variables**. Rieng `GEMINI_API_KEY`, `FIREBASE_SERVICE_ACCOUNT_KEY`, `CHAT_ATTACHMENTS_CRON_SECRET` la **secret** da khai bao trong `apphosting.yaml` — chi tao gia tri bang `firebase apphosting:secrets:set`, **khong** dat literal trong Console (se de len secret, xem `PROJECT_OVERVIEW.md` muc 9.1).
 
 - `NEXT_PUBLIC_FIREBASE_API_KEY`
 - `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN`
@@ -13,17 +13,18 @@ Dat trong **Firebase Console -> App Hosting -> Backend -> Environment variables*
 - `NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID`
 - `NEXT_PUBLIC_FIREBASE_APP_ID`
 - `GEMINI_API_KEY` (chat `/api/chat` + PDF ingest `/api/ingest`; model mac dinh `gemini-3.8-flash`)
-- `FIREBASE_SERVICE_ACCOUNT_KEY` (khuyen nghi dung Secret Manager, xem muc 3)
+- `FIREBASE_SERVICE_ACCOUNT_KEY` (secret, xem muc 3)
+- `CHAT_ATTACHMENTS_CRON_SECRET` (secret, >= 32 ky tu; `apphosting.yaml` khai bao nen phai ton tai trong Secret Manager)
 - `NEXT_PUBLIC_INTERNAL_AUTH_EMAIL_DOMAIN` (domain noi bo map username -> Firebase email, vi du `accounts.internal`)
 - `INTERNAL_AUTH_EMAIL_DOMAIN` (**bat buoc cung gia tri** voi bien `NEXT_PUBLIC_*`; server fail startup neu khac nhau)
 
-> Kiem tra local: `npm run validate:env` (doc `.env.example`). Runtime server goi `src/instrumentation.ts` de validate cap domain.
+> Kiem tra local: `npm run validate:env` (doc `.env` / `.env.local`; chi kiem tra cap domain auth — khong kiem tra bien con thieu). Runtime server goi `src/instrumentation.ts` de validate cap domain.
 
 ## 1b) Gemini & chat (tuy chon)
 
 - `GEMINI_CHAT_MODELS` — danh sach model chat, phan cach bang dau phay. Mac dinh: `gemini-3.8-flash,gemini-3.7-flash,gemini-3.5-flash,gemini-3-flash-preview,gemini-2.5-flash`
 - `CHAT_RATE_LIMIT_PER_MINUTE` — so request toi da moi user moi phut. Mac dinh: `20`
-- `CHAT_ATTACHMENTS_CRON_SECRET` — bat buoc neu dung cron don anh chat het TTL (`apphosting.yaml` khai bao day la secret); route cron tra `503` neu chua dat
+- Cron don anh chat dung `CHAT_ATTACHMENTS_CRON_SECRET` (muc 1); route cron tra `503` neu chua dat hoac < 32 ky tu
 
 ## 2) Khuyen nghi cho production
 
@@ -36,7 +37,7 @@ Dat trong **Firebase Console -> App Hosting -> Backend -> Environment variables*
 - Khong luu secrets trong source code.
 - Uu tien cau hinh `FIREBASE_SERVICE_ACCOUNT_KEY` qua App Hosting secret:
   - Tao secret: `firebase apphosting:secrets:set FIREBASE_SERVICE_ACCOUNT_KEY`
-  - Gan secret vao backend env theo huong dan App Hosting.
+  - `apphosting.yaml` da tham chieu secret nay — khong can gan them trong Console.
 - Dam bao service account co quyen toi thieu can thiet (Firestore/Auth/Storage theo luong app).
 
 ## 4) Kiem tra truoc build (khuyen nghi)
@@ -58,14 +59,15 @@ De trong la dung mac dinh — cac mac dinh da duoc do bang `node scripts/eval-re
 - `RETRIEVAL_FIRESTORE_FETCH_LIMIT` (mac dinh `120` — so doc lexical search doc moi lan)
 - `RETRIEVAL_RRF_WEIGHT_LEXICAL` (mac dinh `0` — **khong nang len > 0**, da do: lam giam chat luong)
 - `RETRIEVAL_RELEVANCE_CHECK_ENABLED` (mac dinh bat; `0` = tat, tiet kiem 1 lenh Gemini/luot nhung mat cau tra loi "chua co guideline")
-- `CHAT_CONVERSATION_MAX_CHARS_PER_TURN` (goi y: `1500`-`3000`)
-- `CHAT_QUERY_MAX_CHARS` (goi y: `6000`-`12000`)
+- `CHAT_CONVERSATION_MAX_CHARS_PER_TURN` (mac dinh `2500`; goi y: `1500`-`3000`)
+- `CHAT_QUERY_MAX_CHARS` (mac dinh `12000`; goi y: `6000`-`12000`)
+- `CHAT_MAX_ATTACHMENTS_PER_TURN` (mac dinh `4`)
 
 > Neu chua dat cac bien tren, app van chay bang gia tri mac dinh trong code.
 
 ## 6) Availability cho NEXT_PUBLIC_* (quan trong)
 
-Voi `NEXT_PUBLIC`_*, dam bao bien co hieu luc trong giai doan **BUILD**.
+Voi `NEXT_PUBLIC_*`, dam bao bien co hieu luc trong giai doan **BUILD**.
 Neu chi doi env ma khong rollout lai, frontend co the van dung gia tri cu.
 
 ## 7) Quy trinh cap nhat env dung
@@ -106,7 +108,7 @@ Neu chi doi env ma khong rollout lai, frontend co the van dung gia tri cu.
 - Loi Gemini:
   - `Gemini API Error` / parse failure trong `/api/ingest`
 
-## 9) Nguon tham chieu trong repo
+## 10) Nguon tham chieu trong repo
 
 - `docs/FIREBASE_DEPLOY.md`
 - `docs/HUONG_DAN_LEN_LIVE.md`
