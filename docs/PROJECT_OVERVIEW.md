@@ -20,7 +20,7 @@ Tài liệu này là bản tổng hợp end-to-end cho dự án: kiến trúc t�
 
 ## 2) Tech stack
 
-- **Frontend + Backend app:** Next.js App Router (`src/app/`*)
+- **Frontend + Backend app:** Next.js App Router (`src/app/*`)
 - **Auth / DB / Storage:** Firebase Auth, Firestore, Firebase Storage
 - **Server admin access:** Firebase Admin SDK
 - **LLM:** Google GenAI (`gemini-3.8-flash`, fallback `gemini-3.7-flash` → `gemini-3.5-flash` → `gemini-3-flash-preview` → `gemini-2.5-flash`)
@@ -41,15 +41,19 @@ Tài liệu này là bản tổng hợp end-to-end cho dự án: kiến trúc t�
 - **API Routes (Next.js server routes):**
   - `POST /api/chat`: xác thực + retrieval + stream câu trả lời
   - `POST /api/ingest`: xác thực + quyền contributor/admin + parse nội dung file
+  - Các route khác (embed, attachments, inline doc, upload ảnh, admin, cron): bảng ở mục 5.10
 - **Firestore:**
   - `documents`: kho tri thức đã index (metadata + full text)
   - `document_chunks`: đoạn văn bản nhỏ với vector embedding (dùng cho vector search)
   - `chatSessions`: lịch sử chat theo user
   - `users`: profile + role (`user`, `contributor`, `admin`)
-  - `analyticsEvents`: telemetry nội bộ (server ghi, admin đọc dashboard)
+  - `analyticsEvents`: telemetry nội bộ (server ghi, admin/contributor đọc dashboard)
   - `rate_limits`: counter rate-limit per-user per phút (TTL tự dọn qua Firestore policy)
+  - `authSessions`: registry phiên đăng nhập theo thiết bị (heartbeat + remote sign-out, xem 8.5)
+  - `settings`: cấu hình do admin sửa trên UI (hiện có `settings/accountContact` — liên hệ xin tài khoản ở `/login`)
 - **Storage:**
-  - Bucket chứa file upload tại `documents/`*
+  - `documents/*`: file tài liệu upload (và ảnh trong inline doc tại `documents/images/{docId}/…`)
+  - `chat-attachments/{uid}/…`: ảnh user đính kèm trong chat, TTL 24h (dọn bằng cron, mục 10.4)
 
 ### 3.2 Luồng dữ liệu cấp cao
 
@@ -92,12 +96,15 @@ Tóm tắt kỹ thuật:
 ### 4.2 Các trang chính
 
 - `src/app/page.tsx`: landing page (server component). Bố cục SaaS: nav sticky (`LandingNav` — toggle theme + CTA), hero chia đôi với minh hoạ `HeroIllustration`, danh sách lợi ích, bento 4 ô phạm vi (chip pattern lấy từ `UI_PATTERN_OPTIONS`), dải CTA cuối + footer. Mọi CTA "Bắt đầu ngay" dùng chung `StartChatLink` (bắn `start_chat_click` kèm `location`). Component nằm ở `src/components/landing/`.
-- `src/app/login/page.tsx`: đăng nhập username/password (map sang email nội bộ cho Firebase); copy *Zalo Content Guidelines*; footer liên hệ cấp tài khoản (email + Zalo).
+- `src/app/login/page.tsx`: server component (`force-dynamic`) đọc liên hệ xin tài khoản từ Firestore `settings/accountContact` (fallback env `NEXT_PUBLIC_CONTACT_*`) rồi render `LoginClient` — form username/password (map sang email nội bộ cho Firebase); footer liên hệ cấp tài khoản (email + Zalo).
 - `src/app/chat/page.tsx`: chat realtime + streaming + lưu session.
 - `src/app/chat/[id]/page.tsx`: xem lại cuộc hội thoại đã lưu.
 - `src/app/admin/library/page.tsx`: quản lý tài liệu.
 - `src/app/admin/upload/page.tsx`: upload + gọi ingest.
-- `src/app/admin/users/page.tsx`: admin tạo user, đổi role, reset mật khẩu, vô hiệu hóa, xóa (gọi `/api/admin/users`).
+- `src/app/admin/users/page.tsx`: admin tạo user, đổi role, reset mật khẩu, vô hiệu hóa, xóa (gọi `/api/admin/users`); xem/đăng xuất phiên của từng user; sửa liên hệ xin tài khoản hiển thị ở `/login` (`AccountContactPanel` → `/api/admin/settings/contact`); đổi mật khẩu của chính mình (`ChangePasswordPanel`).
+- `src/app/admin/page.tsx`: chỉ redirect sang `/admin/library`.
+- `src/app/account/sessions/page.tsx`: user xem/đăng xuất các phiên đăng nhập của mình (mục 8.5).
+- `src/app/references/[id]/page.tsx`: xem một tài liệu nguồn (mở từ link nguồn trong câu trả lời); file gốc phục vụ qua `/references/file/[id]` (mục 5.7).
 - `src/app/admin/reports/page.tsx`: **Analytics Reports** — dashboard telemetry (`admin` hoặc `contributor`). Chi tiết: [ANALYTICS_REPORTS.md](./ANALYTICS_REPORTS.md).
 
 ### 4.3 Auth context và phân quyền UI
@@ -106,9 +113,10 @@ Tóm tắt kỹ thuật:
   - Lắng nghe `onIdTokenChanged`.
   - Đọc role từ `users/{uid}` trong Firestore; **không** có profile hợp lệ hoặc role không parse được → `signOut` + set `authError` (không fallback role `user`).
   - `getDoc(users/{uid})` được bọc bởi `withTimeout()` (`src/lib/with-timeout.ts`, timeout 10s): nếu request Firestore bị treo (vd. trình chặn quảng cáo/bảo mật chặn `firestore.googleapis.com` gây `net::ERR_BLOCKED_BY_CLIENT`), context sẽ tự timeout, sign-out, và set `authError` thay vì để UI treo vô thời hạn không phản hồi.
-  - `fetchRoleDoc()` retry lần đọc này tối đa 2 lần (mỗi lần timeout 10s) trước khi sign-out — một lần Firestore chậm/treo thoáng qua (mạng công ty, cold-start long-polling detection) không còn buộc user phải tự F5 lại trang để đăng nhập lại; chỉ lỗi `permission-denied` là fail ngay không retry (đó là lỗi quyền thật, không phải mạng chậm).
+  - `fetchRoleDoc()` thử đọc tối đa **2 lần** (1 lần đầu + 1 lần retry, mỗi lần timeout 10s → tệ nhất ~20s) trước khi sign-out — một lần Firestore chậm/treo thoáng qua (mạng công ty, cold-start long-polling detection) không còn buộc user phải tự F5 lại trang để đăng nhập lại; chỉ lỗi `permission-denied` là fail ngay không retry (đó là lỗi quyền thật, không phải mạng chậm).
   - Context expose `authError: string | null` — trang login đọc giá trị này để hiển thị banner lỗi.
 - `ProtectedRoute` dùng để chặn truy cập sai role ở client UI.
+- `src/middleware.ts`: nếu thiếu cookie `__session` thì redirect về `/login?next=…` cho `/chat`, `/admin`, `/account`, `/references`. Chỉ là cổng điều hướng, **không** phải kiểm tra bảo mật. (Next 16 đã đổi tên convention này thành `proxy.ts`; file hiện vẫn dùng tên cũ — xem `node_modules/next/dist/docs/01-app/03-api-reference/03-file-conventions/proxy.md` trước khi đổi.)
 - `src/lib/auth-username.ts`: chuẩn hóa username, map `{username}@{INTERNAL_AUTH_EMAIL_DOMAIN}`.
 
 Lưu ý: bảo vệ ở UI chỉ là lớp hiển thị. Bảo mật thật nằm ở Firestore/Storage rules + API auth server-side.
@@ -119,7 +127,7 @@ Lưu ý: bảo vệ ở UI chỉ là lớp hiển thị. Bảo mật thật nằ
 
 ## 5) Cấu trúc backend
 
-## 5.1 API chat (`POST /api/chat`)
+### 5.1 API chat (`POST /api/chat`)
 
 File: `src/app/api/chat/route.ts`
 
@@ -142,22 +150,23 @@ Chức năng:
 8. Stream về client theo **định dạng NDJSON** — mỗi dòng là một JSON object:
    - Dòng 1: `{"t":"s","d":[...ChatSource[]]}` — danh sách nguồn tài liệu (gửi trước khi có text)
    - Dòng 2..N: `{"t":"x","d":"text delta"}` — từng đoạn text từ Gemini, relay nguyên vẹn (không buffer)
-   - Dòng cuối (tuỳ chọn): `{"t":"p","d":PrototypeSpec}` — bản dựng minh hoạ, chỉ gửi sau khi text đã xong (xem 5.7)
+   - Dòng cuối (tuỳ chọn): `{"t":"p","d":PrototypeSpec}` — bản dựng minh hoạ, chỉ gửi sau khi text đã xong (xem 5.6)
    - `Content-Type: application/x-ndjson`
 
-## 5.2 API ingest (`POST /api/ingest`)
+### 5.2 API ingest (`POST /api/ingest`)
 
 File: `src/app/api/ingest/route.ts`
 
 Chức năng:
 
 1. Verify token.
-2. Check role `admin|contributor`.
+2. Check role `admin|contributor`; rate limit 10 req/phút.
 3. Validate `fileUrl` chỉ cho phép URL Firebase Storage bucket hiện tại (chống SSRF).
 4. Tải binary file và parse:
    - **PDF < 4 MB**: gửi inline base64 tới `gemini-3.8-flash`.
    - **PDF ≥ 4 MB**: upload lên **Gemini File API** → poll đến `state === ACTIVE` (timeout 90s) → dùng `fileData` URI → tự động xóa file sau khi extract xong. Nếu File API lỗi, fallback về inline.
-   - **DOCX**: dùng `mammoth`.
+   - **DOCX**: dùng `mammoth.extractRawText`, nếu rỗng thì fallback `convertToHtml` rồi bỏ tag.
+   - Text extract bị cắt ở 900.000 ký tự.
    - **TXT/CSV**: decode text.
 5. **Chunking + Embedding** (`writeDocumentChunks()`): nếu request chứa `docId`, tự động:
    - Chunk text thành đoạn ~1800 ký tự với overlap 200 ký tự; mỗi chunk mang `headingPath` — chuỗi heading Markdown (`#`…`######`) đang có hiệu lực tại vị trí bắt đầu chunk, vd. `Snackbar > Behavior`; `null` nếu tài liệu không có heading.
@@ -166,26 +175,28 @@ Chức năng:
    - Thực tế: PDF được Gemini extract ra thường có heading Markdown → có `headingPath`; DOCX qua mammoth thường không có → `null`.
 6. Trả về `{ textContent, chunkCount }` để client ghi `textContent + status: "indexed"` vào `documents`.
 
-## 5.3 API quản lý user (admin)
+### 5.3 API quản lý user (admin)
 
 - `POST /api/admin/users` — tạo Firebase Auth user + document `users/{uid}`.
-- `PATCH /api/admin/users/[uid]` — đổi role, vô hiệu hóa/kích hoạt (`disabled`).
-- `DELETE /api/admin/users/[uid]` — xóa profile Firestore và user Auth.
+- `PATCH /api/admin/users/[uid]` — đổi `role`, `displayName`, reset `password`, vô hiệu hóa/kích hoạt (`disabled`). Khi `disabled: true` hoặc đổi mật khẩu → đánh dấu `revoked` mọi `authSessions` của user.
+- `DELETE /api/admin/users/[uid]` — xóa profile Firestore và user Auth (không cho admin tự xóa chính mình).
+- `GET/PUT /api/admin/settings/contact` — đọc/ghi `settings/accountContact` (email + Zalo hiển thị ở `/login`).
+- Admin không reset được mật khẩu của chính mình ở bảng users → dùng `ChangePasswordPanel` trên `/admin/users`, hoặc `node scripts/set-password.mjs <username>` (cần `FIREBASE_SERVICE_ACCOUNT_KEY` trong `.env.local`).
 - Guard: `requireAdmin()` trong `src/lib/api-request-auth.ts`.
 
-## 5.4 API telemetry (`POST /api/events`)
+### 5.4 API telemetry (`POST /api/events`)
 
 File: `src/app/api/events/route.ts`
 
 Chức năng:
 
-1. Verify Firebase ID token.
+1. Verify Firebase ID token; rate limit 60 req/phút.
 2. Chỉ chấp nhận 6 event trong whitelist `CLIENT_ANALYTICS_EVENTS` (`src/lib/analytics-events.ts`) từ client: `file_uploaded`, `user_feedback`, `session_started`, `session_ended`, `response_copied`, `document_viewed`.
 3. Ghi event vào Firestore `analyticsEvents` qua `logAnalyticsEvent()` (kèm `user_id`).
 
 Các event khác (`parse_success`, `parse_failed`, `query_sent`, `response_delivered`, `attachment_uploaded`) được ghi **server-side** trong `/api/ingest`, `/api/chat`, `/api/chat/attachments`.
 
-## 5.5 Retrieval service
+### 5.5 Retrieval service
 
 - `src/lib/RetrievalService.ts`
   - Prompt hợp nhất, model tự suy luận 2 kiểu intent:
@@ -209,16 +220,16 @@ Các event khác (`parse_success`, `parse_failed`, `query_sent`, `response_deliv
 - `src/lib/documents/embeddings.ts` — wrapper `gemini-embedding-2`: `embedTexts()` (batch), `embedQuery()` (RETRIEVAL_QUERY task type), `embeddingInputFor()`, `writeDocumentChunks()`, `deleteDocumentChunks()`.
 - **Scope picker (chat, xem 5.1) không lọc cứng theo field:** filter cứng chỉ có `status == "indexed"` (và ngưỡng điểm lexical ở trên, không liên quan scope). Nhãn scope ảnh hưởng theo hai đường, đều là **soft boost**, không đảm bảo trúng đúng tài liệu:
   1. Gián tiếp qua embedding và keyword-overlap score (`buildScopedQuery()` prefix nhãn vào query).
-  2. Trực tiếp qua tag tài liệu: khi có scope, `fetchDocScopeMeta()` batch-load `messageType`/`uiPattern` từ collection `documents` (vì `document_chunks` không mang các field này) rồi `applyScopeBoost()` sort ổn định theo `scopeMatchScore` (2 = khớp cả hai facet hoặc doc gắn `"all"`, 1 = khớp một, 0 = chưa gắn tag / xung đột). Không loại bỏ tài liệu nào.
+  2. Trực tiếp qua tag tài liệu: khi có scope, `fetchDocScopeMeta()` batch-load `messageType`/`uiPattern` từ collection `documents` (vì `document_chunks` không mang các field này) rồi `applyScopeBoost()` sort ổn định theo `scopeMatchScore` (mỗi facet khớp — hoặc doc gắn `"all"` cho facet đó — được 1 điểm: 2 = khớp cả hai, 1 = khớp một, 0 = chưa gắn tag / xung đột). Không loại bỏ tài liệu nào.
 
-## 5.5b Đánh giá chất lượng retrieval & script vận hành
+### 5.5b Đánh giá chất lượng retrieval & script vận hành
 
 Kết quả đo qua từng đợt cải tiến (M0→M5 và các lần sửa sau) ghi trong **`src/lib/retrieval/eval/BASELINE.md`** — đọc file này trước khi đổi bất kỳ tham số `RETRIEVAL_*` nào.
 
-- **Golden set:** `src/lib/retrieval/eval/golden-set.json` (24 câu: 15 lấy từ log thật `query_sent`, 9 tự viết; 5 câu có `notes` ghi `expectedDocId` chưa được người biết corpus xác nhận) và `negative-golden-set.json` (15 câu ngoài phạm vi, gồm 3 câu "khó" về Zalo nhưng không phải UX writing).
+- **Golden set:** `src/lib/retrieval/eval/golden-set.json` (24 câu: 15 lấy từ log thật `query_sent`, 9 tự viết; 3 câu có `notes` đánh dấu "medium confidence"/"cần xác nhận" `expectedDocId` — các câu khác cũng có `notes` nhưng chỉ là ghi chú) và `negative-golden-set.json` (15 câu ngoài phạm vi, gồm 3 câu "khó" về Zalo nhưng không phải UX writing).
 - **Metric chính:** recall@3 và MRR. recall@6 đã chạm trần 100% vì corpus chỉ có 17 tài liệu.
 
-Script (đều **chỉ đọc**, trừ khi ghi chú khác; đọc `GEMINI_API_KEY`/`FIREBASE_SERVICE_ACCOUNT_KEY` từ `.env.local`; tôn trọng các biến `RETRIEVAL_*` giống app):
+Script (đều **chỉ đọc**, trừ khi ghi chú khác; cần `GEMINI_API_KEY`/`FIREBASE_SERVICE_ACCOUNT_KEY` **của production** trong `.env.local` — vì vậy chạy script là truy cập dữ liệu thật; tôn trọng các biến `RETRIEVAL_*` giống app):
 
 | Script | Việc |
 |---|---|
@@ -227,12 +238,13 @@ Script (đều **chỉ đọc**, trừ khi ghi chú khác; đọc `GEMINI_API_KE
 | `node scripts/calibrate-not-found-threshold.mjs` | Khoảng cách vector / điểm lexical tốt nhất của từng câu positive/negative |
 | `node scripts/migrate-heading-path.mjs [--dry-run]` | **Ghi production.** Backfill `headingPath` cho chunk cũ; idempotent (bỏ qua doc đã có field, kể cả `null`). Đã chạy trên production 2026-09-29: 17/17 doc |
 | `node scripts/reindex-embeddings.mjs` | **Ghi production.** Re-chunk + re-embed toàn bộ tài liệu indexed (giữ `headingPath`) |
+| `node scripts/set-password.mjs <username>` | **Ghi production.** Đặt mật khẩu mới cho một tài khoản (nhập ẩn), thu hồi mọi phiên của user đó |
 
 Thử nghiệm tham số không cần deploy: `RETRIEVAL_RRF_WEIGHT_LEXICAL=0.3 RETRIEVAL_RRF_WEIGHT_VECTOR=0.7 node scripts/eval-retrieval.mjs`.
 
 **Script dùng bản JS của logic retrieval** (`scripts/lib/`), vì file `.mjs` chạy độc lập không import được module TS của app. Hai bên được giữ khớp bằng test: `src/lib/retrieval/eval/mirror-drift.test.ts` và test pipeline trong `FirebaseRetrievalProvider.search.test.ts` đưa cùng input qua cả hai và báo lỗi khi lệch. **Sửa logic retrieval trong `src/lib/` thì phải sửa bản tương ứng trong `scripts/lib/`**, nếu không `npm test` sẽ fail.
 
-## 5.7 Bản dựng minh hoạ (visual prototype)
+### 5.6 Bản dựng minh hoạ (visual prototype)
 
 Khi câu hỏi thuộc **Kiểu B — microcopy UX** và model xác định được chính xác một kiểu UI, câu trả lời kèm thêm một bản dựng trực quan để user nhìn phát hiểu, không phải đọc hết markdown.
 
@@ -242,7 +254,7 @@ Khi câu hỏi thuộc **Kiểu B — microcopy UX** và model xác định đư
   - **Không làm mất thông tin** là ràng buộc trung tâm: schema chở `title`, `body`, `bullets[]` (giữ cấu trúc danh sách), `helperText`, và `actions[]` (tới 4 nút, không giới hạn 2). Giới hạn độ dài trong `LIMITS` đặt ở mức chặn lạm dụng (body 900 ký tự), **không** phải mức "gọt cho vừa layout" — cắt chữ là mất thông tin, tệ hơn layout dài. Prompt bắt model giữ đủ mọi dòng/nhãn/nút của bản gốc và chỉ sửa cách viết cho đúng guideline.
   - Field cũ `primaryAction`/`secondaryAction` được `foldLegacyActions()` gộp vào `actions[]` nên spec đã lưu trong Firestore vẫn đọc được.
 - `src/lib/chat/prototype-extract.ts` — `extractPrototypeSpec()` / `stripPrototypeBlock()` / `hasPrototypeFence()`. Model xuất khối ```` ```zalo-prototype ```` ngay trước dòng `[SOURCES_USED: …]`.
-- `src/app/api/chat/route.ts` — sau khi stream text xong: trích, validate, enqueue `{"t":"p","d":spec}`. Nếu có fence nhưng spec không dùng được thì `console.warn` (tỉ lệ dòng log này cho biết có cần chuyển sang function-calling để ép schema hay không) và analytics `response_delivered` mang thêm `prototype_pattern`.
+- `src/app/api/chat/route.ts` — sau khi stream text xong: trích, validate, enqueue `{"t":"p","d":spec}`. Nếu có fence nhưng spec không dùng được thì `console.warn` (tỉ lệ dòng log này cho biết có cần chuyển sang function-calling để ép schema hay không). Analytics `response_delivered` luôn có field `prototype_pattern` (`null` khi không có bản dựng).
 - `src/components/chat/prototype/patterns.tsx` — chrome Zalo dùng chung (`StatusBar`, `ChatHeader`, `MessageStream`, `InputBar`, `ZaloScreen`, `PhoneFrame`) + 8 thân pattern. `Record<UiPattern, …>` nên thêm pattern mà quên dựng component sẽ fail ở tsc. Mỗi pattern đặt đúng chỗ nó xuất hiện thật: snackbar nổi trên thanh nhập liệu, banner đẩy luồng chat xuống (**không** absolute — từng đè chữ lên bong bóng tin nhắn), tooltip trỏ vào icon header, card/ZInstant card chèn thẳng vào luồng chat.
 - `src/components/chat/prototype/PrototypePreview.tsx` — khung, chip facet, thanh nút (Tải JPG / Copy ảnh / Copy chữ), caption "không phải ảnh chụp màn hình".
 - `src/lib/chat/prototype-image.ts` — xuất ảnh **ngay trên trình duyệt** bằng `html-to-image` (2x cho màn retina). Không cần headless Chromium trên Cloud Run. Tải về là **JPG**; copy vào clipboard là **PNG** vì Clipboard API chỉ bắt buộc hỗ trợ `image/png` (Chrome từ chối `image/jpeg` trong `ClipboardItem`). JPEG không có alpha nên luôn truyền `backgroundColor` lấy từ nền thật, nếu không vùng trong suốt sẽ ra đen.
@@ -254,7 +266,7 @@ Khi câu hỏi thuộc **Kiểu B — microcopy UX** và model xác định đư
 
 Bản dựng hoàn toàn **tĩnh**: action giả render bằng `<span>`, không phải `<button>`.
 
-## 5.6 File viewer (`GET /references/file/[id]`)
+### 5.7 File viewer (`GET /references/file/[id]`)
 
 File: `src/app/references/file/[id]/route.ts`
 
@@ -267,48 +279,76 @@ Phục vụ tài liệu trong thư viện ra trình duyệt, có xác thực tok
 - SSRF protection: `assertFirebaseStorageDownloadUrl()` validate URL trước khi fetch.
 - CSP: các response HTML có header CSP riêng — xem mục 7.4.
 
-## 5.7 Env validation (server)
+### 5.8 Env validation (server)
 
 - `src/lib/env/internal-auth-domain.ts` — parse và so khớp `NEXT_PUBLIC_INTERNAL_AUTH_EMAIL_DOMAIN` với `INTERNAL_AUTH_EMAIL_DOMAIN`.
 - `src/instrumentation.ts` — khi Node runtime khởi động, gọi `validateServerEnv()`; **fail startup** nếu hai biến domain được set nhưng khác nhau.
 - Local / CI: `npm run validate:env` (đọc `.env` / `.env.local`). Mẫu biến: `.env.example`.
 
-## 5.8 Firebase Admin init
+### 5.9 Firebase Admin init
 
 - `src/lib/firebase-admin.ts`
   - Ưu tiên `FIREBASE_SERVICE_ACCOUNT_KEY` (JSON string).
   - Fallback `applicationDefault()` khi chạy môi trường GCP.
   - Có xử lý lỗi parse JSON để tránh làm chết toàn bộ server.
 
+
+### 5.10 Bảng toàn bộ route server
+
+Mọi route (trừ cron) yêu cầu `Authorization: Bearer <Firebase ID token>`; guard trong `src/lib/api-request-auth.ts`, rate limit trong `src/lib/rate-limit.ts` (Firestore `rate_limits`).
+
+| Route | Method | Quyền | Rate limit /phút | Việc |
+|---|---|---|---|---|
+| `/api/chat` | POST | signed-in | 20 (env) | Retrieval + stream NDJSON (5.1) |
+| `/api/embed` | POST | signed-in | — | Embed câu hỏi trước khi gửi (5.1) |
+| `/api/chat/attachments` | POST | signed-in | — | Upload ảnh chat (≤ 10 MB) lên `chat-attachments/{uid}/{sessionId}/…`, TTL 24h; log `attachment_uploaded` |
+| `/api/events` | POST | signed-in | 60 | Telemetry client (5.4) |
+| `/api/ingest` | POST | contributor/admin | 10 | Extract + chunk + embed file upload (5.2) |
+| `/api/documents/inline` | POST | contributor/admin | 20 | Tạo inline doc (sanitize HTML, chunk + embed) |
+| `/api/documents/inline/[id]` | PUT, DELETE | contributor/admin | 20 (PUT) | Sửa / xoá inline doc (kèm chunks) |
+| `/api/upload/image` | POST | contributor/admin | 30 | Ảnh trong inline doc (png/jpeg/webp/gif ≤ 10 MB) → `documents/images/{docId}/…` |
+| `/api/admin/users` | POST | admin | — | Tạo user (5.3) |
+| `/api/admin/users/[uid]` | PATCH, DELETE | admin | — | Sửa / xoá user (5.3) |
+| `/api/admin/settings/contact` | GET, PUT | admin | — | Liên hệ xin tài khoản ở `/login` |
+| `/api/admin/reports` | GET | contributor/admin | — | Dữ liệu dashboard (`docs/ANALYTICS_REPORTS.md`) |
+| `/api/cron/cleanup-chat-attachments` | POST | secret cron | — | Xoá ảnh chat hết hạn (10.4) |
+| `/references/file/[id]` | GET | cookie `__session` | — | File viewer (5.7) |
+
 ---
 
 ## 6) Firebase data model
 
-## 6.1 Collection `users`
+### 6.1 Collection `users`
 
 Tài liệu người dùng/role:
 
 - `uid`
 - `username` (đăng nhập hiển thị cho user)
 - `email` (synthetic: `{username}@{INTERNAL_AUTH_EMAIL_DOMAIN}`)
+- `displayName`
 - `role`: `user | contributor | admin`
-- `createdAt` (nếu có)
+- `disabled` (boolean, admin khoá tài khoản)
+- `createdAt`, `createdBy`
+
+Lưu ý: dashboard reports đọc `users` với `orderBy("createdAt")` — doc thiếu `createdAt` sẽ không có tên hiển thị trong báo cáo.
 
 Quy ước quan trọng:
 
 - Canonical profile path luôn là `users/{auth.uid}`.
 
-## 6.2 Collection `documents`
+### 6.2 Collection `documents`
 
 Dữ liệu tri thức đã upload/index:
 
 - `fileName`, `fileUrl`, `storagePath`, `mimeType`, `sizeBytes`
 - `status`: `processing | indexed | failed | inactive | ...`
 - `description`, `tags`
+- `messageType`, `uiPattern` (tag phạm vi chọn lúc upload, giá trị từ `scope-options.ts`; dùng cho scope boost ở 5.5)
+- Inline doc (soạn trực tiếp trong app, không upload file): `type: "inline_doc"`, `title`, `contentHtml` (đã sanitize), `contentPlain`
 - `textContent` (nội dung đã extract — dùng cho lexical search, relevance check và hiển thị)
 - `uploadedBy`, `uploadedEmail`, `uploadedAt`, `updatedAt`
 
-## 6.2b Collection `document_chunks`
+### 6.2b Collection `document_chunks`
 
 Chunks nhỏ của tài liệu — backbone của vector search:
 
@@ -323,22 +363,22 @@ Chunks nhỏ của tài liệu — backbone của vector search:
 
 Chunks tự được tạo/cập nhật/xóa khi document được ingest, inline doc được tạo/sửa/xóa. Xem `src/lib/documents/embeddings.ts`.
 
-## 6.3 Collection `chatSessions`
+### 6.3 Collection `chatSessions`
 
 Lịch sử chat theo user:
 
 - `userId`
 - `title` (từ tin nhắn user đầu tiên)
-- `messages[]` (role/content/sources/timestamp)
+- `messages[]` (role/content/sources/timestamp, tuỳ chọn `attachments` — ảnh đính kèm — và `prototype` — spec bản dựng, mục 5.6)
 - `createdAt`, `updatedAt`
 
-## 6.4 Collection `analyticsEvents`
+### 6.4 Collection `analyticsEvents`
 
 Telemetry nội bộ cho dashboard **Analytics Reports** (`/admin/reports`). Schema: `eventName`, `payload`, `createdAt` (server timestamp). Chỉ Admin SDK được `create` (`firestore.rules`: client `write: false`).
 
 Bảng đầy đủ loại event, luồng ghi, giới hạn mẫu 500/300, filter thời gian và metric UI: **[ANALYTICS_REPORTS.md](./ANALYTICS_REPORTS.md)**.
 
-## 6.5 Collection `rate_limits`
+### 6.5 Collection `rate_limits`
 
 Counter rate-limit per-user per phút:
 
@@ -352,11 +392,12 @@ Counter rate-limit per-user per phút:
 
 ## 7) Security model
 
-## 7.1 Firestore Rules (`firestore.rules`)
+### 7.1 Firestore Rules (`firestore.rules`)
 
 - `chatSessions`: user đọc/ghi/xóa session của chính mình; `contributor`/`admin` được **đọc** (không ghi) mọi session, dùng cho dashboard analytics.
 - `users`:
-  - user đọc/sửa hồ sơ của mình nhưng không tự nâng role; **không** được `create` (không tự đăng ký).
+  - user đọc/sửa hồ sơ của mình nhưng không đổi được `role`, `username`, `uid`, `email`, `createdAt`, `createdBy`; **không** được `create` (không tự đăng ký).
+  - `contributor` được **đọc** mọi profile (dashboard reports).
   - chỉ `admin` được `create` document `users/*`.
   - admin có toàn quyền đọc/ghi/xóa.
 - `documents`:
@@ -365,21 +406,24 @@ Counter rate-limit per-user per phút:
 - `analyticsEvents`:
   - `admin` hoặc `contributor` được đọc (dashboard).
   - client/API user **không** ghi trực tiếp; ghi qua Admin SDK trên server.
+- `authSessions`: owner chỉ được cập nhật `lastSeenAt` hoặc tự set `revoked`; admin được revoke phiên của bất kỳ ai.
+- `document_chunks`: client `read, write: false` — chỉ server (Admin SDK) truy cập.
 
-## 7.2 Storage Rules (`storage.rules`)
+### 7.2 Storage Rules (`storage.rules`)
 
-- Chỉ signed-in user được đọc `documents/`*.
+- Chỉ signed-in user được đọc `documents/*`.
 - Chỉ `admin|contributor` được ghi.
-- Role lookup trong Storage rules dùng `firestore.exists/get`.
+- `chat-attachments/{uid}/**`: chỉ owner đọc; client không ghi (upload qua `/api/chat/attachments`).
+- Role lookup trong Storage rules dùng `firestore.exists/get`; thiếu profile thì coi là role `user`.
 
-## 7.3 API auth guard
+### 7.3 API auth guard
 
 - `src/lib/api-request-auth.ts`
   - Verify Bearer ID token.
   - Check role contributor/admin cho ingest.
   - Validate host/bucket của Storage URL.
 
-## 7.4 Content Security Policy (file viewer)
+### 7.4 Content Security Policy (file viewer)
 
 Route `GET /references/file/[id]` serve HTML trực tiếp ra browser (inline_doc và DOCX được convert sang HTML). Mỗi response kèm header CSP:
 
@@ -400,7 +444,7 @@ img-src 'self' https: data:;
 
 ## 8) Flow tính năng chi tiết
 
-## 8.1 Chat flow
+### 8.1 Chat flow
 
 1. User vào `/chat`.
 2. Chưa có session nào được tạo.
@@ -411,7 +455,7 @@ img-src 'self' https: data:;
 5. Client vừa stream UI, vừa lưu lại messages vào session khi hoàn tất.
 6. Sidebar tự cập nhật lịch sử từ Firestore listener.
 
-## 8.2 Upload/index tài liệu flow
+### 8.2 Upload/index tài liệu flow
 
 1. Contributor/Admin chọn file ở `/admin/upload`.
 2. Upload file lên Storage (`documents/...`).
@@ -420,7 +464,7 @@ img-src 'self' https: data:;
 5. Cập nhật `documents.textContent` và status `indexed` (hoặc `failed`).
 6. Tài liệu indexed sẽ được retrieval dùng trong chat.
 
-## 8.3 User management flow
+### 8.3 User management flow
 
 1. Admin đăng nhập → `/admin/users`.
 2. **Tạo tài khoản:** form username, password, role → `POST /api/admin/users` (tạo Auth + `users/{uid}`).
@@ -429,13 +473,13 @@ img-src 'self' https: data:;
 
 **Bootstrap admin lần đầu:** xem `docs/FIREBASE_DEPLOY.md` mục Auth (Console hoặc tạo thủ công `users/{auth.uid}` khớp UID Auth).
 
-## 8.4 Login flow
+### 8.4 Login flow
 
 1. User nhập **username** + password (không phải email hiển thị).
 2. Client map username → `{username}@{INTERNAL_AUTH_EMAIL_DOMAIN}` rồi `signInWithEmailAndPassword` (`src/app/login/LoginClient.tsx`).
 3. **Việc quyết định "được phép vào app hay không" nằm hoàn toàn ở `AuthContext`** (không có check trùng lặp ở trang login):
-   - `onIdTokenChanged` fire → đọc `users/{uid}` (retry tối đa 2 lần, mỗi lần timeout 10s, xem mục 4.3).
-   - Không có document, hoặc role không hợp lệ, hoặc hết cả 2 lần retry vẫn timeout/lỗi mạng → `signOut` + set `authError` (message khác nhau tùy nguyên nhân: *chưa được cấp quyền* vs *không thể tải thông tin tài khoản, có thể do mạng/trình chặn quảng cáo*).
+   - `onIdTokenChanged` fire → đọc `users/{uid}` (tối đa 2 lần thử, mỗi lần timeout 10s, xem mục 4.3).
+   - Không có document, hoặc role không hợp lệ, hoặc cả 2 lần thử vẫn timeout/lỗi mạng → `signOut` + set `authError` (message khác nhau tùy nguyên nhân: *chưa được cấp quyền* vs *không thể tải thông tin tài khoản, có thể do mạng/trình chặn quảng cáo*).
    - Có document + role hợp lệ → set cookie `__session`, set `user`/`role`.
 4. Trang `/login` có một `useEffect` theo dõi `user` (không phải gọi trực tiếp trong submit handler — tránh redirect loop với middleware, xem lịch sử fix ở commit `61d58f5`): khi `user` xuất hiện, điều hướng bằng **`window.location.assign(next)`** (hard navigation, không phải `router.replace()`). `next` được validate qua `sanitizeNextPath()` (chỉ nhận path nội bộ dạng `/...`, chặn open redirect) lấy từ query `?next=` (do middleware set khi redirect user chưa đăng nhập) hoặc mặc định `/chat`.
    - **Lý do dùng hard navigation:** trên Next.js 16, `router.replace()` (client-side SPA navigation) sang một route chưa từng render trong session trình duyệt đó (vd. lần đăng nhập đầu tiên trên incognito/máy mới) có thể treo âm thầm — không lỗi, URL không đổi — bắt buộc user phải F5 mới vào được; F5 luôn thành công vì nó bỏ qua router cache của client. `window.location.assign()` tái tạo đúng hành vi "F5 thủ công" đó một cách tự động, đổi lại một lần full page load (chấp nhận được vì đây là redirect one-off sau login, không phải điều hướng trong luồng chat).
@@ -445,41 +489,41 @@ img-src 'self' https: data:;
 
 **Test coverage:** `e2e/chat-flow.spec.ts` có test riêng mô phỏng Firestore bị chặn sau khi đăng nhập thành công (route interception, không resolve request) để xác nhận banner lỗi xuất hiện thay vì treo vô hạn; `src/lib/with-timeout.test.ts` cover unit test cho helper timeout.
 
-## 8.5 Đăng nhập đa phiên / đa máy
+### 8.5 Đăng nhập đa phiên / đa máy
 
 **Kết luận:** được phép — cùng username/password trên laptop, điện thoại, hoặc nhiều trình duyệt cùng lúc.
 
-### Phân biệt thuật ngữ
+#### Phân biệt thuật ngữ
 
 | Khái niệm | Ý nghĩa trong app |
 |-----------|-------------------|
 | **Phiên đăng nhập (auth)** | Firebase Authentication: ID token + refresh token trên từng client (`src/lib/firebase.ts`, `AuthContext`). |
 | **Cuộc chat (`chatSessions`)** | Lịch sử hội thoại trong Firestore, gắn `userId` — **không** phải phiên đăng nhập. |
 
-### Cách hoạt động
+#### Cách hoạt động
 
 - Mỗi máy/trình duyệt đăng nhập → Firebase cấp token riêng; API chỉ gọi `verifyIdToken` (không kiểm tra thiết bị) — xem `src/lib/api-request-auth.ts`.
 - Cùng `uid` → cùng quyền, cùng lịch sử chat (Firestore listener trên `chatSessions` theo `userId`).
 - Nhiều tab cùng trình duyệt thường chia sẻ trạng thái Auth (persistence mặc định của Firebase).
 
-### Hành vi vận hành
+#### Hành vi vận hành
 
 - **Đăng xuất trên một máy** (`Header` → `signOut`): xóa bản ghi `authSessions` của thiết bị đó; máy khác vẫn đăng nhập.
 - **Admin vô hiệu hóa** (`PATCH` user `disabled: true`): đánh dấu `revoked` mọi phiên + Auth `disabled` chặn refresh token.
-- **Admin reset mật khẩu:** Firebase thường thu hồi refresh token cũ; các máy có thể bị đăng xuất khi token hết hạn.
+- **Admin reset mật khẩu:** API đánh dấu `revoked` mọi `authSessions` của user → client đang mở nghe `onSnapshot` trên doc phiên của mình nên bị đăng xuất gần như ngay lập tức.
 
-### Quản lý phiên (đã có)
+#### Quản lý phiên (đã có)
 
 - **`/account/sessions`:** User xem danh sách thiết bị/trình duyệt, trạng thái *Đang hoạt động*, đăng xuất từ xa phiên khác.
 - **Admin → Manage Users → Phiên:** Xem/đăng xuất phiên của từng user.
 - Collection Firestore `authSessions` (heartbeat ~60s, `revoked` để kick client).
 - Admin **khoá** hoặc **reset mật khẩu** → API đánh dấu `revoked` trên mọi phiên của user đó.
 
-### Chưa có trong sản phẩm
+#### Chưa có trong sản phẩm
 
 - Giới hạn N máy hoặc “chỉ một phiên”, cảnh báo đăng nhập thiết bị mới.
 
-## 8.6 Analytics Reports
+### 8.6 Analytics Reports
 
 Dashboard tại `/admin/reports` (`admin` hoặc `contributor`): telemetry từ `analyticsEvents`, polling **6 giờ** + nút **Cập nhật**, filter **Hôm nay / 7 / 30 ngày** (UTC).
 
@@ -521,7 +565,10 @@ Sự cố thực tế đã gặp (2026-07-14): `GEMINI_API_KEY` và `FIREBASE_SE
 Tùy chọn (Gemini & chat):
 
 - `GEMINI_CHAT_MODELS` — danh sách model chat, phân tách bằng dấu phẩy. Mặc định: `gemini-3.8-flash`, `gemini-3.7-flash`, `gemini-3.5-flash`, `gemini-3-flash-preview`, `gemini-2.5-flash` (thử lần lượt khi model trước lỗi).
-- `CHAT_RATE_LIMIT_PER_MINUTE` — số request tối đa mỗi user mỗi phút. Mặc định: `20`.
+- `CHAT_RATE_LIMIT_PER_MINUTE` — số request tối đa mỗi user mỗi phút. Mặc định: `20`. (Các route khác có limit cứng trong code: ingest 10, inline-doc 20, upload-image 30, events 60 req/phút; `/api/embed` không có rate limit.)
+- `CHAT_QUERY_MAX_CHARS` — độ dài tối đa câu hỏi. Mặc định: `12000`.
+- `CHAT_CONVERSATION_MAX_CHARS_PER_TURN` — cắt mỗi lượt lịch sử khi gửi lên model. Mặc định: `2500`.
+- `CHAT_MAX_ATTACHMENTS_PER_TURN` — số ảnh tối đa mỗi lượt. Mặc định: `4`.
 
 Tùy chọn (retrieval):
 
@@ -545,25 +592,30 @@ Khuyến nghị:
 - `NEXT_PUBLIC_SITE_URL` (metadata canonical + OG absolute URL; không đặt thì dùng `http://localhost:3000`)
 - `NEXT_PUBLIC_GA_ID` (nếu bật Google Analytics)
 - `NEXT_PUBLIC_CONTACT_EMAIL`, `NEXT_PUBLIC_CONTACT_ZALO` (liên hệ xin tài khoản ở `/login`, chỉ dùng khi admin chưa lưu liên hệ ở `/admin/users` → Firestore `settings/accountContact`)
-- `CHAT_ATTACHMENTS_CRON_SECRET` (bí mật gọi cron xóa ảnh chat hết TTL trong Storage; xem mục 10.4)
+- `CHAT_ATTACHMENTS_CRON_SECRET` — secret (khai báo trong `apphosting.yaml`, nên phải tồn tại trong Secret Manager), **tối thiểu 32 ký tự**; dùng cho cron xóa ảnh chat (mục 10.4)
+- `CHAT_ATTACHMENTS_TTL_MS` — TTL ảnh chat. Mặc định 24h.
+- `FIREBASE_STORAGE_BUCKET` — ưu tiên hơn `NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET` phía server.
+- `FIREBASE_PROJECT_ID` / `GOOGLE_CLOUD_PROJECT` / `GCLOUD_PROJECT` — fallback project id cho Admin SDK (thường tự có trên App Hosting).
+
+Test / tooling: `E2E_BASE_URL` (mặc định `http://localhost:3000`), `E2E_USER_*`, `E2E_ADMIN_*`, `E2E_RUN_LLM_TESTS=1` (bật test gọi model thật), `ANALYZE=true` (qua `npm run analyze`).
 
 Lưu ý:
 
-- Thay đổi `NEXT_PUBLIC_`* cần rollout/build lại để có hiệu lực.
+- Thay đổi `NEXT_PUBLIC_*` cần rollout/build lại để có hiệu lực.
 
 ---
 
 ## 10) Deploy và vận hành
 
-## 10.1 Thiết lập project Firebase
+### 10.1 Thiết lập project Firebase
 
 - `firebase.json`:
   - map rules Firestore/Storage
-  - cấu hình App Hosting backend `zalo-ikc-be`
+  - cấu hình App Hosting backend `zalo-ikc-be` và Storage bucket `zalo-ikc.firebasestorage.app` — **hard-code**, đổi 2 giá trị này nếu dựng trên project Firebase khác
 - `apphosting.yaml`:
   - `minInstances: 0`
 
-## 10.2 Lệnh deploy
+### 10.2 Lệnh deploy
 
 Khuyến nghị dùng CLI mới nhất:
 
@@ -587,7 +639,7 @@ npx -y firebase-tools@latest deploy --only firestore:rules,firestore:indexes,sto
 
 Nếu backend App Hosting đã nối GitHub branch live (`main`), push code lên branch đó sẽ tự rollout.
 
-## 10.2b Cấu hình Firestore TTL policy (một lần)
+### 10.2b Cấu hình Firestore TTL policy (một lần)
 
 Sau deploy lần đầu, bật TTL để tự dọn `rate_limits` docs cũ:
 
@@ -595,13 +647,13 @@ Sau deploy lần đầu, bật TTL để tự dọn `rate_limits` docs cũ:
 2. **Add TTL policy**: Collection `rate_limits`, Field `expireAt`
 3. Save. (TTL xóa docs trong vài giờ sau khi `expireAt` qua — không phải ngay lập tức.)
 
-## 10.2c Re-index tài liệu hiện có (một lần sau khi deploy vector search)
+### 10.2c Re-index tài liệu hiện có (một lần sau khi deploy vector search)
 
 Tài liệu upload trước khi có vector search **chưa có chunks** — chỉ được tìm qua lexical search. Để re-index toàn bộ: `node scripts/reindex-embeddings.mjs` (**ghi production**, xoá rồi ghi lại chunk của từng tài liệu), hoặc upload lại từng tài liệu trong `/admin/library`.
 
 Chunk tạo trước khi có `headingPath` (M5) được backfill bằng `node scripts/migrate-heading-path.mjs` — chạy `--dry-run` trước; script idempotent nên chạy lại an toàn. Đã chạy trên production ngày 2026-09-29 (17/17 tài liệu). Tài liệu upload sau đó tự có `headingPath` qua `/api/ingest`.
 
-## 10.3 Checklist release ngắn
+### 10.3 Checklist release ngắn
 
 1. `npm install` (khi có đổi dependency)
 2. `npm run validate:env` (kiểm tra cặp domain auth, tùy chọn trước deploy)
@@ -614,17 +666,17 @@ Chunk tạo trước khi có `headingPath` (M5) được backfill bằng `node s
 8. `firebase deploy --only firestore:indexes` nếu thay đổi `firestore.indexes.json`
 9. Smoke test production + log monitor
 
-## 10.4 Cron xóa ảnh chat hết TTL (Storage)
+### 10.4 Cron xóa ảnh chat hết TTL (Storage)
 
 Ảnh đính kèm chat lưu dưới prefix `chat-attachments/` với metadata `expiresAt` (24h). Để xóa vật lý định kỳ:
 
-1. Tạo biến môi trường `CHAT_ATTACHMENTS_CRON_SECRET` (chuỗi ngẫu nhiên đủ dài).
+1. Tạo secret `CHAT_ATTACHMENTS_CRON_SECRET` (chuỗi ngẫu nhiên **≥ 32 ký tự**, vd. `openssl rand -hex 32`) bằng `firebase apphosting:secrets:set`.
 2. Trên **Google Cloud Scheduler**, tạo job HTTPS **POST** tới
   `https://<domain-của-app>/api/cron/cleanup-chat-attachments`  
    với header `Authorization: Bearer <CHAT_ATTACHMENTS_CRON_SECRET>` (hoặc `x-cron-secret` cùng giá trị).
 3. Tần suất gợi ý: mỗi 1–6 giờ (tùy lưu lượng). Tùy chọn env: `CHAT_ATTACHMENTS_CLEANUP_MAX_DELETES` (mặc định 500), `CHAT_ATTACHMENTS_CLEANUP_PAGE_SIZE` (100), `CHAT_ATTACHMENTS_CLEANUP_MAX_PAGES` (50).
 
-Nếu không đặt `CHAT_ATTACHMENTS_CRON_SECRET`, route cron trả `503` (chưa cấu hình). Sai secret trả `401`.
+Nếu không đặt `CHAT_ATTACHMENTS_CRON_SECRET` hoặc secret < 32 ký tự, route cron trả `503`. Sai secret trả `401`. Route chỉ nhận `POST`.
 
 ---
 
@@ -636,7 +688,7 @@ Nếu không đặt `CHAT_ATTACHMENTS_CRON_SECRET`, route cron trả `503` (chư
 - **Admin không vào được:** kiểm tra email Auth = `{username}@{INTERNAL_AUTH_EMAIL_DOMAIN}` và field `role: "admin"` trong `users/{uid}`.
 - **Server configuration error** ở API: thiếu hoặc sai `FIREBASE_SERVICE_ACCOUNT_KEY` / project id env.
 - **Startup crash env domain:** `INTERNAL_AUTH_EMAIL_DOMAIN` và `NEXT_PUBLIC_INTERNAL_AUTH_EMAIL_DOMAIN` khác nhau — đặt cùng một giá trị (ví dụ `accounts.internal`).
-- **Chat/ingest Gemini lỗi model:** kiểm tra `GEMINI_API_KEY` và quyền model `gemini-3.8-flash`; fallback tự thử model trong `GEMINI_CHAT_MODELS`.
+- **Chat/ingest Gemini lỗi model:** kiểm tra `GEMINI_API_KEY` và quyền model `gemini-3.8-flash`. Chat tự fallback qua `GEMINI_CHAT_MODELS`; **ingest không có fallback** (luôn dùng `GEMINI_FLASH_MODEL`).
 - **Gemini trả `API_KEY_INVALID` dù key vừa tạo còn hạn:** Google đang migrate key Gemini từ Standard (`AIza...`) sang Auth key gắn service account (`AQ.Ab...`); Standard key **unrestricted** đã bị từ chối từ 19/06/2026, và **toàn bộ** Standard key ngừng hoạt động từ 09/2026. Key tạo mới qua AI Studio giờ luôn là Auth key. Cần `@google/genai` ≥ 2.x (project hiện dùng `^2.11.0`) để tương thích Auth key — bản 1.x sẽ báo `API_KEY_INVALID`.
 - **Rotate `GEMINI_API_KEY`/`FIREBASE_SERVICE_ACCOUNT_KEY` xong vẫn lỗi `500`/`16 UNAUTHENTICATED`:** rất có thể do **Console override** đè lên `secret:` trong `apphosting.yaml` — xem mục 9.1 để biết cách kiểm tra và fix đúng quy trình.
 - **Vector search lỗi `index not ready`:** index `document_chunks.embedding` chưa deploy hoặc đang tạo → vector search trả rỗng, kết quả chỉ còn từ lexical search; deploy index bằng `firebase deploy --only firestore:indexes`.
@@ -659,6 +711,7 @@ Nếu không đặt `CHAT_ATTACHMENTS_CRON_SECRET`, route cron trả `503` (chư
 
 ## 12) Tài liệu liên quan
 
+- `docs/ONBOARDING.md` - lộ trình cho người mới (đọc gì, setup, 4 luồng code, quy ước, release)
 - `docs/ANALYTICS_REPORTS.md` - dashboard `/admin/reports` (telemetry, filter, metrics)
 - `docs/HUONG_DAN_LEN_LIVE.md` - runbook deploy hằng ngày (tiếng Việt)
 - `docs/RELEASE_PROCESS.md` - quy trình release tổng quát
@@ -670,5 +723,5 @@ Nếu không đặt `CHAT_ATTACHMENTS_CRON_SECRET`, route cron trả `503` (chư
 ## 13) Test
 
 - `npm test` — Vitest. Mặc định môi trường `node`; file cần DOM khai báo `// @vitest-environment jsdom` ở đầu (vd. `src/hooks/useChatPage.test.ts`, dùng `@testing-library/react`).
-- `e2e/*.spec.ts` — Playwright, cần app đang chạy và tài khoản test: `E2E_USER_USERNAME`/`E2E_USER_PASSWORD` (+ `E2E_ADMIN_*`). **Thiếu các biến này thì test cần đăng nhập bị skip** — ví dụ test "new chat link resets the conversation" lẽ ra đã bắt được lỗi React #185 ở mục 11 nhưng chưa từng chạy vì thiếu tài khoản test.
+- `e2e/*.spec.ts` — Playwright, chạy bằng `npx playwright test` (không có npm script). Config không tự đọc file env — phải `export` biến trong shell. Cần app đang chạy và tài khoản test: `E2E_USER_USERNAME`/`E2E_USER_PASSWORD` (+ `E2E_ADMIN_*`). **Thiếu các biến này thì test cần đăng nhập bị skip** — ví dụ test "new chat link resets the conversation" lẽ ra đã bắt được lỗi React #185 ở mục 11 nhưng chưa từng chạy vì thiếu tài khoản test.
 

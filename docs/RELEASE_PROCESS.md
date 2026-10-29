@@ -2,7 +2,7 @@
 
 This project deploys production via **Firebase App Hosting**.
 
-Vietnamese day-to-day guide: `[HUONG_DAN_LEN_LIVE.md](./HUONG_DAN_LEN_LIVE.md)`.
+Vietnamese day-to-day guide: [HUONG_DAN_LEN_LIVE.md](./HUONG_DAN_LEN_LIVE.md).
 
 ## 1) Pre-release checks (local)
 
@@ -10,8 +10,13 @@ Run before every release:
 
 ```bash
 npm install
+npm run validate:env   # auth domain pair in .env / .env.local
+npm test
+npm run lint
 npm run build
 ```
+
+If retrieval logic or `RETRIEVAL_*` params changed: run `node scripts/eval-retrieval.mjs` and compare with `src/lib/retrieval/eval/BASELINE.md`.
 
 Smoke test key flows locally:
 
@@ -40,9 +45,8 @@ firebase deploy --only apphosting
 
 ## 3) Environment variables
 
-Manage production vars in:
-
-Firebase Console -> App Hosting -> Backend -> Environment variables
+Plain vars: Firebase Console -> App Hosting -> Backend -> Environment variables.
+Secrets (`GEMINI_API_KEY`, `FIREBASE_SERVICE_ACCOUNT_KEY`, `CHAT_ATTACHMENTS_CRON_SECRET`): `firebase apphosting:secrets:set <NAME>` only — they are already referenced by `apphosting.yaml`.
 
 After changing env vars, trigger a new rollout (push commit or manual deploy).
 
@@ -56,18 +60,17 @@ Typical vars:
 - `NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET`
 - `NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID`
 - `NEXT_PUBLIC_FIREBASE_APP_ID`
-- `FIREBASE_SERVICE_ACCOUNT_KEY`
+- `FIREBASE_SERVICE_ACCOUNT_KEY` (secret)
 - `NEXT_PUBLIC_INTERNAL_AUTH_EMAIL_DOMAIN` and `INTERNAL_AUTH_EMAIL_DOMAIN` (same value; username → Auth email mapping)
-- `GEMINI_API_KEY` (chat + ingest PDF; default model `gemini-3.8-flash`)
+- `GEMINI_API_KEY` (secret; chat + ingest PDF; default model `gemini-3.8-flash`)
 - Optional: `GEMINI_CHAT_MODELS` (comma-separated fallback list for `/api/chat`)
-- `CHAT_ATTACHMENTS_CRON_SECRET` (secret, required if the chat-attachments cleanup cron is enabled)
-- See `docs/PRE_LIVE_ENV_CHECKLIST.md` for the full pre-live list
+- `CHAT_ATTACHMENTS_CRON_SECRET` (secret, ≥ 32 chars; declared in `apphosting.yaml`, so it must exist)
+- Full list: `docs/PROJECT_OVERVIEW.md` §9; pre-live audit: `docs/PRE_LIVE_ENV_CHECKLIST.md`
 
 ## 4) Post-release validation
 
 Right after rollout:
 
-- Run `npm run validate:env` locally if env changed (auth domain pair)
 - Open production `/login` (confirm no Google sign-in; username/password flow)
 - Test `/chat`, `/chat/[id]`, and one admin page
 - Admin `/admin/reports`: time-range filters and manual refresh

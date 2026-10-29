@@ -31,14 +31,15 @@ Nên thử nhanh các luồng liên quan tới thay đổi của bạn, ví dụ
 
 ## Bước 2 — Đẩy code lên GitHub
 
-```bash
-git status
-git add .
-git commit -m "Mô tả ngắn thay đổi"
-git push origin main
-```
+Khuyên dùng: làm trên branch riêng, mở PR vào `main`, merge xong mới coi như bước này hoàn tất (push thẳng `main` = rollout production ngay).
 
-Nếu team dùng PR: mở PR vào `main`, merge xong mới coi như bước này hoàn tất.
+```bash
+git checkout -b feat/ten-thay-doi
+git add <file>
+git commit -m "feat: mô tả ngắn thay đổi"
+git push -u origin feat/ten-thay-doi
+gh pr create --base main
+```
 
 ---
 
@@ -63,20 +64,20 @@ firebase deploy --only apphosting
 
 ## Bước 4 — Khi nào cần thêm lệnh?
 
-### Đổi Firestore hoặc Storage rules
+### Đổi Firestore/Storage rules hoặc index
 
-Nếu bạn sửa `firestore.rules` hoặc `storage.rules`:
+Nếu bạn sửa `firestore.rules`, `storage.rules` hoặc `firestore.indexes.json`:
 
 ```bash
-firebase deploy --only firestore:rules,storage
+firebase deploy --only firestore:rules,firestore:indexes,storage
 ```
 
 ### Đổi biến môi trường trên App Hosting
 
-1. **Firebase Console → App Hosting → Backend → Environment variables**
-2. Sửa/thêm biến (ví dụ `GEMINI_API_KEY`, `GEMINI_CHAT_MODELS` (tùy chọn), `FIREBASE_SERVICE_ACCOUNT_KEY`, `NEXT_PUBLIC_INTERNAL_AUTH_EMAIL_DOMAIN`, `INTERNAL_AUTH_EMAIL_DOMAIN` — **hai biến domain phải cùng giá trị**, các `NEXT_PUBLIC_*`, `NEXT_PUBLIC_SITE_URL`…).
-3. Local: `npm run validate:env` trước khi push (đọc `.env.example`).
-4. **Bắt buộc rollout lại** để build nhận giá trị mới (đặc biệt với `NEXT_PUBLIC_`*):
+1. **Biến thường** (`GEMINI_CHAT_MODELS`, `NEXT_PUBLIC_*`, `NEXT_PUBLIC_SITE_URL`, `NEXT_PUBLIC_INTERNAL_AUTH_EMAIL_DOMAIN` + `INTERNAL_AUTH_EMAIL_DOMAIN` — **hai biến domain phải cùng giá trị**…): **Firebase Console → App Hosting → Backend → Environment variables**.
+2. **Secret** (`GEMINI_API_KEY`, `FIREBASE_SERVICE_ACCOUNT_KEY`, `CHAT_ATTACHMENTS_CRON_SECRET`): `firebase apphosting:secrets:set <TÊN>` — **không** nhập giá trị vào Console (giá trị literal ở Console sẽ đè secret; xem `PROJECT_OVERVIEW.md` mục 9.1).
+3. Local: `npm run validate:env` trước khi push (đọc `.env` / `.env.local`, chỉ kiểm tra cặp domain).
+4. **Bắt buộc rollout lại** để build nhận giá trị mới (đặc biệt với `NEXT_PUBLIC_*` và secret):
   - push thêm một commit nhỏ, **hoặc**
   - chạy lại `firebase deploy --only apphosting`.
 
@@ -99,8 +100,8 @@ firebase deploy --only firestore:rules,storage
 
 ---
 
-## Tài liệu liên quan (tiếng Anh)
+## Tài liệu liên quan
 
-- `[FIREBASE_DEPLOY.md](./FIREBASE_DEPLOY.md)` — checklist deploy Firebase & env lần đầu.
-- `[RELEASE_PROCESS.md](./RELEASE_PROCESS.md)` — quy trình release chi tiết hơn (smoke test, rollback).
+- [FIREBASE_DEPLOY.md](./FIREBASE_DEPLOY.md) — checklist deploy Firebase & env lần đầu.
+- [RELEASE_PROCESS.md](./RELEASE_PROCESS.md) — quy trình release (tiếng Anh: smoke test, rollback).
 

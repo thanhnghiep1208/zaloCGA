@@ -4,7 +4,8 @@
 
 - Install CLI: `npm i -g firebase-tools`
 - Login: `firebase login`
-- Select project: `firebase use <your-firebase-project-id>`
+- Select project: `firebase use <your-firebase-project-id>` (mẫu alias: `.firebaserc.example`)
+- **Dựng trên project khác `zalo-ikc`?** Sửa 2 giá trị hard-code trong `firebase.json`: `storage.bucket` và `apphosting.backendId`.
 
 ## 2) One-time App Hosting setup
 
@@ -18,7 +19,19 @@ Choose the same Firebase project as above and connect to your GitHub repo.
 
 ## 3) Configure production environment variables
 
-Set these in **Firebase App Hosting > Backend > Environment variables**:
+**Secrets — KHÔNG đặt trong Console.** `apphosting.yaml` đã khai báo 3 biến dưới đây dạng `secret:`; chỉ cần tạo giá trị trong Secret Manager:
+
+```bash
+firebase apphosting:secrets:set FIREBASE_SERVICE_ACCOUNT_KEY   # full JSON service account
+firebase apphosting:secrets:set GEMINI_API_KEY
+firebase apphosting:secrets:set CHAT_ATTACHMENTS_CRON_SECRET   # ≥ 32 ký tự, vd. openssl rand -hex 32
+```
+
+> Nếu Console có **giá trị literal** cho cùng tên biến, nó sẽ đè `secret:` trong YAML (sự cố 2026-07-14). Xem `PROJECT_OVERVIEW.md` mục 9.1.
+
+`GEMINI_API_KEY` dùng cho `/api/chat`, `/api/ingest`, embedding `gemini-embedding-2`; model mặc định `gemini-3.8-flash` (`src/lib/gemini-models.ts`). `CHAT_ATTACHMENTS_CRON_SECRET` được khai báo trong YAML nên phải tồn tại kể cả khi chưa dựng cron.
+
+**Biến thường** — đặt trong **Firebase App Hosting > Backend > Environment variables** (hoặc thêm vào `apphosting.yaml`):
 
 - `NEXT_PUBLIC_FIREBASE_API_KEY`
 - `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN`
@@ -26,15 +39,13 @@ Set these in **Firebase App Hosting > Backend > Environment variables**:
 - `NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET`
 - `NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID`
 - `NEXT_PUBLIC_FIREBASE_APP_ID`
-- `FIREBASE_SERVICE_ACCOUNT_KEY` (full JSON string of service account)
-- `GEMINI_API_KEY` (cho `/api/chat`, `/api/ingest`, và embedding `gemini-embedding-2`; model mặc định `gemini-3.8-flash`, xem `src/lib/gemini-models.ts`)
 - Tùy chọn: `GEMINI_CHAT_MODELS` (danh sách model chat fallback, phân cách dấu phẩy)
 - Tùy chọn: `CHAT_RATE_LIMIT_PER_MINUTE` (mặc định `20` req/phút/user)
 - Tùy chọn: `NEXT_PUBLIC_SITE_URL` (canonical URL cho metadata/OG), `NEXT_PUBLIC_GA_ID`
-- Tùy chọn: `CHAT_ATTACHMENTS_CRON_SECRET` (bắt buộc nếu dùng cron dọn ảnh chat, xem mục 10.4 trong `PROJECT_OVERVIEW.md`)
+- Tùy chọn: `NEXT_PUBLIC_CONTACT_EMAIL`, `NEXT_PUBLIC_CONTACT_ZALO` (liên hệ mặc định ở `/login` khi admin chưa lưu liên hệ trên `/admin/users`)
 - `NEXT_PUBLIC_INTERNAL_AUTH_EMAIL_DOMAIN` và `INTERNAL_AUTH_EMAIL_DOMAIN` (cùng giá trị, ví dụ `accounts.internal`)
 
-Chi tiet pre-live audit env (bat buoc + khuyen nghi + token tuning):
+Danh sách đầy đủ biến (kể cả `RETRIEVAL_*`, giới hạn chat): `PROJECT_OVERVIEW.md` mục 9. Audit pre-live:
 
 - [PRE_LIVE_ENV_CHECKLIST.md](./PRE_LIVE_ENV_CHECKLIST.md)
 
@@ -50,7 +61,7 @@ Chi tiet pre-live audit env (bat buoc + khuyen nghi + token tuning):
      - Fields gợi ý: `uid`, `username` (ví dụ `"admin"`), `email` (cùng email Auth), `role: "admin"`, `createdAt` (server timestamp).
    - **Cách B (sau khi đã có admin):** `/admin/users` → **Tạo tài khoản mới** (`POST /api/admin/users`).
 3. User mới **không** tự đăng ký: chỉ đăng nhập được sau khi admin tạo cả Auth user **và** document `users/{uid}`.
-4. Trang `/login` hiển thị form username/password, mô tả *Zalo Content Guidelines*, và footer liên hệ xin cấp tài khoản (email + Zalo — chỉnh trong `src/app/login/LoginClient.tsx` nếu đổi người liên hệ).
+4. Trang `/login` hiển thị form username/password, mô tả *Zalo Content Guidelines*, và footer liên hệ xin cấp tài khoản (email + Zalo). Đổi người liên hệ: admin vào `/admin/users` → panel liên hệ (lưu Firestore `settings/accountContact`); chưa lưu thì dùng env `NEXT_PUBLIC_CONTACT_*`.
 
 **Lỗi thường gặp:** đăng nhập đúng mật khẩu nhưng báo *chưa được cấp quyền* → thiếu hoặc sai ID document Firestore (phải khớp `auth.uid`).
 
@@ -70,7 +81,7 @@ Chi tiet pre-live audit env (bat buoc + khuyen nghi + token tuning):
 | Triệu chứng | Giải thích |
 |-------------|------------|
 | Máy A đăng xuất nhưng máy B vẫn dùng được | `signOut` chỉ xóa session local trên máy A; không có “đăng xuất tất cả thiết bị”. |
-| Admin disable user nhưng một máy vẫn vào vài phút | Token cũ còn hiệu lực đến khi refresh; sau đó sẽ `auth/user-disabled`. |
+| Admin disable user / reset mật khẩu | API đánh dấu `revoked` mọi `authSessions` → client đang mở bị đăng xuất gần như ngay; Auth `disabled` chặn refresh token. |
 | Muốn đăng xuất một máy, giữ máy khác | User: `/account/sessions` → *Đăng xuất phiên*. Admin: `/admin/users` → **Phiên**. |
 | Lỗi tải danh sách phiên | Deploy `firestore.rules` + `firestore.indexes.json` (collection `authSessions`). |
 
@@ -96,8 +107,7 @@ Sau deploy lần đầu, bật TTL để tự dọn documents cũ trong `rate_li
 
 ## 5) Deploy app
 
-If App Hosting is connected to GitHub, pushing to the configured branch will auto-deploy.
-You can also deploy via CLI:
+Nếu App Hosting đã nối GitHub, push lên branch live (`main`) sẽ tự rollout. Hoặc deploy bằng CLI:
 
 ```bash
 firebase deploy --only apphosting

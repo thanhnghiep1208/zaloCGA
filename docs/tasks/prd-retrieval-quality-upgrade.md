@@ -1,5 +1,11 @@
 # PRD: Nâng cấp chất lượng Retrieval (RAG)
 
+> **Trạng thái (2026-10): đã triển khai M0–M5 — tài liệu lịch sử.** Phần mô tả "hiện tại" bên dưới là trạng thái **trước** nâng cấp (vd. bug 1 chunk/doc đã sửa bằng `chunkMerge.ts`). Hành vi đang chạy: `docs/PROJECT_OVERVIEW.md` mục 5.5; số đo: `src/lib/retrieval/eval/BASELINE.md`. Những điểm thực tế khác với PRD:
+> - Model rewrite: cố định phần tử cuối `GEMINI_CHAT_MODEL_FALLBACKS` (`gemini-models.ts`), **không** đọc từ `GEMINI_CHAT_MODELS`.
+> - Trọng số RRF chốt **1.0 / 0 / 60** (vector / lexical / k), không phải 0.7 / 0.3 — lexical > 0 làm giảm chất lượng.
+> - "Không tìm thấy" xử lý bằng LLM relevance check (`checkRelevance()` trong `FirebaseRetrievalProvider.search()`), không phải ngưỡng số trong `RetrievalService.getContext`.
+> - Reranker: chọn LLM reranker, không dùng Vertex AI.
+
 ## 1) Introduction/Overview
 
 Chat hiện tại dùng `FirebaseRetrievalProvider` (vector search qua Firestore `findNearest` + lexical search trên `documents`) để lấy ngữ cảnh cho Gemini trả lời guideline nội dung Zalo và soạn microcopy. Đánh giá gần đây (đối chiếu với kiến trúc retrieval của WeKnora — xem `docs/` thread liên quan) phát hiện các hạn chế cụ thể, đã verify trực tiếp trong code:

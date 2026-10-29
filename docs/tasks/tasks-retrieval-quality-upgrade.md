@@ -1,5 +1,7 @@
 ## Relevant Files
 
+> **Trạng thái (2026-10): hoàn thành, chỉ còn 1.8b và 6.13 cần người xác nhận.** Danh sách file bên dưới giữ nguyên như lúc làm (có mục "kế hoạch" trùng với mục đã xong). Lưu ý lệch: `RetrievalService.ts` **không** đổi ở M4; không có `src/lib/env/*` cho `RETRIEVAL_*` — env nằm trong `FirebaseRetrievalProvider.ts` (`envInt`/`envFloat` ~dòng 11–43); không có `evaluate.ts` — thay bằng `scripts/eval-retrieval.mjs`.
+
 - `src/lib/retrieval/FirebaseRetrievalProvider.ts` - Toàn bộ logic vector search, lexical search, merge/fusion, ngưỡng — sửa chính cho M1, M3, M4. ✅ Đã sửa cho M1 (`vectorSearch()`).
 - `src/lib/retrieval/FirebaseRetrievalProvider.test.ts` - Test hiện có (`scopeMatchScore`/`applyScopeBoost`) — không đổi, vẫn pass.
 - `src/lib/retrieval/chunkMerge.ts` - **Mới (M1):** `dedupeByContentHash`, `mergeAdjacentChunksByDoc` (round-robin theo doc, xem comment trong file lý do không dùng flat sort).
