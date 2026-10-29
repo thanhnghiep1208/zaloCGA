@@ -89,7 +89,7 @@ function Benefits() {
     <section className="border-y border-border bg-surface">
       <div className="mx-auto grid max-w-6xl gap-10 px-4 py-16 md:px-8 md:py-24 lg:grid-cols-12">
         <h2 className="max-w-[18ch] text-balance text-3xl font-semibold leading-tight tracking-[-0.03em] text-foreground md:text-4xl lg:col-span-5">
-          Lợi ích khi chuẩn hóa ngôn từ
+          Lợi ích khi <span className="lg:block">chuẩn hóa ngôn từ</span>
         </h2>
         <ul className="divide-y divide-border lg:col-span-7">
           {BENEFITS.map(({ icon: Icon, title, desc }) => (
